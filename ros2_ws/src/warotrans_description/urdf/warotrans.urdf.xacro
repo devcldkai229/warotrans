@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="warotrans">
+
+  <!--
+    Professional starter only.
+
+    Confirmed chassis plan:
+      overall top-view envelope: 0.320 m x 0.260 m
+      acrylic thickness: 0.003 m
+
+    Do NOT add laser/camera pose here until physically measured.
+    Do NOT invent wheel separation or wheel locations.
+
+    When measured values exist, read them from
+      warotrans_description/config/calibration.yaml
+    via xacro.load_yaml instead of typing numbers into this file. That file is
+    the single source of truth shared with node parameters; typing the same
+    number in two places is how the URDF and the odometry node drift apart.
+  -->
+
+  <link name="base_footprint"/>
+
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="0.320 0.260 0.003"/>
+      </geometry>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.320 0.260 0.003"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!--
+    UNRESOLVED: z is 0 only as a neutral starter value.
+
+    base_footprint is by convention the projection of the robot onto the ground
+    plane. With z = 0 it is coincident with base_link, so the frame currently
+    carries no meaning.
+
+    This is self-consistent today and will not throw an error. That is exactly
+    why it is dangerous: sensor heights measured against base_link will keep
+    "working" while base_footprint is not on the ground, and the error only
+    surfaces later as wrong obstacle heights and a costmap that disagrees with
+    the physical robot.
+
+    Set this from measured geometry (normally the wheel axle height above the
+    floor) at the same time the wheel links are added, and record the number in
+    docs/calibration.md. Do not leave this comment in place after the value is
+    known.
+  -->
+  <joint name="base_footprint_to_base_link" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Add wheels only after measured axle/wheel positions are confirmed. -->
+  <!-- Add laser link/joint only after lidar_x/y/z/yaw are measured. -->
+  <!-- Add camera link/joint only after exact camera model and pose are verified. -->
+
+</robot>

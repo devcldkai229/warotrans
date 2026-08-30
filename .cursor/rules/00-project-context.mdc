@@ -1,0 +1,97 @@
+---
+description: WaroTrans project context — verified hardware, software baseline, TF contract, measurement policy
+alwaysApply: true
+---
+
+# WaroTrans — Bối cảnh dự án
+
+Robot AMR vận chuyển hàng trong kho, đồ án tốt nghiệp.
+
+## 1. VERIFIED — đã xác nhận ở trạng thái hiện tại
+
+| Thành phần | Trạng thái |
+|---|---|
+| Máy tính chính | Raspberry Pi 5 |
+| OS | Ubuntu Server 24.04 |
+| Linux user | `waro` |
+| Hostname | `warotrans` |
+| Vi điều khiển | ESP32-S3 MKE-K01 N16R8 |
+| Driver motor | Cytron MDD10A |
+| Motor | 4 × JGB37-520, project dùng drive skid-steer |
+| LiDAR | RPLIDAR A1M8-R6 |
+| IMU | GY-BNO055, chưa tích hợp |
+| Chassis | 320 mm × 260 mm, mica 3 mm |
+| Wheel | nominal Ø65 mm |
+| Network | SSH/mDNS tới `waro@warotrans.local` đã hoạt động |
+| Motor bring-up | MDD10A manual board-button test làm bánh quay được |
+
+## 2. CHƯA XÁC NHẬN — không được biến thành sự thật
+
+- Exact camera model/interface.
+- Exact battery cell/BMS/fuse configuration.
+- Encoder wire colors và encoder supply voltage.
+- `ticks_per_rev`, effective `wheel_radius`, effective `wheel_separation`.
+- Exact LiDAR/camera pose trên robot sau khi lắp hoàn chỉnh.
+
+Nếu cần một mục ở đây: trả lời **CHƯA XÁC NHẬN** và đề xuất cách đo/xác minh.
+
+## 3. Software baseline
+
+- ROS 2 target: **Jazzy Jalisco** trên Ubuntu 24.04 arm64.
+- Python 3.12 trên Ubuntu 24.04.
+- ESP32 Arduino core target: 3.x nếu firmware hiện tại xác nhận đang dùng API core 3.x.
+
+Không sinh ROS 1 (`rospy`, `catkin`). Không đổi distro/OS chỉ để giải quyết một subsystem nếu chưa đánh giá impact toàn project.
+
+## 4. TF contract — bất biến kiến trúc
+
+```text
+map
+ └── odom
+      └── base_footprint
+           └── base_link
+                ├── laser
+                └── camera_link   # chỉ khi camera pose đã xác nhận
+```
+
+Ownership:
+
+- `map → odom`: SLAM/localization.
+- `odom → base_footprint`: wheel odom hoặc EKF, không đồng thời.
+- static geometry: URDF + `robot_state_publisher`.
+
+**Một TF edge chỉ có một publisher.**
+
+## 5. Physical constants — measurement only
+
+Các giá trị sau chỉ lấy từ `docs/calibration.md` khi đã có evidence:
+
+```text
+ticks_per_rev
+wheel_radius
+wheel_separation
+lidar_x / lidar_y / lidar_z / lidar_yaw
+camera pose
+encoder supply voltage
+```
+
+Không "adjust as needed" bằng số tự nghĩ.
+
+## 6. Source of truth
+
+Ưu tiên:
+
+1. measurement/evidence robot thật + `docs/calibration.md`;
+2. `docs/STATUS.md`;
+3. `docs/interfaces.md`;
+4. Cursor rules;
+5. Master Guide;
+6. implementation hiện tại.
+
+## 7. Ngôn ngữ và cách làm việc
+
+- Docs/comment: tiếng Việt; identifier/topic/file: tiếng Anh.
+- Firmware comment có thể dùng tiếng Việt không dấu nếu toolchain/editor có vấn đề encoding.
+- Mỗi change chỉ giải quyết một concern.
+- Code hardware phải kèm cách kiểm chứng + expected result.
+- Không thêm dependency mà không nêu lý do.

@@ -1,0 +1,17 @@
+# Generated build artifacts
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+firmware/**/.pio/
+
+# Runtime / large generated data
+bags/
+logs/
+*.db3
+*.mcap
+*.pgm
+
+# Python/editor noise
+**/__pycache__/
+**/*.pyc
+.git/

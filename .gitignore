@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ROS 2 workspace outputs
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+
+# PlatformIO
+firmware/**/.pio/
+
+# Runtime artifacts — không commit mặc định
+bags/
+logs/
+*.db3
+*.mcap
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Secrets / local env
+.env
+.env.*
+!.env.example
+
+# Generated maps can be large; promote selected release maps explicitly if desired
+# ros2_ws/src/warotrans_navigation/maps/*.pgm

@@ -1,0 +1,73 @@
+---
+description: Workflow vibe coding co kiem soat — plan, evidence, diff, quality gate
+alwaysApply: true
+---
+
+# WaroTrans — Vibe coding workflow
+
+## Trước khi sửa
+
+Với task robotics, đọc các file liên quan:
+
+```text
+docs/STATUS.md
+docs/interfaces.md
+docs/calibration.md
+```
+
+Nếu task liên quan kiến trúc lớn, đọc thêm:
+
+```text
+docs/architecture.md
+docs/MASTER_ENGINEERING_GUIDE.md
+```
+
+## Một task = một concern
+
+Không gộp ví dụ:
+
+```text
+PID + TF refactor + Nav2 tuning + firmware cleanup
+```
+
+thành một diff.
+
+## Plan trước khi edit
+
+Trả lời ngắn:
+
+```text
+Goal
+Files to change
+What will NOT change
+How to test
+```
+
+Task debug: **không sửa code ngay** nếu evidence chưa đủ. Xếp hypothesis theo xác suất và đưa lệnh loại trừ.
+
+## Definition of Done
+
+Build PASS không đồng nghĩa robot PASS.
+
+DoD robotics phải có runtime evidence, ví dụ:
+
+```text
+ros2 topic hz /scan
+ros2 topic hz /odom
+tf2_echo
+measurement 2.00 m
+watchdog test
+```
+
+## Sau khi sửa
+
+1. review `git diff`;
+2. chạy `tools/check.sh` khi môi trường hỗ trợ;
+3. deploy có kiểm soát;
+4. test robot thật;
+5. cập nhật `STATUS.md`/`calibration.md` nếu trạng thái/số đo đổi.
+
+## AI freedom boundary
+
+AI được tự do ở implementation/test/docs/tooling.
+AI không tự do ở hardware truth, safety invariant, TF contract, measurement và breaking interface.

@@ -1,0 +1,3 @@
+# Placeholder only.
+# Do not add covariance, sensor axes, or fusion settings until BNO055 and
+# wheel odometry frames/topics have been verified on the real robot.

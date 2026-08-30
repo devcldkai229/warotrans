@@ -1,0 +1,69 @@
+---
+description: Quy uoc ROS 2 Jazzy, package boundaries, TF/QoS/runtime safety
+globs: ros2_ws/**
+alwaysApply: false
+---
+
+# ROS 2 Jazzy — quy ước WaroTrans
+
+## Package boundaries
+
+- `warotrans_msgs`: custom msg/srv/action khi thực sự cần.
+- `warotrans_description`: URDF/xacro/mesh/static geometry, không chứa domain node.
+- `warotrans_hardware`: ESP32 bridge, encoder/odometry, hardware diagnostics.
+- `warotrans_localization`: EKF/AMCL/localization config.
+- `warotrans_slam`: SLAM Toolbox config/launch.
+- `warotrans_navigation`: Nav2 config, maps, BT.
+- `warotrans_perception`: camera/vision.
+- `warotrans_fleet`: task FSM + backend bridge + protocol adapter.
+- `warotrans_simulation`: simulation only.
+- `warotrans_bringup`: orchestration launch/config; **không nhét node domain vào đây**.
+
+Không tách package chỉ để "đẹp" nếu chưa có lý do thay đổi độc lập.
+
+## Launch
+
+- Python `*.launch.py`.
+- Path bằng package share APIs, không hardcode `/home/waro/...`.
+- Reuse launch bằng `IncludeLaunchDescription`.
+- User-facing runtime settings dùng launch args hoặc YAML params có ownership rõ.
+- Không dùng sleep/timer như cơ chế readiness chính. `TimerAction` chỉ dùng khi delay thật sự là requirement; ưu tiên lifecycle/readiness/event rõ ràng.
+- Robot thật mặc định `use_sim_time: false`.
+
+## Node
+
+- Parameter bằng `declare_parameter`.
+- Frame/topic/device path quan trọng không hardcode rải rác.
+- Blocking serial/socket I/O không chặn executor callback.
+- Rút thiết bị giữa chừng: log + retry/state transition có kiểm soát, không crash vô nghĩa.
+- Validate parameter ranges tại startup.
+- Timestamp dùng ROS clock phù hợp; không trộn timestamp ESP32 millis trực tiếp thành ROS time nếu chưa quy đổi.
+
+## QoS baseline
+
+- Sensor streams như `/scan`: sensor-data QoS / BEST_EFFORT khi phù hợp driver.
+- `/odom`: RELIABLE baseline.
+- `/map`: RELIABLE + TRANSIENT_LOCAL khi map publisher/subscriber yêu cầu latched-like behavior.
+
+Không đổi QoS chỉ để "RViz thấy được" mà không hiểu publisher QoS.
+
+## TF
+
+Contract:
+
+```text
+map → odom → base_footprint → base_link → laser
+```
+
+- static transforms từ URDF + `robot_state_publisher`.
+- không rải `static_transform_publisher` trong production launch để vá URDF.
+- khi EKF own `odom → base_footprint`, wheel odom không được publish edge đó.
+
+Trước khi thêm TF broadcaster mới: kiểm tra publisher hiện có.
+
+## Không làm mặc định
+
+- Không tự chuyển sang `ros2_control`.
+- Không đổi frame contract.
+- Không tune SLAM/Nav2 bằng số ngẫu nhiên để che lỗi odom/TF.
+- Không tạo package mới nếu code vẫn cùng một responsibility.

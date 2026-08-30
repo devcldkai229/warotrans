@@ -1,0 +1,68 @@
+# =============================================================================
+# WaroTrans — machine-readable calibration values
+# =============================================================================
+# PURPOSE
+#   Single source of truth for physical constants that MORE THAN ONE component
+#   needs. Without this file the same number gets copied into the URDF and into
+#   node parameters, and the two drift apart silently.
+#
+# RELATIONSHIP TO docs/calibration.md
+#   docs/calibration.md is the human LOG: date, method, conditions, evidence.
+#   This file is the machine VALUE that code reads.
+#   A value may only appear here after it has a record in docs/calibration.md.
+#
+# HOW IT IS CONSUMED (wire this up when the first real value exists)
+#   URDF (xacro):
+#       <xacro:arg name="calibration_file" default="$(find warotrans_description)/config/calibration.yaml"/>
+#       <xacro:property name="cal" value="${xacro.load_yaml('$(arg calibration_file)')}"/>
+#       <xacro:property name="wheel_radius" value="${cal['wheel']['radius']}"/>
+#   Launch (python):
+#       import yaml
+#       cal = yaml.safe_load(open(path))
+#       parameters=[{'wheel_radius': float(cal['wheel']['radius'])}]
+#
+# RULES
+#   - `null` means NOT MEASURED YET. Do not replace null with a plausible number.
+#   - Do not wire a consumer to a key that is still null; xacro/launch will fail
+#     loudly, which is correct. Wire each key up the day it gets measured.
+#   - Every change here needs a matching row in docs/calibration.md.
+# =============================================================================
+
+wheel:
+  # metres
+  radius: null
+  # metres, EFFECTIVE separation from the rotation test, not the tape measurement
+  separation: null
+  # quadrature ticks per one full wheel revolution, after gearbox
+  ticks_per_rev: null
+
+lidar:
+  # metres, relative to base_link, ROS REP-103 (+X front, +Y left, +Z up)
+  x: null
+  y: null
+  z: null
+  # radians
+  yaw: null
+
+camera:
+  # Fill only after exact model, interface and mounting are verified.
+  x: null
+  y: null
+  z: null
+  roll: null
+  pitch: null
+  yaw: null
+
+chassis:
+  # CONFIRMED from the fabricated plate
+  length: 0.320
+  width: 0.260
+  plate_thickness: 0.003
+  # metres, front axle centre to rear axle centre — measure on the built robot
+  wheelbase: null
+
+limits:
+  # Velocity that corresponds to 100% duty. Used to convert /cmd_vel to duty
+  # while the motor loop is still open-loop. Must be measured, not assumed.
+  max_linear: null
+  max_angular: null

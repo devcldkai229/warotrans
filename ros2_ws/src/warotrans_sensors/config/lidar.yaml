@@ -1,0 +1,15 @@
+# Placeholder only.
+#
+# Ownership: this package owns sensor DRIVER configuration.
+# It does not own SLAM, localization, or navigation parameters.
+#
+# Required contract when configured:
+#   frame_id must match the sensor link name published by warotrans_description
+#   output topic must match interfaces.md (/scan)
+#
+# Do not fill in serial port, baudrate, or scan mode from a tutorial.
+# Confirm them against the actual device:
+#   - stable device path comes from a udev rule, not from /dev/ttyUSB0
+#   - baudrate depends on the exact LiDAR model
+#   - scan mode: only set it after listing the modes the device itself reports.
+#     Setting a mode the firmware does not support prevents the node from starting.

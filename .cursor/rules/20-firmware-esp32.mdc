@@ -1,0 +1,75 @@
+---
+description: Quy uoc firmware ESP32-S3 cho motor, encoder, serial va safety
+globs: firmware/**
+alwaysApply: false
+---
+
+# ESP32-S3 firmware — WaroTrans
+
+## Current GPIO contract
+
+Contract prototype hiện tại:
+
+| Chức năng | GPIO |
+|---|---|
+| DIR1 trái | 4 |
+| PWM1 trái | 5 |
+| DIR2 phải | 6 |
+| PWM2 phải | 7 |
+| Encoder trái A/B | 8 / 9 |
+| Encoder phải A/B | 10 / 11 |
+
+**Không đổi pinout nếu chưa được người dùng xác nhận wiring thật.**
+
+Không tự tạo danh sách "GPIO cấm" theo trí nhớ. Nếu cần pin mới, phải kiểm tra **đúng schematic/pinout của MKE-K01 N16R8** và nêu evidence.
+
+## Safety invariants — không được gỡ
+
+1. Motor output safe/zero khi boot.
+2. Command watchdog luôn tồn tại: mất lệnh quá timeout → STOP.
+3. Không tăng PWM frequency/voltage assumptions nếu chưa verify MDD10A + firmware setup.
+4. Shared ISR state phải đọc/ghi atomically phù hợp platform.
+5. Invalid/partial serial command không được làm motor chạy bằng giá trị cũ ngoài watchdog policy.
+
+## ISR
+
+- ISR ngắn, deterministic.
+- Không log/allocate/network trong ISR.
+- Encoder decode phải có test hoặc bảng truth rõ.
+
+## Main loop/control loop
+
+- Không blocking delay dài.
+- Không network/HTML task được phép làm trễ safety/control loop.
+- Khi thêm PID, tách target velocity, measured velocity và actuator output rõ ràng.
+- Saturation/zero/reverse behavior phải test.
+
+## Serial contract
+
+```text
+ESP32 → Pi
+O <tickL> <tickR> <millis>\n
+
+Pi → ESP32
+V <linear_mps> <angular_rps>\n
+R\n
+```
+
+- Text protocol là chủ ý để debug.
+- Command mới = prefix mới.
+- Không breaking-change command cũ âm thầm.
+- Nếu firmware thực tế đang nạp khác contract này, cập nhật `docs/interfaces.md` trước.
+
+## PlatformIO direction
+
+Target repo structure:
+
+```text
+firmware/esp32_low_level/
+├── platformio.ini
+├── src/main.cpp
+├── lib/
+└── test/
+```
+
+Không refactor `.ino` → nhiều library trong cùng task với một thay đổi hardware behavior lớn.

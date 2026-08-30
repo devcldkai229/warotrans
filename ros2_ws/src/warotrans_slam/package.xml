@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>warotrans_slam</name>
+  <version>0.1.0</version>
+  <description>WaroTrans mapping configuration using SLAM Toolbox.</description>
+  <maintainer email="dev@warotrans.local">WaroTrans Team</maintainer>
+  <license>Proprietary</license>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>slam_toolbox</exec_depend>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -1,0 +1,41 @@
+---
+description: Thay doi rui ro cao phai plan, explain va verify truoc
+alwaysApply: true
+---
+
+# Safety / architecture review gates
+
+Không tự ý thực hiện các thay đổi sau như một "cleanup":
+
+1. Đổi TF frame hoặc ownership của TF edge.
+2. Đổi physical/calibration constants.
+3. Gỡ/sửa semantics của command watchdog hoặc boot-safe motor output.
+4. Đổi GPIO, encoder voltage, PWM frequency, serial baud/protocol.
+5. Đổi power wiring, buck output, nguồn cấp Pi/ESP32/sensor.
+6. Chuyển sang `ros2_control` hoặc kiến trúc low-level controller khác.
+7. Thêm node phát TF mới.
+8. Đổi OS/ROS distro để giải quyết camera/driver mà chưa impact review.
+9. Đổi fleet protocol core hoặc khóa project vào VDA5050/MQTT/etc. mà chưa ADR.
+10. Deploy có thể xóa remote source/runtime data.
+
+Với các thay đổi trên, trước khi sửa phải nêu:
+
+```text
+WHY
+FILES/SUBSYSTEMS AFFECTED
+RISK
+MEASUREMENT / TEST
+ROLLBACK
+```
+
+## Không bịa số
+
+Nếu thiếu thông số phần cứng:
+
+```text
+CHƯA XÁC NHẬN
+```
+
+và nói cần đo/chụp/đọc datasheet nào.
+
+Một con số nghe hợp lý nhưng không có evidence là lỗi nghiêm trọng hơn để trống.
