@@ -2,63 +2,130 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="warotrans">
 
   <!--
-    Professional starter only.
+    Static robot geometry for robot_state_publisher.
 
-    Confirmed chassis plan:
-      overall top-view envelope: 0.320 m x 0.260 m
-      acrylic thickness: 0.003 m
+    TF published from this model (fixed joints only):
+      base_footprint -> base_link -> laser
+      base_link -> ultrasonic_front | ultrasonic_rear
+        (only when enable_ultrasonic_front_rear:=true after measured geometry)
 
-    Do NOT add laser/camera pose here until physically measured.
-    Do NOT invent wheel separation or wheel locations.
+    odom -> base_footprint is NOT in this URDF; wheel_odom_node owns that edge.
 
-    When measured values exist, read them from
-      warotrans_description/config/calibration.yaml
-    via xacro.load_yaml instead of typing numbers into this file. That file is
-    the single source of truth shared with node parameters; typing the same
-    number in two places is how the URDF and the odometry node drift apart.
+    Physical values come from config/geometry.yaml. Launch may override laser
+    pose and base_link_z via xacro args after validation.
+    LEFT/RIGHT ultrasonic frames are intentionally omitted (not Nav2 Phase 0.5).
   -->
+
+  <xacro:arg name="geometry_file"
+             default="$(find warotrans_description)/config/geometry.yaml"/>
+  <xacro:arg name="base_link_z" default="0.0"/>
+  <xacro:arg name="lidar_x" default="0.0"/>
+  <xacro:arg name="lidar_y" default="0.0"/>
+  <xacro:arg name="lidar_z" default="0.0"/>
+  <xacro:arg name="lidar_yaw" default="0.0"/>
+  <xacro:arg name="enable_ultrasonic_front_rear" default="false"/>
+  <xacro:arg name="ultrasonic_front_x" default="0.0"/>
+  <xacro:arg name="ultrasonic_front_y" default="0.0"/>
+  <xacro:arg name="ultrasonic_front_z" default="0.0"/>
+  <xacro:arg name="ultrasonic_front_yaw" default="0.0"/>
+  <xacro:arg name="ultrasonic_rear_x" default="0.0"/>
+  <xacro:arg name="ultrasonic_rear_y" default="0.0"/>
+  <xacro:arg name="ultrasonic_rear_z" default="0.0"/>
+  <xacro:arg name="ultrasonic_rear_yaw" default="0.0"/>
+
+  <xacro:property name="geo" value="${xacro.load_yaml('$(arg geometry_file)')}"/>
+  <xacro:property name="chassis_length" value="${geo['chassis']['length']}"/>
+  <xacro:property name="chassis_width" value="${geo['chassis']['width']}"/>
+  <xacro:property name="plate_thickness" value="${geo['chassis']['plate_thickness']}"/>
+
+  <xacro:property name="fp_x" value="${geo['base_footprint_to_base_link']['x']}"/>
+  <xacro:property name="fp_y" value="${geo['base_footprint_to_base_link']['y']}"/>
+  <xacro:property name="fp_roll" value="${geo['base_footprint_to_base_link']['roll']}"/>
+  <xacro:property name="fp_pitch" value="${geo['base_footprint_to_base_link']['pitch']}"/>
+  <xacro:property name="fp_yaw" value="${geo['base_footprint_to_base_link']['yaw']}"/>
+
+  <!-- Generic LiDAR envelope for RViz; not a measured device dimension. -->
+  <xacro:property name="laser_radius" value="0.035"/>
+  <xacro:property name="laser_height" value="0.040"/>
+  <xacro:property name="us_radius" value="0.008"/>
+  <xacro:property name="us_length" value="0.012"/>
 
   <link name="base_footprint"/>
 
   <link name="base_link">
     <visual>
+      <origin xyz="0 0 ${plate_thickness / 2.0}" rpy="0 0 0"/>
       <geometry>
-        <box size="0.320 0.260 0.003"/>
+        <box size="${chassis_length} ${chassis_width} ${plate_thickness}"/>
       </geometry>
     </visual>
     <collision>
+      <origin xyz="0 0 ${plate_thickness / 2.0}" rpy="0 0 0"/>
       <geometry>
-        <box size="0.320 0.260 0.003"/>
+        <box size="${chassis_length} ${chassis_width} ${plate_thickness}"/>
       </geometry>
     </collision>
   </link>
 
-  <!--
-    UNRESOLVED: z is 0 only as a neutral starter value.
-
-    base_footprint is by convention the projection of the robot onto the ground
-    plane. With z = 0 it is coincident with base_link, so the frame currently
-    carries no meaning.
-
-    This is self-consistent today and will not throw an error. That is exactly
-    why it is dangerous: sensor heights measured against base_link will keep
-    "working" while base_footprint is not on the ground, and the error only
-    surfaces later as wrong obstacle heights and a costmap that disagrees with
-    the physical robot.
-
-    Set this from measured geometry (normally the wheel axle height above the
-    floor) at the same time the wheel links are added, and record the number in
-    docs/calibration.md. Do not leave this comment in place after the value is
-    known.
-  -->
   <joint name="base_footprint_to_base_link" type="fixed">
     <parent link="base_footprint"/>
     <child link="base_link"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="${fp_x} ${fp_y} $(arg base_link_z)"
+            rpy="${fp_roll} ${fp_pitch} ${fp_yaw}"/>
   </joint>
 
-  <!-- Add wheels only after measured axle/wheel positions are confirmed. -->
-  <!-- Add laser link/joint only after lidar_x/y/z/yaw are measured. -->
-  <!-- Add camera link/joint only after exact camera model and pose are verified. -->
+  <link name="laser">
+    <visual>
+      <origin xyz="0 0 ${laser_height / 2.0}" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="${laser_radius}" length="${laser_height}"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${laser_height / 2.0}" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="${laser_radius}" length="${laser_height}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="base_link_to_laser" type="fixed">
+    <parent link="base_link"/>
+    <child link="laser"/>
+    <origin xyz="$(arg lidar_x) $(arg lidar_y) $(arg lidar_z)"
+            rpy="0 0 $(arg lidar_yaw)"/>
+  </joint>
+
+  <xacro:if value="$(arg enable_ultrasonic_front_rear)">
+    <link name="ultrasonic_front">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 1.5708 0"/>
+        <geometry>
+          <cylinder radius="${us_radius}" length="${us_length}"/>
+        </geometry>
+      </visual>
+    </link>
+    <joint name="base_link_to_ultrasonic_front" type="fixed">
+      <parent link="base_link"/>
+      <child link="ultrasonic_front"/>
+      <origin xyz="$(arg ultrasonic_front_x) $(arg ultrasonic_front_y) $(arg ultrasonic_front_z)"
+              rpy="0 0 $(arg ultrasonic_front_yaw)"/>
+    </joint>
+
+    <link name="ultrasonic_rear">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 1.5708 0"/>
+        <geometry>
+          <cylinder radius="${us_radius}" length="${us_length}"/>
+        </geometry>
+      </visual>
+    </link>
+    <joint name="base_link_to_ultrasonic_rear" type="fixed">
+      <parent link="base_link"/>
+      <child link="ultrasonic_rear"/>
+      <origin xyz="$(arg ultrasonic_rear_x) $(arg ultrasonic_rear_y) $(arg ultrasonic_rear_z)"
+              rpy="0 0 $(arg ultrasonic_rear_yaw)"/>
+    </joint>
+  </xacro:if>
 
 </robot>

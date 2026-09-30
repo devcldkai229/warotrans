@@ -1,0 +1,22 @@
+# =============================================================================
+# WaroTrans Nav2 — Phase 3 costmap filters ON overlay
+# =============================================================================
+# Merged AFTER nav2_params.yaml when enable_costmap_filters:=true.
+# Requires keepout/speed mask YAML + filter lifecycle nodes in launch.
+# =============================================================================
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      filters: ["keepout_filter"]
+      keepout_filter:
+        enabled: true
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      filters: ["keepout_filter", "speed_filter"]
+      keepout_filter:
+        enabled: true
+      speed_filter:
+        enabled: true

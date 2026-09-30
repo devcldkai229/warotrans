@@ -1,2 +1,94 @@
-# Placeholder only.
-# Tune AMCL only after a validated static map, TF tree, and /scan are available.
+# =============================================================================
+# WaroTrans AMCL Configuration (Nav2 Phase 0)
+# =============================================================================
+# PURPOSE
+#   AMCL parameters for localization within a pre-built map.
+#   AMCL owns the map -> odom transform during navigation.
+#
+# NOTES
+#   - robot_model_type: nav2_amcl::DifferentialMotionModel (skid-steer approximation)
+#   - alpha1-5 tuned slightly higher than default for skid-steer slip
+#   - Particles limited for Pi 5 CPU budget
+#   - set_initial_pose: true — PROVISIONAL boot pose so map->odom exists for Nav2 activate.
+#     Operator must overwrite via RViz "2D Pose Estimate" before trusting goals.
+#
+# TUNING markers indicate values that may need adjustment based on testing
+# =============================================================================
+
+amcl:
+  ros__parameters:
+    use_sim_time: false
+
+    # ----- Frame IDs -----
+    base_frame_id: "base_footprint"
+    odom_frame_id: "odom"
+    global_frame_id: "map"
+
+    # ----- Sensor -----
+    scan_topic: "/scan"
+    laser_max_range: 12.0      # RPLIDAR A1M8 max ~12m, matches slam_toolbox
+    laser_min_range: 0.15      # A1M8 min ~0.15m
+    max_beams: 60              # TUNING: subsample for CPU; A1M8 has ~360 points
+
+    # ----- Motion model (DifferentialMotionModel for skid-steer approx) -----
+    robot_model_type: "nav2_amcl::DifferentialMotionModel"
+
+    # Alpha parameters — noise in odometry motion model
+    # Skid-steer has higher rotational slip; raise alpha1/alpha2 vs defaults
+    alpha1: 0.3                # TUNING: rotation→rotation noise
+    alpha2: 0.3                # TUNING: translation→rotation noise
+    alpha3: 0.2                # TUNING: translation→translation noise
+    alpha4: 0.2                # TUNING: rotation→translation noise
+    alpha5: 0.1                # TUNING: translation→translation (strafe, usually 0 for diff)
+
+    # ----- Particle filter -----
+    min_particles: 500
+    max_particles: 2000        # Limit for Pi 5 CPU
+    pf_err: 0.05               # KLD particle filter error
+    pf_z: 0.99                 # KLD z-score
+
+    # ----- Update thresholds (small room, frequent updates) -----
+    update_min_d: 0.10         # metres moved before filter update
+    update_min_a: 0.15         # radians rotated before filter update
+
+    # ----- Resample -----
+    resample_interval: 1       # resample every N updates
+    recovery_alpha_slow: 0.001
+    recovery_alpha_fast: 0.1
+
+    # ----- Laser likelihood model -----
+    laser_model_type: "likelihood_field"
+    z_hit: 0.95
+    z_rand: 0.05
+    sigma_hit: 0.2             # TUNING: laser noise std dev
+    laser_likelihood_max_dist: 2.0
+
+    # ----- Initial pose -----
+    # PROVISIONAL boot pose so map->odom exists and Nav2 planner can activate.
+    # Operator MUST overwrite with RViz "2D Pose Estimate" before trusting goals.
+    set_initial_pose: true
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      yaw: 0.0
+
+    # ----- TF -----
+    tf_broadcast: true
+    transform_tolerance: 1.0
+
+    # ----- Debug -----
+    always_reset_initial_pose: false
+    first_map_only: false
+
+map_server:
+  ros__parameters:
+    use_sim_time: false
+    yaml_filename: ""          # Overridden by launch argument
+
+map_saver:
+  ros__parameters:
+    use_sim_time: false
+    save_map_timeout: 5.0
+    free_thresh_default: 0.25
+    occupied_thresh_default: 0.65

@@ -1,81 +1,63 @@
 # WaroTrans Tools
 
-## `check.sh`
+Thư mục này **cố ý gọn**. Không thêm script one-off / probe / recover vào đây —
+chạy lệnh trực tiếp trên Pi khi debug.
 
-Quality gate trước deploy.
+## Giữ lại
 
-```bash
-./tools/check.sh
-./tools/check.sh --strict
-```
+| File | Việc |
+|---|---|
+| `warotrans-teleop-start.sh` | Join Wi‑Fi + `mobile_base` (teleop `:8080`) |
+| `warotrans-teleop.service` | systemd unit boot |
+| `install_teleop_autostart.sh` | Cài/enable service trên Pi (chạy 1 lần) |
+| `warotrans-wifi.conf.example` | Mẫu `/home/waro/warotrans-wifi.conf` |
+| `warotrans-stop-all.sh` | Tắt teleop service + mọi stack ROS |
+| `save_map.sh` | Lưu map SLAM |
+| `check.sh` + `validate_structure.py` | Quality gate trước deploy |
+| `deploy.sh` / `deploy.ps1` | Đồng bộ source lên Pi |
+| `doctor.sh` / `doctor.ps1` | Thu thập evidence trên robot |
+| `rollback_source.sh` / `rollback.ps1` | Rollback source sau deploy hỏng |
 
-- static policy checks;
-- `colcon build/test` nếu ROS workspace/toolchain có sẵn;
-- PlatformIO build nếu firmware project + `pio` có sẵn.
+## Phone teleop khi Pi boot
 
-`--strict` biến thiếu toolchain cần thiết thành failure.
-
-## `deploy.sh`
-
-Linux/macOS/WSL/Git Bash:
-
-```bash
-./tools/deploy.sh --dry-run
-./tools/deploy.sh
-./tools/deploy.sh --run mapping
-```
-
-Default:
-- backup `~/ros2_ws/src` trên Pi;
-- mirror **chỉ** `ros2_ws/src`;
-- không xóa maps/bags/logs ngoài source;
-- giữ 5 backup source gần nhất;
-- copy runtime diagnostic tools;
-- build trên Pi.
-
-## `deploy.ps1`
-
-Windows PowerShell:
-
-```powershell
-.\tools\deploy.ps1 -DryRun
-.\tools\deploy.ps1
-.\tools\deploy.ps1 -Run mapping
-```
-
-Khuyến nghị dùng `rsync`. `-AllowScpFallback` là opt-in vì scp không xóa stale source.
-
-## `doctor.sh`
-
-Chạy trên Pi sau deploy:
+Trên Pi (một lần):
 
 ```bash
-~/warotrans_tools/doctor.sh idle
-~/warotrans_tools/doctor.sh base
-~/warotrans_tools/doctor.sh mapping
-~/warotrans_tools/doctor.sh navigation
+# 1) Wi-Fi / hotspot phone
+cp ~/warotrans/tools/warotrans-wifi.conf.example ~/warotrans-wifi.conf
+nano ~/warotrans-wifi.conf   # WIFI_SSID / WIFI_PASSWORD
+
+# 2) Cần sudo nmcli không hỏi mật khẩu (User=waro trong systemd)
+#    (nếu chưa có) thêm sudoers NOPASSWD cho /usr/bin/nmcli
+
+# 3) Cài service
+cd ~/warotrans   # hoặc path repo trên Pi
+bash tools/install_teleop_autostart.sh
 ```
 
-Hoặc Windows:
+Sau reboot:
 
-```powershell
-.\tools\doctor.ps1 -Mode mapping
-```
-
-Doctor thu thập evidence, không tự thay calibration.
-
-## Rollback source
-
-Nếu deploy mới hỏng:
-
-```powershell
-.\tools\rollback.ps1
-```
-
-hoặc trên Pi:
+- Service `warotrans-teleop` tự chạy.
+- Điện thoại cùng Wi‑Fi/hotspot: `http://<IP_Pi>:8080`
+- IP: trên Pi `hostname -I`
 
 ```bash
-~/warotrans_tools/rollback_source.sh
+sudo systemctl status warotrans-teleop
+journalctl -u warotrans-teleop -f
+sudo systemctl stop warotrans-teleop    # trước khi chạy Nav2 / mapping
+sudo systemctl restart warotrans-teleop # sau khi sửa wifi.conf
 ```
 
-Sau rollback phải build/test lại trước khi bật motion.
+**Không** chạy Nav2 cùng teleop (`/cmd_vel` xung đột).
+
+## Nav2 / mapping
+
+Dùng lệnh ROS trực tiếp, không qua script phụ:
+
+```bash
+bash ~/tools/warotrans-stop-all.sh
+ros2 launch warotrans_bringup navigation.launch.py map:=$HOME/maps/warotrans.yaml
+# hoặc mapping:
+ros2 launch warotrans_bringup mapping.launch.py
+bash ~/tools/save_map.sh ~/maps/warotrans
+```

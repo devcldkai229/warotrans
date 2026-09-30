@@ -21,6 +21,7 @@ expected = {
     "warotrans_fleet",
     "warotrans_simulation",
     "warotrans_bringup",
+    "warotrans_teleop",
 }
 
 found = {p.name for p in SRC.iterdir() if p.is_dir()}

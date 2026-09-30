@@ -1836,10 +1836,10 @@ Các mục dưới đây lấy từ bộ guide/devkit hiện tại. Chỉ coi l�
 ## GPIO contract hiện tại trong devkit
 
 ```text
-DIR1        GPIO 4
-PWM1        GPIO 5
-DIR2        GPIO 6
-PWM2        GPIO 7
+PWM1        GPIO 4
+DIR1        GPIO 5
+PWM2        GPIO 6
+DIR2        GPIO 7
 
 Encoder L A GPIO 8
 Encoder L B GPIO 9

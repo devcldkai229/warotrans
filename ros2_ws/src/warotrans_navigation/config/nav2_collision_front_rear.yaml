@@ -1,0 +1,41 @@
+# =============================================================================
+# Overlay / template — Collision Monitor using ultrasonic FRONT + REAR only.
+# =============================================================================
+# DO NOT merge into live nav until:
+#   1) tools/warotrans-check-ultrasonic-front-rear-geometry.sh → FRONT_REAR_GEOMETRY_OK
+#   2) tf2_echo base_link ultrasonic_front|rear works
+#   3) Safety review: controller remapped to /cmd_vel_nav (see docs/ultrasonic-front-rear-nav2.md)
+#
+# LEFT / RIGHT intentionally omitted.
+#
+# Thresholds below are STARTING points for tuning after measurement — not
+# calibrated stopping distances. Retune on robot.
+# =============================================================================
+
+collision_monitor:
+  ros__parameters:
+    use_sim_time: false
+    base_frame_id: base_footprint
+    odom_frame_id: odom
+    cmd_vel_in_topic: cmd_vel_nav
+    cmd_vel_out_topic: cmd_vel
+    state_topic: collision_monitor_state
+    transform_tolerance: 0.2
+    source_timeout: 1.0
+    base_shift_correction: true
+    stop_pub_timeout: 2.0
+    observation_sources: ["front_range", "rear_range"]
+    front_range:
+      type: "range"
+      topic: /ultrasonic/front
+      # Stop / slow when range below these (metres) — TUNE after mount known
+      min_height: 0.0
+      max_height: 0.5
+    rear_range:
+      type: "range"
+      topic: /ultrasonic/rear
+      min_height: 0.0
+      max_height: 0.5
+    # Prefer polygons + range sources per Nav2 CM docs for your distro;
+    # enable stop/slow zones after first outdoor smoke with measured TF.
+    polygons: []

@@ -12,37 +12,53 @@
 #   A value may only appear here after it has a record in docs/calibration.md.
 #
 # HOW IT IS CONSUMED (wire this up when the first real value exists)
-#   URDF (xacro):
-#       <xacro:arg name="calibration_file" default="$(find warotrans_description)/config/calibration.yaml"/>
-#       <xacro:property name="cal" value="${xacro.load_yaml('$(arg calibration_file)')}"/>
-#       <xacro:property name="wheel_radius" value="${cal['wheel']['radius']}"/>
 #   Launch (python):
 #       import yaml
 #       cal = yaml.safe_load(open(path))
-#       parameters=[{'wheel_radius': float(cal['wheel']['radius'])}]
+#       parameters=[{
+#           'ticks_per_rev_left': float(cal['wheel']['ticks_per_rev_left']),
+#           'ticks_per_rev_right': float(cal['wheel']['ticks_per_rev_right']),
+#           'wheel_radius_left': float(cal['wheel']['radius_left']),
+#           'wheel_radius_right': float(cal['wheel']['radius_right']),
+#           'wheel_separation': float(cal['wheel']['separation']),
+#       }]
+#   URDF geometry (geometry.yaml):
+#       When lidar.* changes here, sync the same values into config/geometry.yaml.
+#
+# WHEEL SCHEMA (Phase 5 left/right odometry model)
+#   radius_left / radius_right       — metres, per-wheel effective radius
+#   ticks_per_rev_left / right       — quadrature ticks per revolution
+#   separation                       — target is EFFECTIVE separation from the
+#                                      Phase 7B powered 360° rotation test.
+#                                      Currently holds the tape value as an
+#                                      operator-approved PROVISIONAL stand-in.
 #
 # RULES
 #   - `null` means NOT MEASURED YET. Do not replace null with a plausible number.
-#   - Do not wire a consumer to a key that is still null; xacro/launch will fail
-#     loudly, which is correct. Wire each key up the day it gets measured.
+#   - Any value that is not the result of its own calibration test must carry a
+#     PROVISIONAL marker here and a matching row in docs/calibration.md.
+#   - Do not wire a consumer to a key that is still null; launch will fail loudly.
 #   - Every change here needs a matching row in docs/calibration.md.
 # =============================================================================
 
 wheel:
-  # metres
-  radius: null
-  # metres, EFFECTIVE separation from the rotation test, not the tape measurement
-  separation: null
-  # quadrature ticks per one full wheel revolution, after gearbox
-  ticks_per_rev: null
+  # Operator re-measure 2026-09-07 (10-rev + straight 2.00 m @ 15%)
+  radius_left: 0.03296
+  radius_right: 0.03263
+  ticks_per_rev_left: 2478.1
+  ticks_per_rev_right: 2478.1
+  # Effective separation — operator 2026-09-07:
+  # mean of two rotation-derived values (0.4274 + 0.4795) / 2 = 0.45345 ≈ 0.4535 m
+  separation: 0.4535
 
 lidar:
-  # metres, relative to base_link, ROS REP-103 (+X front, +Y left, +Z up)
-  x: null
-  y: null
-  z: null
-  # radians
-  yaw: null
+  # metres / radians, relative to base_link, REP-103 (+X front, +Y left, +Z up)
+  # Sync into config/geometry.yaml laser.* when URDF is updated.
+  x: 0.010
+  y: 0.0017
+  z: 0.142
+  # +π/2: mount xoay trái 90° (operator box-in-front 2026-09-07) — sync geometry.yaml
+  yaw: 1.5707963267948966
 
 camera:
   # Fill only after exact model, interface and mounting are verified.
@@ -58,11 +74,18 @@ chassis:
   length: 0.320
   width: 0.260
   plate_thickness: 0.003
-  # metres, front axle centre to rear axle centre — measure on the built robot
-  wheelbase: null
+  # metres, front axle centre to rear axle centre — operator measured 2026-09-07
+  wheelbase: 0.146
 
 limits:
   # Velocity that corresponds to 100% duty. Used to convert /cmd_vel to duty
   # while the motor loop is still open-loop. Must be measured, not assumed.
-  max_linear: null
-  max_angular: null
+  #
+  # PROVISIONAL 2026-09-09: theoretical from firmware commissioning scale
+  # commissioning_full_scale_linear = 0.32 m/s @ 100% duty
+  # commissioning_full_scale_angular = 1.41 rad/s @ 100% duty
+  # PWM ceiling = 40%  =>  max @ ceiling = scale × 0.4
+  # TODO: measure actual /odom twist.linear.x and twist.angular.z at 40% teleop
+  #       then replace these values and mark as Calibrated.
+  max_linear: 0.128    # PROVISIONAL — 0.32 × 0.4; measure to confirm
+  max_angular: 0.56    # PROVISIONAL — 1.41 × 0.4; measure to confirm

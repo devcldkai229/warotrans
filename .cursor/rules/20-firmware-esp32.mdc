@@ -12,10 +12,10 @@ Contract prototype hiện tại:
 
 | Chức năng | GPIO |
 |---|---|
-| DIR1 trái | 4 |
-| PWM1 trái | 5 |
-| DIR2 phải | 6 |
-| PWM2 phải | 7 |
+| PWM1 trái | 4 |
+| DIR1 trái | 5 |
+| PWM2 phải | 6 |
+| DIR2 phải | 7 |
 | Encoder trái A/B | 8 / 9 |
 | Encoder phải A/B | 10 / 11 |
 

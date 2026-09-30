@@ -2,22 +2,25 @@
 <package format="3">
   <name>warotrans_sensors</name>
   <version>0.1.0</version>
-  <description>Sensor device drivers and driver configuration: LiDAR now, IMU and
-    other raw sensor sources later. Owns the driver layer only; it does not
-    estimate state and does not consume its own output.</description>
+  <description>Sensor device drivers and driver configuration: LiDAR, ultrasonic
+    (Pi GPIO), and other raw sensor sources later. Owns the driver layer only;
+    it does not estimate state and does not consume its own output.</description>
   <maintainer email="dev@warotrans.local">WaroTrans Team</maintainer>
   <license>Proprietary</license>
 
-  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
 
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
-  <!-- Driver package for the LiDAR model actually used on the robot.
-       Confirm the correct package name on the target ROS distro before
-       relying on it in a launch file. -->
+  <exec_depend>ament_index_python</exec_depend>
+  <!-- Driver package for the LiDAR model actually used on the robot. -->
   <exec_depend>rplidar_ros</exec_depend>
+  <!-- GPIO: system package python3-lgpio (sudo apt install python3-lgpio).
+       Not declared as rosdep — install on Pi before running ultrasonic_node. -->
 
   <export>
-    <build_type>ament_cmake</build_type>
+    <build_type>ament_python</build_type>
   </export>
 </package>

@@ -4,7 +4,7 @@ project(warotrans_navigation)
 find_package(ament_cmake REQUIRED)
 
 install(
-  DIRECTORY launch config maps behavior_trees
+  DIRECTORY launch config maps behavior_trees rviz
   DESTINATION share/${PROJECT_NAME}
 )
 

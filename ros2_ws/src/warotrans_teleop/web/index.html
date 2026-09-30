@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>WaroTrans Teleop</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="header">
+      <h1>WaroTrans</h1>
+      <p class="subtitle">Phase 7.5 Commissioning Teleop</p>
+    </header>
+
+    <section class="controls">
+      <button class="btn drive" data-direction="FORWARD">FORWARD</button>
+
+      <div class="row">
+        <button class="btn drive" data-direction="LEFT">LEFT</button>
+        <button class="btn stop" data-direction="STOP">STOP</button>
+        <button class="btn drive" data-direction="RIGHT">RIGHT</button>
+      </div>
+
+      <button class="btn drive" data-direction="BACKWARD">BACKWARD</button>
+    </section>
+
+    <section class="speed">
+      <button class="btn speed-btn" id="speed-down">SPEED -</button>
+      <div class="speed-display">
+        <div class="speed-label">SPEED LEVEL</div>
+        <div class="speed-value" id="speed-level">20%</div>
+      </div>
+      <button class="btn speed-btn" id="speed-up">SPEED +</button>
+    </section>
+
+    <section class="presets">
+      <button class="btn preset" data-speed="10">10%</button>
+      <button class="btn preset" data-speed="15">15%</button>
+      <button class="btn preset" data-speed="20">20%</button>
+      <button class="btn preset" data-speed="25">25%</button>
+      <button class="btn preset" data-speed="30">30%</button>
+      <button class="btn preset" data-speed="35">35%</button>
+      <button class="btn preset" data-speed="40">40%</button>
+    </section>
+
+    <section class="status">
+      <div class="status-row"><span>ROS</span><span id="ros-status">DISCONNECTED</span></div>
+      <div class="status-row"><span>COMMAND</span><span id="command-status">STOP</span></div>
+      <div class="status-row"><span>SPEED LEVEL</span><span id="speed-status">20%</span></div>
+      <div class="status-row"><span>LINEAR CMD</span><span id="linear-cmd">0.00 m/s</span></div>
+      <div class="status-row"><span>ANGULAR CMD</span><span id="angular-cmd">0.00 rad/s</span></div>
+      <div class="status-row"><span>ODOM LINEAR</span><span id="odom-linear">0.00 m/s</span></div>
+      <div class="status-row"><span>ODOM ANGULAR</span><span id="odom-angular">0.00 rad/s</span></div>
+      <div class="status-row"><span>LEFT PWM CMD</span><span id="left-pwm">0% (0/255)</span></div>
+      <div class="status-row"><span>RIGHT PWM CMD</span><span id="right-pwm">0% (0/255)</span></div>
+      <div class="status-row"><span>LAST COMMAND</span><span id="last-command">0 ms ago</span></div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

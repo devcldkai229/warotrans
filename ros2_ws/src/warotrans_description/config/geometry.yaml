@@ -1,0 +1,64 @@
+# =============================================================================
+# WaroTrans — static URDF geometry (warotrans_description)
+# =============================================================================
+# Consumed by warotrans.urdf.xacro via description.launch.py.
+#
+# RULES
+#   - `null` means NOT MEASURED YET. Do not replace with guessed numbers.
+#   - Chassis envelope values below are CONFIRMED (docs/STATUS.md).
+#   - After measuring laser pose, record evidence in docs/calibration.md and
+#     sync the same values into calibration.yaml lidar.* for cross-package use.
+# =============================================================================
+
+chassis:
+  # metres, top-view envelope of the fabricated plate
+  length: 0.320
+  width: 0.260
+  plate_thickness: 0.003
+
+base_footprint_to_base_link:
+  # metres / radians, REP-103 (+X front, +Y left, +Z up)
+  x: 0.0
+  y: 0.0
+  z: 0.0325  # wheel axle height above ground
+  roll: 0.0
+  pitch: 0.0
+  yaw: 0.0
+
+laser:
+  # metres / radians, relative to base_link, REP-103
+  x: 0.01
+  y: 0.0017
+  z: 0.142
+  # +pi/2: mount rotated 90 deg LEFT vs vehicle forward (operator 2026-09-07).
+  # Evidence: notebook in front -> line parallel to Ox, empty ahead of +X tip.
+  # Re-verify box-in-front after restart (expect hits on +X).
+  yaw: 1.5707963267948966
+
+# Phase 0.5 — ultrasonic mounts relative to base_link (REP-103).
+# null = NOT MEASURED. Do NOT invent.
+# Nav2 safety (Collision Monitor / Range layer): ONLY front + rear after measured.
+# left / right: optional monitoring; NOT wired into Nav2 Phase 0.5.
+# URDF adds ultrasonic_front / ultrasonic_rear links only when front+rear are all non-null.
+ultrasonic:
+  # Operator tape 2026-09-12 — see docs/calibration.md §4b (metres, base_link)
+  front:
+    x: 0.1697      # (154.2 + 15.5) mm forward
+    y: 0.0015      # 1.5 mm left (+Y)
+    z: 0.0045      # 4.5 mm
+    yaw: 0.0       # facing +X
+  rear:
+    x: -0.02892    # (15.42 + 13.5) mm rearward → negative X (all mm)
+    y: 0.0
+    z: 0.0045      # 4.5 mm
+    yaw: 3.141592653589793  # 180 deg, facing -X
+  left:
+    x: null
+    y: null
+    z: null
+    yaw: null   # expect ~+pi/2 ( +Y ) — not used by Nav2
+  right:
+    x: null
+    y: null
+    z: null
+    yaw: null   # expect ~-pi/2 ( -Y ) — not used by Nav2

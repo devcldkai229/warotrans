@@ -1,0 +1,8 @@
+# WaroTrans Wi-Fi client config (on the Raspberry Pi only).
+# Copy to: /home/waro/warotrans-wifi.conf
+# Then: sudo systemctl restart warotrans-teleop
+#
+# Đổi phòng / đổi mạng: chỉ sửa 2 dòng dưới, không SCP/build.
+
+WIFI_SSID="TEN_WIFI"
+WIFI_PASSWORD="MAT_KHAU"

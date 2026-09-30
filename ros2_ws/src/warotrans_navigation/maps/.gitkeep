@@ -1,0 +1,2 @@
+#!/usr/bin/env python3
+"""Placeholder so CMake maps/ install exists. Runtime masks live in ~/maps/."""

@@ -24,7 +24,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            # Add ROS 2 node entry points only when the node is implemented.
+            'esp32_bridge_node = warotrans_hardware.esp32_bridge_node:main',
+            'wheel_odom_node = warotrans_hardware.wheel_odom_node:main',
         ],
     },
 )

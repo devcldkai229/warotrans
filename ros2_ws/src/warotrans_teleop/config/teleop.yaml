@@ -1,0 +1,24 @@
+web_teleop_node:
+  ros__parameters:
+    host: "0.0.0.0"
+    port: 8080
+
+    # YAML integers become ROS INTEGER; declare_parameter expects DOUBLE here.
+    default_speed_percent: 20.0
+    min_speed_percent: 10.0
+    max_speed_percent: 40.0
+    speed_step_percent: 5.0
+
+    # Command setpoint for commissioning; actual robot velocity must be
+    # verified from encoder odometry and Phase 7B physical testing.
+    commissioning_linear_command_max: 0.32
+    # derived = 2 * linear_max / wheel_separation (0.32, 0.4535)
+    commissioning_angular_command_max: 1.4112
+
+    wheel_separation: 0.4535
+    pwm_raw_max: 255
+    pwm_limit_percent: 40.0
+
+    deadman_timeout_ms: 250
+    cmd_vel_publish_hz: 20.0
+    motor_state_publish_hz: 10.0

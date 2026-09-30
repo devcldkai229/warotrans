@@ -1,0 +1,32 @@
+[Unit]
+Description=WaroTrans phone teleop (mobile_base → web UI :8080)
+Documentation=file:///home/waro/ros2_ws/src/warotrans_bringup/launch/mobile_base.launch.py
+After=network-online.target NetworkManager.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=waro
+Group=waro
+SupplementaryGroups=dialout
+WorkingDirectory=/home/waro
+Environment=HOME=/home/waro
+Environment=USER=waro
+Environment=ROS_DOMAIN_ID=0
+Environment=RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+
+# One stack only — stop this before mapping/Nav2.
+ExecStart=/home/waro/bin/warotrans-teleop-start.sh
+ExecStop=/bin/kill -INT $MAINPID
+Restart=on-failure
+RestartSec=8
+TimeoutStartSec=120
+TimeoutStopSec=30
+KillMode=mixed
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=warotrans-teleop
+
+[Install]
+WantedBy=multi-user.target

@@ -31,6 +31,16 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+warotrans-wifi.conf
+**/warotrans-wifi.conf
+
+# Demo Phase 1
+demo/frontend/node_modules/
+demo/frontend/dist/
+demo/backend/.vendor/
+demo/backend/.venv/
+demo/**/__pycache__/
+demo/**/.pytest_cache/
 
 # Generated maps can be large; promote selected release maps explicitly if desired
 # ros2_ws/src/warotrans_navigation/maps/*.pgm

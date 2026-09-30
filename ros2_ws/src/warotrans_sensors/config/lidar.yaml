@@ -1,15 +1,32 @@
-# Placeholder only.
+# WaroTrans — RPLIDAR A1 driver configuration
 #
-# Ownership: this package owns sensor DRIVER configuration.
-# It does not own SLAM, localization, or navigation parameters.
+# Ownership: package này chỉ sở hữu cấu hình DRIVER. Không chứa tham số SLAM,
+# localization hay navigation.
 #
-# Required contract when configured:
-#   frame_id must match the sensor link name published by warotrans_description
-#   output topic must match interfaces.md (/scan)
-#
-# Do not fill in serial port, baudrate, or scan mode from a tutorial.
-# Confirm them against the actual device:
-#   - stable device path comes from a udev rule, not from /dev/ttyUSB0
-#   - baudrate depends on the exact LiDAR model
-#   - scan mode: only set it after listing the modes the device itself reports.
-#     Setting a mode the firmware does not support prevents the node from starting.
+# Nguồn số liệu: docs/MASTER_ENGINEERING_GUIDE.md muc 8.3 (Phase 2).
+# Không copy baud/scan_mode từ tutorial cho model khác.
+
+rplidar_node:
+  ros__parameters:
+    # Symlink udev ổn định, không dùng /dev/ttyUSB0 vì thứ tự enumerate đổi
+    # theo thứ tự cắm USB giữa LiDAR và ESP32.
+    serial_port: /dev/rplidar
+
+    # A1 dùng 115200. Các model khác cùng họ dùng baud khác; sai baud biểu hiện
+    # thành "operation timed out" chứ không phải lỗi phần cứng.
+    serial_baudrate: 115200
+
+    # Phải khớp link `laser` mà warotrans_description publish qua URDF.
+    # Hình học cảm biến thuộc TF, không sửa bằng cách xoay dữ liệu LaserScan.
+    frame_id: laser
+
+    # Nội suy đều góc giữa các mẫu; cần cho scan matcher của slam_toolbox.
+    angle_compensate: true
+
+    # Chỉ đặt true khi LiDAR được gắn lộn ngược về mặt vật lý. Hiện tại chưa
+    # có evidence gắn ngược nên giữ false.
+    inverted: false
+
+    # scan_mode CỐ Ý bỏ trống. Không phải mọi mode đều tồn tại trên mọi
+    # firmware A1; đặt một mode không hỗ trợ sẽ làm node chết ngay lúc start.
+    # Chỉ thêm sau khi driver tự liệt kê mode mà thiết bị thật báo cáo.

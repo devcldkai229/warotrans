@@ -1,9 +1,130 @@
-# Placeholder only.
+# WaroTrans — SLAM Toolbox online asynchronous mapping baseline (Phase 8)
 #
-# Required frame contract when configured:
-#   map_frame: map
-#   odom_frame: odom
-#   base_frame: base_footprint
-#   scan_topic: /scan
+# Node name phải là `slam_toolbox` để khớp key namespace ở dưới; xem
+# launch/slam.launch.py.
 #
-# Do not tune SLAM parameters to hide bad odometry or TF.
+# Nguyên tắc:
+#   - File này chỉ chứa tham số SLAM. Physical calibration (ticks_per_rev,
+#     wheel_radius, wheel_separation, lidar pose) thuộc warotrans_hardware
+#     config/hardware.yaml và warotrans_description config/geometry.yaml.
+#   - Không tune tham số ở đây để che odometry/TF sai. Thứ tự debug nằm trong
+#     README.md của package này.
+
+slam_toolbox:
+  ros__parameters:
+
+    # ---- Solver ----------------------------------------------------------
+    # Ceres là solver mặc định và ổn định nhất cho pose-graph của slam_toolbox.
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None
+
+    # ---- Frame / topic contract -----------------------------------------
+    # Bất biến kiến trúc: slam_toolbox là publisher DUY NHẤT của map -> odom.
+    # odom -> base_footprint thuộc wheel_odom_node; base_footprint -> base_link
+    # -> laser thuộc robot_state_publisher. Không đổi các giá trị này.
+    map_frame: map
+    odom_frame: odom
+    base_frame: base_footprint
+    scan_topic: /scan
+
+    # mapping = dựng map mới. localization mode là việc của Phase 11.
+    mode: mapping
+
+    # Robot thật, không dùng /clock của simulation.
+    use_sim_time: false
+
+    # Cho phép gọi service slam_toolbox/save_map. Không tự động ghi file.
+    use_map_saver: true
+
+    debug_logging: false
+
+    # ---- Tần suất xử lý và publish --------------------------------------
+    # RPLIDAR A1 chạy khoảng 7 Hz nên xử lý mọi scan, không bỏ bớt.
+    throttle_scans: 1
+
+    # 50 Hz cho map -> odom: đủ mượt cho TF lookup của Foxglove/Nav2 sau này.
+    transform_publish_period: 0.02
+
+    # Occupancy grid được rebuild định kỳ và khá tốn CPU trên Pi 5.
+    # 2 s là mức bảo thủ: đủ realtime để lái mà không làm nghẽn scan matching.
+    map_update_interval: 2.0
+
+    # 5 cm/cell: baseline cho AMR trong kho, khớp mặc định của Nav2 costmap.
+    resolution: 0.05
+
+    # range_max đo từ /scan trên A1 thật: 12.0 m (2026-09-07)
+    max_laser_range: 12.0
+
+    # Khoảng cách thời gian tối thiểu giữa 2 scan được đưa vào pose graph.
+    # 0.2 s ~ tối đa 5 scan/s vào graph, phần còn lại chỉ dùng để bám TF.
+    minimum_time_interval: 0.2
+
+    # TF lookup timeout: rộng hơn một chu kỳ scan để tha thứ jitter mạng/CPU,
+    # nhưng vẫn đủ ngắn để phát hiện TF chain đứt.
+    transform_timeout: 0.2
+    tf_buffer_duration: 30.0
+
+    # Stack cho serialization pose-graph khi map lớn.
+    stack_size_to_use: 40000000
+
+    # Không dùng interactive marker (chỉ hữu ích khi chỉnh graph bằng tay
+    # trong RViz); giữ tắt để nhẹ CPU trên Pi.
+    enable_interactive_mode: false
+
+    # Kích thước hàng đợi scan của node async. Giữ nhỏ để nếu Pi quá tải thì
+    # scan cũ bị bỏ thay vì tích tụ độ trễ (bản chất của chế độ async).
+    scan_queue_size: 1
+
+    # ---- Scan matching ---------------------------------------------------
+    use_scan_matching: true
+    use_scan_barycenter: true
+
+    # Chỉ thêm node mới vào pose graph sau khi robot đã đi 0.2 m hoặc quay
+    # 0.2 rad (~11.5 độ). Đứng yên sẽ không làm map phình ra.
+    minimum_travel_distance: 0.2
+    minimum_travel_heading: 0.2
+
+    # Số scan gần nhất giữ trong buffer để matching cục bộ.
+    scan_buffer_size: 10
+    scan_buffer_maximum_scan_distance: 10.0
+
+    link_match_minimum_response_fine: 0.1
+    link_scan_maximum_distance: 1.5
+
+    # ---- Loop closure ----------------------------------------------------
+    # Bật loop closing: đây là thứ kéo map thẳng lại khi robot quay về điểm
+    # xuất phát và bù drift tích luỹ của wheel odometry skid-steer.
+    do_loop_closing: true
+    loop_search_maximum_distance: 3.0
+    loop_match_minimum_chain_size: 10
+    loop_match_maximum_variance_coarse: 3.0
+    loop_match_minimum_response_coarse: 0.35
+    loop_match_minimum_response_fine: 0.45
+
+    # ---- Correlation (scan matcher search window) ------------------------
+    correlation_search_space_dimension: 0.5
+    correlation_search_space_resolution: 0.01
+    correlation_search_space_smear_deviation: 0.1
+
+    # ---- Correlation window riêng cho loop closure -----------------------
+    # Cửa sổ rộng hơn vì lúc đóng vòng, sai số tích luỹ có thể lớn.
+    loop_search_space_dimension: 8.0
+    loop_search_space_resolution: 0.05
+    loop_search_space_smear_deviation: 0.03
+
+    # ---- Trọng số penalty của scan matcher -------------------------------
+    # Phạt lệch so với prior từ odometry. Skid-steer trượt bánh khi quay nên
+    # giữ mặc định thay vì tin odom quá mức.
+    distance_variance_penalty: 0.5
+    angle_variance_penalty: 1.0
+
+    fine_search_angle_offset: 0.00349
+    coarse_search_angle_offset: 0.349
+    coarse_angle_resolution: 0.0349
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+    use_response_expansion: true

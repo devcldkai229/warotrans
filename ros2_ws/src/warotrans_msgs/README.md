@@ -18,4 +18,14 @@ Possible future custom interfaces:
 - task lifecycle events
 - low-level wheel telemetry if a standard message is not suitable
 
-Do not add messages speculatively.
+Current interface:
+
+```text
+WheelTicks.msg
+  int64 left_ticks
+  int64 right_ticks
+  uint32 mcu_millis
+```
+
+`WheelTicks` is the explicit bridge contract for cumulative encoder telemetry.
+Do not add more messages speculatively.

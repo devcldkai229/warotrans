@@ -1,0 +1,22 @@
+# =============================================================================
+# WaroTrans Nav2 — outdoor overlay (no keepout/speed filters)
+# =============================================================================
+# Merged AFTER nav2_params.yaml when nav outdoor / Zenoh smoke.
+# Do NOT set an empty filters list — that crashes planner/controller on Jazzy
+# (InvalidParameterValueException: parameter_value_from failed for 'filters').
+# Omitting the filters key = no costmap filter plugins.
+# =============================================================================
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      keepout_filter:
+        enabled: false
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      keepout_filter:
+        enabled: false
+      speed_filter:
+        enabled: false
