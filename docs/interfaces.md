@@ -237,18 +237,17 @@ Mọi thay đổi ở mục này phải được đo lại, không suy luận.
 
 ---
 
-## 5. Fleet contract — chưa khóa protocol transport
+## 5. Fleet contract — MQTT (ADR 0005)
 
-Core domain không phụ thuộc MQTT/VDA5050/WebSocket cụ thể.
+Transport đã khóa: MQTT topics trong `warotrans-system/docs/mqtt-robot-contracts.md`.  
+ADR: `docs/adr/0005-fleet-mqtt-command-protocol.md`. Không dùng VDA5050.
 
 ### Backend → Robot
 
 ```text
-task_id
-robot_id / intended robot
-pickup or navigation goal
-dropoff or navigation goal
-action: assign / pause / resume / cancel
+command: NAVIGATE_TO_POSE | CANCEL
+commandId (Guid)
+payload: pose (frameId/x/y/yaw) hoặc targetCommandId
 ```
 
 ### Robot → Backend

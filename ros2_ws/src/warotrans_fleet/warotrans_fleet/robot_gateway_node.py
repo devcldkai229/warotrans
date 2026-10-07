@@ -1,12 +1,13 @@
-"""ROS2 ↔ MQTT Robot Gateway: heartbeat (1 Hz) + telemetry (~5 Hz)."""
+"""ROS2 ↔ MQTT Robot Gateway: heartbeat/telemetry uplink + command downlink."""
 
 from __future__ import annotations
 
 import os
+import threading
 from typing import Optional
 
 import rclpy
-from geometry_msgs.msg import PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from nav_msgs.msg import Odometry
 from rclpy.duration import Duration
 from rclpy.node import Node
@@ -14,9 +15,15 @@ from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
 from tf2_ros import Buffer, TransformException, TransformListener
 
+from warotrans_fleet.command_handler import CommandHandler, yaw_to_quaternion
 from warotrans_fleet.mqtt_publisher import ReconnectingMqttPublisher, default_paho_factory
 from warotrans_fleet.nav2_status_tracker import Nav2StatusTracker
-from warotrans_fleet.payload_builder import build_heartbeat, build_telemetry
+from warotrans_fleet.payload_builder import (
+    build_command_ack,
+    build_command_result,
+    build_heartbeat,
+    build_telemetry,
+)
 from warotrans_fleet.sequence import SequenceClock
 from warotrans_fleet.transforms import quaternion_to_yaw
 
@@ -62,12 +69,14 @@ class RobotGatewayNode(Node):
         )
         client_id = self.get_parameter("mqtt_client_id").get_parameter_value().string_value
 
-        # Do not name this `_clock` — that shadows rclpy Node._clock used by create_timer.
         self._seq = SequenceClock()
         self._nav = Nav2StatusTracker()
         self._ever_localized = False
+        self._last_localization = "UNKNOWN"
         self._lin_vel = 0.0
         self._ang_vel = 0.0
+        self._goal_handle = None
+        self._goal_lock = threading.Lock()
 
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
@@ -83,13 +92,23 @@ class RobotGatewayNode(Node):
         )
 
         self._action_client = None
+        self._NavigateToPose = None
         self._setup_nav2_action()
 
+        self._commands = CommandHandler(
+            localization_provider=lambda: self._last_localization,
+            nav2=self if self._action_client is not None else None,
+            on_result=self._publish_command_result,
+        )
+
+        command_topic = f"{self._topic_prefix}/robots/{self._robot_code}/command"
         self._mqtt = ReconnectingMqttPublisher(
             host=self._mqtt_host,
             port=self._mqtt_port,
             client_id=f"{client_id}-{self._robot_code}",
             client_factory=default_paho_factory,
+            subscribe_topic=command_topic,
+            on_message=self._on_mqtt_message,
         )
         self._mqtt.start()
 
@@ -101,7 +120,8 @@ class RobotGatewayNode(Node):
         self.get_logger().info(
             f"Robot gateway started robot_code={self._robot_code} "
             f"mqtt={self._mqtt_host}:{self._mqtt_port} "
-            f"frames={self._map_frame}->{self._base_frame} bootId={self._seq.boot_id}"
+            f"frames={self._map_frame}->{self._base_frame} bootId={self._seq.boot_id} "
+            f"subscribe={command_topic}"
         )
 
     def _setup_nav2_action(self) -> None:
@@ -110,14 +130,91 @@ class RobotGatewayNode(Node):
             from nav2_msgs.action import NavigateToPose
             from rclpy.action import ActionClient
 
+            self._NavigateToPose = NavigateToPose
             action_name = self.get_parameter("navigate_action").get_parameter_value().string_value
             self._action_client = ActionClient(self, NavigateToPose, action_name)
-            # Status topic published by action server: <action>/_action/status
             status_topic = f"{action_name}/_action/status"
             self.create_subscription(GoalStatusArray, status_topic, self._on_goal_status, 10)
-            self.get_logger().info(f"Tracking Nav2 action status on {status_topic}")
+            self.get_logger().info(f"Nav2 ActionClient ready on {action_name}")
         except Exception as exc:  # noqa: BLE001
-            self.get_logger().warning(f"Nav2 action tracking unavailable: {exc}; navigationStatus stays IDLE")
+            self.get_logger().warning(f"Nav2 unavailable: {exc}; commands will be rejected")
+
+    # --- Nav2Bridge protocol ---
+    def send_navigate(self, *, frame_id: str, x: float, y: float, yaw: float, command_id: str) -> None:
+        if self._action_client is None or self._NavigateToPose is None:
+            raise RuntimeError("Nav2 unavailable")
+
+        if not self._action_client.wait_for_server(timeout_sec=2.0):
+            raise RuntimeError("Nav2 server not ready")
+
+        with self._goal_lock:
+            if self._goal_handle is not None:
+                try:
+                    self._goal_handle.cancel_goal_async()
+                except Exception:  # noqa: BLE001
+                    pass
+                self._goal_handle = None
+
+        pose = PoseStamped()
+        pose.header.frame_id = frame_id
+        pose.header.stamp = self.get_clock().now().to_msg()
+        pose.pose.position.x = float(x)
+        pose.pose.position.y = float(y)
+        qx, qy, qz, qw = yaw_to_quaternion(yaw)
+        pose.pose.orientation.x = qx
+        pose.pose.orientation.y = qy
+        pose.pose.orientation.z = qz
+        pose.pose.orientation.w = qw
+
+        goal = self._NavigateToPose.Goal()
+        goal.pose = pose
+
+        send_future = self._action_client.send_goal_async(goal)
+
+        def _goal_response(fut):
+            try:
+                handle = fut.result()
+            except Exception as exc:  # noqa: BLE001
+                self.get_logger().error(f"send_goal failed: {exc}")
+                self._commands.notify_nav_result(command_id, "FAILED", "SEND_GOAL_FAILED")
+                return
+            if not handle.accepted:
+                self._commands.notify_nav_result(command_id, "FAILED", "GOAL_REJECTED")
+                return
+            with self._goal_lock:
+                self._goal_handle = handle
+            result_future = handle.get_result_async()
+
+            def _result_done(rf):
+                try:
+                    result = rf.result()
+                    status = int(result.status)
+                except Exception as exc:  # noqa: BLE001
+                    self.get_logger().error(f"get_result failed: {exc}")
+                    self._commands.notify_nav_result(command_id, "FAILED", "RESULT_ERROR")
+                    return
+                finally:
+                    with self._goal_lock:
+                        self._goal_handle = None
+
+                # GoalStatus: 4 SUCCEEDED, 5 CANCELED, 6 ABORTED
+                if status == 4:
+                    outcome = "SUCCEEDED"
+                elif status == 5:
+                    outcome = "CANCELED"
+                else:
+                    outcome = "FAILED"
+                self._commands.notify_nav_result(command_id, outcome, None if outcome == "SUCCEEDED" else f"GOAL_STATUS_{status}")
+
+            result_future.add_done_callback(_result_done)
+
+        send_future.add_done_callback(_goal_response)
+
+    def cancel_active(self) -> None:
+        with self._goal_lock:
+            handle = self._goal_handle
+        if handle is not None:
+            handle.cancel_goal_async()
 
     def destroy_node(self) -> bool:
         self._mqtt.stop()
@@ -128,13 +225,11 @@ class RobotGatewayNode(Node):
         self._ang_vel = float(msg.twist.twist.angular.z)
 
     def _on_amcl_pose(self, _msg: PoseWithCovarianceStamped) -> None:
-        # Presence of AMCL pose is an assist signal only; TF remains SoT for pose.
         pass
 
     def _on_goal_status(self, msg) -> None:
         if not msg.status_list:
             return
-        # Use the most recent status entry.
         latest = msg.status_list[-1]
         self._nav.update_from_goal_status(int(latest.status))
 
@@ -143,6 +238,43 @@ class RobotGatewayNode(Node):
 
     def _telemetry_topic(self) -> str:
         return f"{self._topic_prefix}/robots/{self._robot_code}/telemetry"
+
+    def _command_ack_topic(self) -> str:
+        return f"{self._topic_prefix}/robots/{self._robot_code}/command_ack"
+
+    def _command_result_topic(self) -> str:
+        return f"{self._topic_prefix}/robots/{self._robot_code}/command_result"
+
+    def _on_mqtt_message(self, topic: str, body: dict) -> None:
+        if not topic.endswith("/command"):
+            return
+        # MQTT callback thread; ActionClient futures are designed for this usage.
+        self._process_command(body)
+
+    def _process_command(self, body: dict) -> None:
+        command_id = str(body.get("commandId") or "")
+        decision = self._commands.handle_command(body)
+        ack = build_command_ack(
+            robot_code=self._robot_code,
+            command_id=command_id,
+            accepted=decision.accepted,
+            reason_code=decision.reason_code,
+        )
+        self._mqtt.publish(self._command_ack_topic(), ack, qos=1)
+        self.get_logger().info(
+            f"command {command_id} type={body.get('type')} accepted={decision.accepted} "
+            f"reason={decision.reason_code}"
+        )
+
+    def _publish_command_result(self, command_id: str, outcome: str, error_code: Optional[str]) -> None:
+        payload = build_command_result(
+            robot_code=self._robot_code,
+            command_id=command_id,
+            outcome=outcome,
+            error_code=error_code,
+        )
+        self._mqtt.publish(self._command_result_topic(), payload, qos=1)
+        self.get_logger().info(f"command_result {command_id} outcome={outcome}")
 
     def _on_heartbeat_timer(self) -> None:
         seq = self._seq.next_heartbeat()
@@ -179,7 +311,7 @@ class RobotGatewayNode(Node):
 
     def _on_telemetry_timer(self) -> None:
         pose, localization_status = self._lookup_map_pose()
-        # Never publish a stale pose as valid when not localized.
+        self._last_localization = localization_status
         if localization_status != "LOCALIZED":
             pose = None
 
@@ -190,12 +322,12 @@ class RobotGatewayNode(Node):
             sequence=seq,
             map_version_code=self._map_version_code,
             pose=pose,
-            battery_percent=None,  # no battery sensor in current hardware stack
+            battery_percent=None,
             navigation_status=self._nav.navigation_status,
             localization_status=localization_status,
             linear_velocity=self._lin_vel,
             angular_velocity=self._ang_vel,
-            current_command_id=None,
+            current_command_id=self._commands.active_command_id,
             error_code=None,
         )
         self._mqtt.publish(self._telemetry_topic(), payload)
