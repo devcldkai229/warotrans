@@ -1,17 +1,22 @@
 # warotrans_fleet
 
-Fleet / backend bridge. Current implementation: **Robot Gateway** — ROS 2 → MQTT heartbeat + telemetry for `warotrans-system`.
+Fleet / backend bridge. **Robot Gateway** — bidirectional MQTT with `warotrans-system` (heartbeat/telemetry uplink + command downlink).
+
+Protocol ADR: `docs/adr/0005-fleet-mqtt-command-protocol.md`.
 
 ## Shared MQTT contract
 
 See `warotrans-system/docs/mqtt-robot-contracts.md`.
 
-| Topic | Rate | QoS |
-|-------|------|-----|
-| `warotrans/v1/robots/{robotCode}/heartbeat` | 1 Hz | 0, retain false |
-| `warotrans/v1/robots/{robotCode}/telemetry` | ~5 Hz | 0, retain false |
+| Topic | Direction | QoS |
+|-------|-----------|-----|
+| `…/heartbeat` | robot → backend (~1 Hz) | 0 |
+| `…/telemetry` | robot → backend (~5 Hz) | 0 |
+| `…/command` | backend → robot | 1 |
+| `…/command_ack` | robot → backend | 1 |
+| `…/command_result` | robot → backend | 1 |
 
-Robot never publishes OFFLINE or business states (`AVAILABLE`, `RESERVED`, …). Backend owns connectivity (`IsOnline`) and operational status.
+Commands: `NAVIGATE_TO_POSE`, `CANCEL` only. Robot never sets business `RobotStatus`. Backend owns `IsOnline` and operational status.
 
 ## ROS sources
 

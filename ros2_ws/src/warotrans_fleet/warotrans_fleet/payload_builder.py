@@ -77,3 +77,43 @@ def build_telemetry(
         "currentCommandId": current_command_id,
         "errorCode": error_code,
     }
+
+
+def build_command_ack(
+    *,
+    robot_code: str,
+    command_id: str,
+    accepted: bool,
+    reason_code: Optional[str] = None,
+    sent_at: Optional[str] = None,
+    message_id: Optional[str] = None,
+) -> dict[str, Any]:
+    return {
+        "schemaVersion": 1,
+        "messageId": message_id or new_message_id(),
+        "commandId": command_id,
+        "robotCode": robot_code,
+        "accepted": bool(accepted),
+        "reasonCode": reason_code,
+        "sentAt": sent_at or utc_now_iso(),
+    }
+
+
+def build_command_result(
+    *,
+    robot_code: str,
+    command_id: str,
+    outcome: str,
+    error_code: Optional[str] = None,
+    sent_at: Optional[str] = None,
+    message_id: Optional[str] = None,
+) -> dict[str, Any]:
+    return {
+        "schemaVersion": 1,
+        "messageId": message_id or new_message_id(),
+        "commandId": command_id,
+        "robotCode": robot_code,
+        "outcome": outcome,
+        "errorCode": error_code,
+        "sentAt": sent_at or utc_now_iso(),
+    }
