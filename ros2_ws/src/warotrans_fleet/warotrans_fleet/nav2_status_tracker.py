@@ -18,6 +18,7 @@ class Nav2StatusTracker:
     def __init__(self) -> None:
         self._status: str = "IDLE"
         self._ever_seen_goal = False
+        self._has_active_goal = False
 
     @property
     def navigation_status(self) -> str:
@@ -28,6 +29,18 @@ class Nav2StatusTracker:
         mapped = self.map_goal_status(status_code)
         self._status = mapped
         return mapped
+
+    def update_from_status_list(self, status_codes: list[int]) -> None:
+        """Toàn bộ GoalStatusArray: có goal nào đang sống (accepted/executing/canceling) không."""
+        self._has_active_goal = any(
+            code in (STATUS_ACCEPTED, STATUS_EXECUTING, STATUS_CANCELING) for code in status_codes
+        )
+        if status_codes:
+            self.update_from_goal_status(status_codes[-1])
+
+    @property
+    def has_active_goal(self) -> bool:
+        return self._has_active_goal
 
     def mark_idle(self) -> None:
         self._status = "IDLE"

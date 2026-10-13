@@ -85,9 +85,14 @@ def build_command_ack(
     command_id: str,
     accepted: bool,
     reason_code: Optional[str] = None,
+    reason_message: Optional[str] = None,
+    job_assignment_id: Optional[str] = None,
+    job_step_id: Optional[str] = None,
     sent_at: Optional[str] = None,
     message_id: Optional[str] = None,
 ) -> dict[str, Any]:
+    # jobAssignmentId / jobStepId / reasonMessage: field mở rộng để correlate + debug.
+    # Backend (System.Text.Json) bỏ qua field lạ nên không phá contract.
     return {
         "schemaVersion": 1,
         "messageId": message_id or new_message_id(),
@@ -95,6 +100,9 @@ def build_command_ack(
         "robotCode": robot_code,
         "accepted": bool(accepted),
         "reasonCode": reason_code,
+        "reasonMessage": reason_message,
+        "jobAssignmentId": job_assignment_id,
+        "jobStepId": job_step_id,
         "sentAt": sent_at or utc_now_iso(),
     }
 
@@ -105,6 +113,10 @@ def build_command_result(
     command_id: str,
     outcome: str,
     error_code: Optional[str] = None,
+    error_message: Optional[str] = None,
+    job_assignment_id: Optional[str] = None,
+    job_step_id: Optional[str] = None,
+    result: Optional[Mapping[str, Any]] = None,
     sent_at: Optional[str] = None,
     message_id: Optional[str] = None,
 ) -> dict[str, Any]:
@@ -115,5 +127,9 @@ def build_command_result(
         "robotCode": robot_code,
         "outcome": outcome,
         "errorCode": error_code,
+        "errorMessage": error_message,
+        "jobAssignmentId": job_assignment_id,
+        "jobStepId": job_step_id,
+        "result": dict(result) if result is not None else None,
         "sentAt": sent_at or utc_now_iso(),
     }

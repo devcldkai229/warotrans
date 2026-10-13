@@ -1,29 +1,35 @@
-"""ROS2 ↔ MQTT Robot Gateway: heartbeat/telemetry uplink + command downlink."""
+"""ROS2 ↔ MQTT Robot Gateway: heartbeat/telemetry uplink + command downlink.
+
+Threading:
+- MQTT network thread (paho) chỉ parse JSON rồi đẩy vào inbox + trigger guard condition.
+  Không gọi rclpy / Nav2 từ thread đó, không block.
+- ROS executor thread: CommandRouter, MoveCommandHandler, Nav2 action futures, timers
+  (heartbeat / telemetry / command tick). Không callback nào chờ Nav2 đồng bộ, nên
+  heartbeat + telemetry vẫn chạy đều trong lúc robot đang MOVE.
+"""
 
 from __future__ import annotations
 
 import os
-import threading
-from typing import Optional
+import queue
+from typing import Any, Optional
 
 import rclpy
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped
 from nav_msgs.msg import Odometry
 from rclpy.duration import Duration
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
 from tf2_ros import Buffer, TransformException, TransformListener
 
-from warotrans_fleet.command_handler import CommandHandler, yaw_to_quaternion
+from warotrans_fleet import navigation_state as nav_state
+from warotrans_fleet.command_stack import build_command_stack
 from warotrans_fleet.mqtt_publisher import ReconnectingMqttPublisher, default_paho_factory
 from warotrans_fleet.nav2_status_tracker import Nav2StatusTracker
-from warotrans_fleet.payload_builder import (
-    build_command_ack,
-    build_command_result,
-    build_heartbeat,
-    build_telemetry,
-)
+from warotrans_fleet.navigator import NavigatorPort, UnavailableNavigator
+from warotrans_fleet.payload_builder import build_heartbeat, build_telemetry
 from warotrans_fleet.sequence import SequenceClock
 from warotrans_fleet.transforms import quaternion_to_yaw
 
@@ -31,6 +37,25 @@ from warotrans_fleet.transforms import quaternion_to_yaw
 def _env_or(param_value: str, env_name: str) -> str:
     env = os.environ.get(env_name)
     return env if env is not None and env != "" else param_value
+
+
+class _MqttCommandEvents:
+    """CommandEventPublisher → MQTT QoS1 trên command_ack / command_result."""
+
+    def __init__(self, node: "RobotGatewayNode") -> None:
+        self._node = node
+
+    def publish_ack(self, payload: dict[str, Any]) -> None:
+        self._publish(self._node.topic("command_ack"), payload)
+
+    def publish_result(self, payload: dict[str, Any]) -> None:
+        self._publish(self._node.topic("command_result"), payload)
+
+    def _publish(self, topic: str, payload: dict[str, Any]) -> None:
+        if not self._node.mqtt.publish(topic, payload, qos=1):
+            self._node.get_logger().error(
+                f"[MqttPublishDropped] topic={topic} commandId={payload.get('commandId')} (outbound queue full)"
+            )
 
 
 class RobotGatewayNode(Node):
@@ -51,38 +76,49 @@ class RobotGatewayNode(Node):
         self.declare_parameter("heartbeat_hz", 1.0)
         self.declare_parameter("telemetry_hz", 5.0)
         self.declare_parameter("max_transform_age_sec", 0.5)
+        # MOVE command
+        self.declare_parameter("default_navigate_timeout_sec", 0.0)  # 0 = không timeout nếu command không gửi
+        self.declare_parameter("goal_response_timeout_sec", 10.0)
+        self.declare_parameter("cancel_confirm_timeout_sec", 10.0)
+        self.declare_parameter("terminal_status_hold_sec", 3.0)
+        self.declare_parameter("command_tick_hz", 5.0)
+        self.declare_parameter("command_ledger_size", 500)
 
-        self._robot_code = _env_or(self.get_parameter("robot_code").get_parameter_value().string_value, "WARO_ROBOT_CODE")
-        self._mqtt_host = _env_or(self.get_parameter("mqtt_host").get_parameter_value().string_value, "WARO_MQTT_HOST")
+        self._robot_code = _env_or(self._str_param("robot_code"), "WARO_ROBOT_CODE")
+        self._mqtt_host = _env_or(self._str_param("mqtt_host"), "WARO_MQTT_HOST")
         mqtt_port_param = int(self.get_parameter("mqtt_port").get_parameter_value().integer_value)
         port_env = os.environ.get("WARO_MQTT_PORT")
         self._mqtt_port = int(port_env) if port_env else mqtt_port_param
-        self._topic_prefix = self.get_parameter("topic_prefix").get_parameter_value().string_value.strip().rstrip("/")
-        self._map_version_code = _env_or(
-            self.get_parameter("map_version_code").get_parameter_value().string_value,
-            "WARO_MAP_VERSION_CODE",
-        ) or None
-        self._map_frame = self.get_parameter("map_frame").get_parameter_value().string_value
-        self._base_frame = self.get_parameter("base_frame").get_parameter_value().string_value
-        self._max_transform_age = float(
-            self.get_parameter("max_transform_age_sec").get_parameter_value().double_value
-        )
-        client_id = self.get_parameter("mqtt_client_id").get_parameter_value().string_value
+        self._topic_prefix = self._str_param("topic_prefix").strip().rstrip("/")
+        self._map_version_code = _env_or(self._str_param("map_version_code"), "WARO_MAP_VERSION_CODE") or None
+        self._map_frame = self._str_param("map_frame")
+        self._base_frame = self._str_param("base_frame")
+        self._max_transform_age = self._float_param("max_transform_age_sec")
+        client_id = self._str_param("mqtt_client_id")
+
+        default_timeout = self._float_param("default_navigate_timeout_sec")
+        goal_response_timeout = self._float_param("goal_response_timeout_sec")
+        cancel_confirm_timeout = self._float_param("cancel_confirm_timeout_sec")
+        terminal_hold = self._float_param("terminal_status_hold_sec")
+        tick_hz = self._float_param("command_tick_hz")
+        ledger_size = int(self.get_parameter("command_ledger_size").get_parameter_value().integer_value)
+        if default_timeout < 0 or goal_response_timeout <= 0 or cancel_confirm_timeout <= 0:
+            raise ValueError("navigate timeouts must be > 0 (default_navigate_timeout_sec may be 0 = disabled)")
+        if terminal_hold < 0 or tick_hz <= 0 or ledger_size < 1:
+            raise ValueError("terminal_status_hold_sec >= 0, command_tick_hz > 0, command_ledger_size >= 1")
 
         self._seq = SequenceClock()
-        self._nav = Nav2StatusTracker()
+        self._nav_tracker = Nav2StatusTracker()
         self._ever_localized = False
         self._last_localization = "UNKNOWN"
         self._lin_vel = 0.0
         self._ang_vel = 0.0
-        self._goal_handle = None
-        self._goal_lock = threading.Lock()
 
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
 
-        odom_topic = self.get_parameter("odom_topic").get_parameter_value().string_value
-        amcl_topic = self.get_parameter("amcl_pose_topic").get_parameter_value().string_value
+        odom_topic = self._str_param("odom_topic")
+        amcl_topic = self._str_param("amcl_pose_topic")
         self.create_subscription(Odometry, odom_topic, self._on_odom, 10)
         self.create_subscription(
             PoseWithCovarianceStamped,
@@ -91,29 +127,42 @@ class RobotGatewayNode(Node):
             qos_profile_sensor_data,
         )
 
-        self._action_client = None
-        self._NavigateToPose = None
-        self._setup_nav2_action()
+        navigator = self._setup_nav2()
 
-        self._commands = CommandHandler(
-            localization_provider=lambda: self._last_localization,
-            nav2=self if self._action_client is not None else None,
-            on_result=self._publish_command_result,
-        )
-
-        command_topic = f"{self._topic_prefix}/robots/{self._robot_code}/command"
-        self._mqtt = ReconnectingMqttPublisher(
+        self.mqtt = ReconnectingMqttPublisher(
             host=self._mqtt_host,
             port=self._mqtt_port,
             client_id=f"{client_id}-{self._robot_code}",
             client_factory=default_paho_factory,
-            subscribe_topic=command_topic,
+            subscribe_topic=self.topic("command"),
             on_message=self._on_mqtt_message,
         )
-        self._mqtt.start()
 
-        hb_hz = max(0.1, float(self.get_parameter("heartbeat_hz").get_parameter_value().double_value))
-        tel_hz = max(0.1, float(self.get_parameter("telemetry_hz").get_parameter_value().double_value))
+        self._commands = build_command_stack(
+            robot_code=self._robot_code,
+            publisher=_MqttCommandEvents(self),
+            navigator=navigator,
+            localization_provider=lambda: self._last_localization,
+            log=self.get_logger(),
+            map_frame=self._map_frame,
+            robot_map_version_code=self._map_version_code,
+            default_timeout_sec=default_timeout or None,
+            goal_response_timeout_sec=goal_response_timeout,
+            cancel_confirm_timeout_sec=cancel_confirm_timeout,
+            terminal_status_hold_sec=terminal_hold,
+            ledger_capacity=ledger_size,
+            external_goal_active=lambda: self._nav_tracker.has_active_goal,
+        )
+
+        # Inbox: MQTT thread → executor thread.
+        self._inbox: "queue.SimpleQueue[dict[str, Any]]" = queue.SimpleQueue()
+        self._inbox_signal = self.create_guard_condition(self._drain_inbox)
+        self.create_timer(1.0 / tick_hz, self._commands.router.tick)
+
+        self.mqtt.start()
+
+        hb_hz = max(0.1, self._float_param("heartbeat_hz"))
+        tel_hz = max(0.1, self._float_param("telemetry_hz"))
         self.create_timer(1.0 / hb_hz, self._on_heartbeat_timer)
         self.create_timer(1.0 / tel_hz, self._on_telemetry_timer)
 
@@ -121,104 +170,58 @@ class RobotGatewayNode(Node):
             f"Robot gateway started robot_code={self._robot_code} "
             f"mqtt={self._mqtt_host}:{self._mqtt_port} "
             f"frames={self._map_frame}->{self._base_frame} bootId={self._seq.boot_id} "
-            f"subscribe={command_topic}"
+            f"subscribe={self.topic('command')} commands={list(self._commands.router.supported_types)} "
+            f"mapVersion={self._map_version_code}"
         )
 
-    def _setup_nav2_action(self) -> None:
+    # ------------------------------------------------------------------ setup helpers
+
+    def _str_param(self, name: str) -> str:
+        return self.get_parameter(name).get_parameter_value().string_value
+
+    def _float_param(self, name: str) -> float:
+        return float(self.get_parameter(name).get_parameter_value().double_value)
+
+    def _setup_nav2(self) -> NavigatorPort:
+        action_name = self._str_param("navigate_action")
         try:
             from action_msgs.msg import GoalStatusArray
-            from nav2_msgs.action import NavigateToPose
-            from rclpy.action import ActionClient
 
-            self._NavigateToPose = NavigateToPose
-            action_name = self.get_parameter("navigate_action").get_parameter_value().string_value
-            self._action_client = ActionClient(self, NavigateToPose, action_name)
-            status_topic = f"{action_name}/_action/status"
-            self.create_subscription(GoalStatusArray, status_topic, self._on_goal_status, 10)
-            self.get_logger().info(f"Nav2 ActionClient ready on {action_name}")
-        except Exception as exc:  # noqa: BLE001
-            self.get_logger().warning(f"Nav2 unavailable: {exc}; commands will be rejected")
+            from warotrans_fleet.nav2_navigator import Nav2ActionNavigator
+        except ImportError as exc:
+            self.get_logger().error(f"Nav2 unavailable ({exc}); NAVIGATE_TO_POSE will be rejected NAV2_UNAVAILABLE")
+            return UnavailableNavigator()
 
-    # --- Nav2Bridge protocol ---
-    def send_navigate(self, *, frame_id: str, x: float, y: float, yaw: float, command_id: str) -> None:
-        if self._action_client is None or self._NavigateToPose is None:
-            raise RuntimeError("Nav2 unavailable")
+        navigator = Nav2ActionNavigator(self, action_name)
+        self.create_subscription(GoalStatusArray, f"{action_name}/_action/status", self._on_goal_status, 10)
+        self.get_logger().info(f"Nav2 ActionClient on {action_name}")
+        return navigator
 
-        if not self._action_client.wait_for_server(timeout_sec=2.0):
-            raise RuntimeError("Nav2 server not ready")
-
-        with self._goal_lock:
-            if self._goal_handle is not None:
-                try:
-                    self._goal_handle.cancel_goal_async()
-                except Exception:  # noqa: BLE001
-                    pass
-                self._goal_handle = None
-
-        pose = PoseStamped()
-        pose.header.frame_id = frame_id
-        pose.header.stamp = self.get_clock().now().to_msg()
-        pose.pose.position.x = float(x)
-        pose.pose.position.y = float(y)
-        qx, qy, qz, qw = yaw_to_quaternion(yaw)
-        pose.pose.orientation.x = qx
-        pose.pose.orientation.y = qy
-        pose.pose.orientation.z = qz
-        pose.pose.orientation.w = qw
-
-        goal = self._NavigateToPose.Goal()
-        goal.pose = pose
-
-        send_future = self._action_client.send_goal_async(goal)
-
-        def _goal_response(fut):
-            try:
-                handle = fut.result()
-            except Exception as exc:  # noqa: BLE001
-                self.get_logger().error(f"send_goal failed: {exc}")
-                self._commands.notify_nav_result(command_id, "FAILED", "SEND_GOAL_FAILED")
-                return
-            if not handle.accepted:
-                self._commands.notify_nav_result(command_id, "FAILED", "GOAL_REJECTED")
-                return
-            with self._goal_lock:
-                self._goal_handle = handle
-            result_future = handle.get_result_async()
-
-            def _result_done(rf):
-                try:
-                    result = rf.result()
-                    status = int(result.status)
-                except Exception as exc:  # noqa: BLE001
-                    self.get_logger().error(f"get_result failed: {exc}")
-                    self._commands.notify_nav_result(command_id, "FAILED", "RESULT_ERROR")
-                    return
-                finally:
-                    with self._goal_lock:
-                        self._goal_handle = None
-
-                # GoalStatus: 4 SUCCEEDED, 5 CANCELED, 6 ABORTED
-                if status == 4:
-                    outcome = "SUCCEEDED"
-                elif status == 5:
-                    outcome = "CANCELED"
-                else:
-                    outcome = "FAILED"
-                self._commands.notify_nav_result(command_id, outcome, None if outcome == "SUCCEEDED" else f"GOAL_STATUS_{status}")
-
-            result_future.add_done_callback(_result_done)
-
-        send_future.add_done_callback(_goal_response)
-
-    def cancel_active(self) -> None:
-        with self._goal_lock:
-            handle = self._goal_handle
-        if handle is not None:
-            handle.cancel_goal_async()
+    def topic(self, leaf: str) -> str:
+        return f"{self._topic_prefix}/robots/{self._robot_code}/{leaf}"
 
     def destroy_node(self) -> bool:
-        self._mqtt.stop()
+        self.mqtt.stop()
         return super().destroy_node()
+
+    # ------------------------------------------------------------------ command downlink
+
+    def _on_mqtt_message(self, topic: str, body: dict) -> None:
+        # MQTT network thread: chỉ enqueue, không xử lý.
+        if topic != self.topic("command"):
+            return
+        self._inbox.put(body)
+        self._inbox_signal.trigger()
+
+    def _drain_inbox(self) -> None:
+        while True:
+            try:
+                body = self._inbox.get_nowait()
+            except queue.Empty:
+                return
+            self._commands.router.handle_message(body)
+
+    # ------------------------------------------------------------------ ROS inputs
 
     def _on_odom(self, msg: Odometry) -> None:
         self._lin_vel = float(msg.twist.twist.linear.x)
@@ -228,53 +231,9 @@ class RobotGatewayNode(Node):
         pass
 
     def _on_goal_status(self, msg) -> None:
-        if not msg.status_list:
-            return
-        latest = msg.status_list[-1]
-        self._nav.update_from_goal_status(int(latest.status))
+        self._nav_tracker.update_from_status_list([int(s.status) for s in msg.status_list])
 
-    def _heartbeat_topic(self) -> str:
-        return f"{self._topic_prefix}/robots/{self._robot_code}/heartbeat"
-
-    def _telemetry_topic(self) -> str:
-        return f"{self._topic_prefix}/robots/{self._robot_code}/telemetry"
-
-    def _command_ack_topic(self) -> str:
-        return f"{self._topic_prefix}/robots/{self._robot_code}/command_ack"
-
-    def _command_result_topic(self) -> str:
-        return f"{self._topic_prefix}/robots/{self._robot_code}/command_result"
-
-    def _on_mqtt_message(self, topic: str, body: dict) -> None:
-        if not topic.endswith("/command"):
-            return
-        # MQTT callback thread; ActionClient futures are designed for this usage.
-        self._process_command(body)
-
-    def _process_command(self, body: dict) -> None:
-        command_id = str(body.get("commandId") or "")
-        decision = self._commands.handle_command(body)
-        ack = build_command_ack(
-            robot_code=self._robot_code,
-            command_id=command_id,
-            accepted=decision.accepted,
-            reason_code=decision.reason_code,
-        )
-        self._mqtt.publish(self._command_ack_topic(), ack, qos=1)
-        self.get_logger().info(
-            f"command {command_id} type={body.get('type')} accepted={decision.accepted} "
-            f"reason={decision.reason_code}"
-        )
-
-    def _publish_command_result(self, command_id: str, outcome: str, error_code: Optional[str]) -> None:
-        payload = build_command_result(
-            robot_code=self._robot_code,
-            command_id=command_id,
-            outcome=outcome,
-            error_code=error_code,
-        )
-        self._mqtt.publish(self._command_result_topic(), payload, qos=1)
-        self.get_logger().info(f"command_result {command_id} outcome={outcome}")
+    # ------------------------------------------------------------------ uplink
 
     def _on_heartbeat_timer(self) -> None:
         seq = self._seq.next_heartbeat()
@@ -283,7 +242,7 @@ class RobotGatewayNode(Node):
             boot_id=self._seq.boot_id,
             sequence=seq,
         )
-        self._mqtt.publish(self._heartbeat_topic(), payload)
+        self.mqtt.publish(self.topic("heartbeat"), payload)
 
     def _lookup_map_pose(self) -> tuple[Optional[dict[str, float]], str]:
         try:
@@ -309,6 +268,13 @@ class RobotGatewayNode(Node):
             status = "LOST" if self._ever_localized else "UNKNOWN"
             return None, status
 
+    def _navigation_status(self) -> str:
+        status = self._commands.move.navigation_status
+        if status == nav_state.IDLE and self._nav_tracker.has_active_goal:
+            # Goal không do fleet gửi (RViz / CLI) — vẫn phản ánh robot đang chạy.
+            return nav_state.NAVIGATING
+        return status
+
     def _on_telemetry_timer(self) -> None:
         pose, localization_status = self._lookup_map_pose()
         self._last_localization = localization_status
@@ -323,14 +289,14 @@ class RobotGatewayNode(Node):
             map_version_code=self._map_version_code,
             pose=pose,
             battery_percent=None,
-            navigation_status=self._nav.navigation_status,
+            navigation_status=self._navigation_status(),
             localization_status=localization_status,
             linear_velocity=self._lin_vel,
             angular_velocity=self._ang_vel,
-            current_command_id=self._commands.active_command_id,
+            current_command_id=self._commands.move.active_command_id,
             error_code=None,
         )
-        self._mqtt.publish(self._telemetry_topic(), payload)
+        self.mqtt.publish(self.topic("telemetry"), payload)
 
 
 def main(args=None) -> None:
@@ -338,11 +304,12 @@ def main(args=None) -> None:
     node = RobotGatewayNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        # Jazzy tự shutdown context khi nhận SIGINT — shutdown lần hai sẽ raise RCLError.
+        rclpy.try_shutdown()
 
 
 if __name__ == "__main__":
