@@ -1,0 +1,16 @@
+robot_gateway:
+  ros__parameters:
+    robot_code: "RBT-001"
+    mqtt_host: "localhost"
+    mqtt_port: 1883
+    mqtt_client_id: "warotrans-robot-gateway"
+    topic_prefix: "warotrans/v1"
+    map_version_code: ""
+    map_frame: "map"
+    base_frame: "base_link"
+    odom_topic: "/odom"
+    amcl_pose_topic: "/amcl_pose"
+    navigate_action: "navigate_to_pose"
+    heartbeat_hz: 1.0
+    telemetry_hz: 5.0
+    max_transform_age_sec: 0.5
