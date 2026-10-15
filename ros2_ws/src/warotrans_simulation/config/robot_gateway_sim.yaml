@@ -1,0 +1,37 @@
+# Fleet gateway for the SIMULATED robot (same node as on the Pi: warotrans_fleet/robot_gateway_node).
+# Only identity, clock and broker differ from config/robot_gateway.yaml.
+robot_gateway:
+  ros__parameters:
+    use_sim_time: true
+    robot_code: "RBT-SIM-01"
+    # WSL2 networkingMode=mirrored: Mosquitto (Docker on Windows) is reachable on localhost.
+    mqtt_host: "localhost"
+    mqtt_port: 1883
+    mqtt_client_id: "warotrans-robot-gateway-sim-01"
+    topic_prefix: "warotrans/v1"
+    # Set to the backend MapVersion code of the imported sim map (GĐ 2), e.g. "MAP-WHDEMO-V001".
+    map_version_code: ""
+    map_frame: "map"
+    base_frame: "base_link"
+    odom_topic: "/odom"
+    amcl_pose_topic: "/amcl_pose"
+    navigate_action: "navigate_to_pose"
+    heartbeat_hz: 1.0
+    telemetry_hz: 5.0
+    # Sim clock + bridge latency: be a bit more tolerant than on the Pi.
+    max_transform_age_sec: 1.0
+    default_navigate_timeout_sec: 0.0
+    goal_response_timeout_sec: 10.0
+    cancel_confirm_timeout_sec: 10.0
+    terminal_status_hold_sec: 3.0
+    command_tick_hz: 5.0
+    command_ledger_size: 500
+    # Simulation only: fake battery level so backend CHECK.BATTERY_MIN can pass (real robot: -1 / null).
+    simulated_battery_percent: 87.0
+    # Manual drive from the web (MQTT teleop → /cmd_vel). The simulated motors have no provisional limit.
+    teleop_enabled: true
+    cmd_vel_topic: "/cmd_vel"
+    teleop_max_linear: 0.3
+    teleop_max_angular: 1.0
+    teleop_deadman_sec: 0.5
+    teleop_max_message_age_sec: 2.0   # backend and WSL share the host clock

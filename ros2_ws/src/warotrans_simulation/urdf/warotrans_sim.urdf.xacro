@@ -1,0 +1,171 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="warotrans">
+
+  <!--
+    WaroTrans robot for Gazebo Harmonic (simulation ONLY).
+
+    Includes the real model (warotrans_description/urdf/warotrans.urdf.xacro,
+    unchanged: base_footprint -> base_link -> laser) and adds what a simulator
+    needs but the real robot gets from hardware:
+
+      - mass / inertia, visible body
+      - FOUR drive wheels, skid steer like the real chassis (no casters, no steering)
+      - gz DiffDrive system      : /cmd_vel -> 2 left + 2 right wheels, publishes /odom + TF odom -> base_footprint
+                                   (on the real robot: esp32_bridge_node + wheel_odom_node)
+      - gz JointStatePublisher   : wheel joints -> /joint_states
+      - gpu_lidar on frame laser : /scan (on the real robot: RPLIDAR)
+
+    Wheel geometry comes from warotrans_description/config/calibration.yaml (real robot):
+      wheel radius   = mean(radius_left, radius_right)
+      wheelbase      = chassis.wheelbase (front axle <-> rear axle)
+      wheel_separation for DiffDrive = wheel.separation, the EFFECTIVE separation measured with the
+      360 deg rotation test on the real skid-steer robot (it already accounts for wheel scrub).
+    Nav2 only sees /cmd_vel, /odom, /scan and TF, which keep the same names and frames.
+  -->
+
+  <xacro:include filename="$(find warotrans_description)/urdf/warotrans.urdf.xacro"/>
+
+  <xacro:property name="cal" value="${xacro.load_yaml('$(find warotrans_description)/config/calibration.yaml')}"/>
+  <xacro:property name="wheel_radius" value="${(cal['wheel']['radius_left'] + cal['wheel']['radius_right']) / 2.0}"/>
+  <xacro:property name="effective_separation" value="${cal['wheel']['separation']}"/>
+  <xacro:property name="wheelbase" value="${cal['chassis']['wheelbase']}"/>
+  <xacro:property name="chassis_length_sim" value="${cal['chassis']['length']}"/>
+  <xacro:property name="chassis_width_sim" value="${cal['chassis']['width']}"/>
+
+  <!-- Physical wheel placement: just outside the chassis plate. -->
+  <xacro:property name="wheel_width" value="0.026"/>
+  <xacro:property name="wheel_y" value="${chassis_width_sim / 2.0 + wheel_width / 2.0 + 0.005}"/>
+  <xacro:property name="wheel_x" value="${wheelbase / 2.0}"/>
+  <xacro:property name="wheel_mass" value="0.12"/>
+  <xacro:property name="body_mass" value="3.0"/>
+  <xacro:property name="body_height" value="0.12"/>
+
+  <!-- Mass + visible body. base_link (from the real URDF) has no inertial;
+       this fixed child gives the merged chassis its mass. -->
+  <link name="sim_body">
+    <inertial>
+      <origin xyz="0 0 ${body_height / 2.0}" rpy="0 0 0"/>
+      <mass value="${body_mass}"/>
+      <inertia ixx="${body_mass * (chassis_width_sim ** 2 + body_height ** 2) / 12.0}" ixy="0" ixz="0"
+               iyy="${body_mass * (chassis_length_sim ** 2 + body_height ** 2) / 12.0}" iyz="0"
+               izz="${body_mass * (chassis_length_sim ** 2 + chassis_width_sim ** 2) / 12.0}"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 ${body_height / 2.0 + 0.003}" rpy="0 0 0"/>
+      <geometry><box size="${chassis_length_sim} ${chassis_width_sim} ${body_height}"/></geometry>
+      <material name="warotrans_yellow"><color rgba="0.95 0.75 0.1 1"/></material>
+    </visual>
+  </link>
+  <joint name="base_link_to_sim_body" type="fixed">
+    <parent link="base_link"/>
+    <child link="sim_body"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Skid-steer wheel. Friction: high along the rolling direction (fdir1 = wheel +X),
+       lower sideways so the chassis can scrub when turning in place, like the real robot. -->
+  <xacro:macro name="drive_wheel" params="name x y">
+    <link name="${name}_wheel">
+      <inertial>
+        <mass value="${wheel_mass}"/>
+        <inertia ixx="${wheel_mass * (3 * wheel_radius ** 2 + wheel_width ** 2) / 12.0}" ixy="0" ixz="0"
+                 iyy="${wheel_mass * (3 * wheel_radius ** 2 + wheel_width ** 2) / 12.0}" iyz="0"
+                 izz="${wheel_mass * wheel_radius ** 2 / 2.0}"/>
+      </inertial>
+      <visual>
+        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+        <material name="warotrans_black"><color rgba="0.1 0.1 0.1 1"/></material>
+      </visual>
+      <collision>
+        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+      </collision>
+    </link>
+    <joint name="${name}_wheel_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="${name}_wheel"/>
+      <!-- cylinder axis is local Z; roll -90deg puts it along +Y -->
+      <origin xyz="${x} ${y} 0" rpy="-1.5708 0 0"/>
+      <axis xyz="0 0 1"/>
+    </joint>
+    <gazebo reference="${name}_wheel">
+      <mu1>1.0</mu1>
+      <mu2>0.4</mu2>
+      <fdir1>1 0 0</fdir1>
+    </gazebo>
+  </xacro:macro>
+
+  <xacro:drive_wheel name="front_left" x="${wheel_x}" y="${wheel_y}"/>
+  <xacro:drive_wheel name="rear_left" x="${-wheel_x}" y="${wheel_y}"/>
+  <xacro:drive_wheel name="front_right" x="${wheel_x}" y="${-wheel_y}"/>
+  <xacro:drive_wheel name="rear_right" x="${-wheel_x}" y="${-wheel_y}"/>
+
+  <!-- 360 deg lidar on the real "laser" frame (yaw from geometry.yaml is kept). -->
+  <gazebo reference="laser">
+    <sensor name="lidar" type="gpu_lidar">
+      <gz_frame_id>laser</gz_frame_id>
+      <topic>scan</topic>
+      <update_rate>10</update_rate>
+      <always_on>true</always_on>
+      <visualize>true</visualize>
+      <lidar>
+        <scan>
+          <horizontal>
+            <samples>360</samples>
+            <resolution>1</resolution>
+            <min_angle>-3.14159</min_angle>
+            <max_angle>3.14159</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.15</min>
+          <max>12.0</max>
+          <resolution>0.01</resolution>
+        </range>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.01</stddev>
+        </noise>
+      </lidar>
+    </sensor>
+  </gazebo>
+
+  <gazebo>
+    <!-- Skid steer = DiffDrive with two joints per side. -->
+    <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
+      <left_joint>front_left_wheel_joint</left_joint>
+      <left_joint>rear_left_wheel_joint</left_joint>
+      <right_joint>front_right_wheel_joint</right_joint>
+      <right_joint>rear_right_wheel_joint</right_joint>
+      <wheel_separation>${effective_separation}</wheel_separation>
+      <wheel_radius>${wheel_radius}</wheel_radius>
+      <max_linear_acceleration>1.0</max_linear_acceleration>
+      <max_angular_acceleration>2.0</max_angular_acceleration>
+      <topic>cmd_vel</topic>
+      <!-- Wheel-integrated odometry is NOT used: with 4 skidding wheels it drifts badly in heading,
+           which made AMCL jump to a look-alike aisle on large maps. Kept on unbridged topics. -->
+      <odom_topic>wheel_odom</odom_topic>
+      <tf_topic>wheel_tf</tf_topic>
+      <frame_id>odom</frame_id>
+      <child_frame_id>base_footprint</child_frame_id>
+      <odom_publish_frequency>50</odom_publish_frequency>
+    </plugin>
+    <!-- /odom + TF odom -> base_footprint from the true simulated motion (like a well-calibrated robot). -->
+    <plugin filename="gz-sim-odometry-publisher-system" name="gz::sim::systems::OdometryPublisher">
+      <odom_frame>odom</odom_frame>
+      <robot_base_frame>base_footprint</robot_base_frame>
+      <odom_topic>odom</odom_topic>
+      <tf_topic>tf</tf_topic>
+      <odom_publish_frequency>50</odom_publish_frequency>
+      <dimensions>2</dimensions>
+    </plugin>
+    <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
+      <topic>joint_states</topic>
+      <joint_name>front_left_wheel_joint</joint_name>
+      <joint_name>rear_left_wheel_joint</joint_name>
+      <joint_name>front_right_wheel_joint</joint_name>
+      <joint_name>rear_right_wheel_joint</joint_name>
+    </plugin>
+  </gazebo>
+
+</robot>

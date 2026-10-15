@@ -57,6 +57,15 @@ def _setup(context, *args, **kwargs):
         if os.path.isfile(outdoor_overlay):
             param_files.append(outdoor_overlay)
 
+    # Optional last overlay (e.g. warotrans_simulation nav2_params_sim.yaml). Empty = none.
+    extra_params = os.path.expanduser(
+        LaunchConfiguration("extra_params_file").perform(context).strip()
+    )
+    if extra_params:
+        if not os.path.isfile(extra_params):
+            raise RuntimeError(f"extra_params_file not found: {extra_params}")
+        param_files.append(extra_params)
+
     common_params = param_files + [{"use_sim_time": use_sim_time}]
     bt_navigator_params = common_params + [{"default_nav_to_pose_bt_xml": bt_xml}]
 
@@ -77,6 +86,7 @@ def _setup(context, *args, **kwargs):
             ]
         ),
         LogInfo(msg=["[warotrans_navigation] default_nav_to_pose_bt_xml=", bt_xml]),
+        LogInfo(msg=["[warotrans_navigation] param_files=", ", ".join(param_files)]),
         Node(
             package="nav2_controller",
             executable="controller_server",
@@ -230,6 +240,11 @@ def generate_launch_description():
                 "nav2_params_file",
                 default_value=default_params,
                 description="Nav2 params YAML (do not name this params_file)",
+            ),
+            DeclareLaunchArgument(
+                "extra_params_file",
+                default_value="",
+                description="Optional Nav2 params overlay merged last (simulation)",
             ),
             DeclareLaunchArgument(
                 "enable_costmap_filters",
