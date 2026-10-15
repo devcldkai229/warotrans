@@ -8,7 +8,7 @@ import queue
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class ReconnectingMqttPublisher:
         port: int,
         client_id: str,
         client_factory: ClientFactory,
-        subscribe_topic: Optional[str] = None,
+        subscribe_topic: Optional[str | Sequence[str]] = None,
         on_message: Optional[MessageCallback] = None,
         reconnect_backoff_sec: float = 1.0,
         max_backoff_sec: float = 10.0,
@@ -59,7 +59,13 @@ class ReconnectingMqttPublisher:
         self._port = port
         self._client_id = client_id
         self._client_factory = client_factory
-        self._subscribe_topic = subscribe_topic
+        # One topic (str) or several (command + teleop), all re-subscribed on every reconnect.
+        if subscribe_topic is None:
+            self._subscribe_topics: tuple[str, ...] = ()
+        elif isinstance(subscribe_topic, str):
+            self._subscribe_topics = (subscribe_topic,)
+        else:
+            self._subscribe_topics = tuple(subscribe_topic)
         self._on_message = on_message
         self._reconnect_backoff_sec = reconnect_backoff_sec
         self._max_backoff_sec = max_backoff_sec
@@ -110,12 +116,12 @@ class ReconnectingMqttPublisher:
                     if rc == 0 or getattr(rc, "value", rc) == 0:
                         self._connected.set()
                         logger.info("MQTT connected %s:%s", self._host, self._port)
-                        if self._subscribe_topic:
+                        for topic in self._subscribe_topics:
                             try:
-                                client.subscribe(self._subscribe_topic, qos=1)
-                                logger.info("MQTT subscribed %s", self._subscribe_topic)
+                                client.subscribe(topic, qos=1)
+                                logger.info("MQTT subscribed %s", topic)
                             except Exception as exc:  # noqa: BLE001
-                                logger.warning("MQTT subscribe failed: %s", exc)
+                                logger.warning("MQTT subscribe failed %s: %s", topic, exc)
                     else:
                         self._connected.clear()
                         logger.warning("MQTT connect failed rc=%s", rc)

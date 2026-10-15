@@ -15,8 +15,18 @@ See `warotrans-system/docs/mqtt-robot-contracts.md`.
 | `…/command` | backend → robot | 1 |
 | `…/command_ack` | robot → backend | 1 |
 | `…/command_result` | robot → backend | 1 |
+| `…/teleop` | backend → robot (manual drive, ~5 Hz while a button is held) | 0 |
 
 Commands: `NAVIGATE_TO_POSE`, `CANCEL` only. Robot never sets business `RobotStatus`. Backend owns `IsOnline` and operational status.
+
+**Teleop** (`warotrans_fleet/teleop.py`, không phải command, không ACK/RESULT): `{linear, angular}` → `geometry_msgs/Twist`
+trên `cmd_vel_topic`. Kẹp theo `teleop_max_linear` / `teleop_max_angular` (robot thật 0.10 m/s, 0.45 rad/s).
+Không nhận lệnh trong `teleop_deadman_sec` (0.5 s) → tự gửi Twist 0. Bỏ qua khi đang có lệnh navigate / goal Nav2.
+Tắt hẳn: `teleop_enabled: false`.
+
+**Drive Assist** (`warotrans_fleet/drive_assist.py`, teleop `assist`, mặc định bật): `/scan` → `base_link` (TF; lidar
+gắn yaw +pi/2) → hành lang rộng bằng thân xe theo hướng chạy → giảm tốc dưới `assist_slow_gap`, dừng dưới
+`assist_stop_gap`. Không có scan mới → không tiến/lùi (quay tại chỗ vẫn được).
 
 Robot chỉ nhận "đi tới pose này" — không biết TransportRequest / Job / Workflow. Backend resolve Endpoint → `x/y/yaw` trước khi gửi.
 
