@@ -9,7 +9,7 @@ install(
 )
 
 install(
-  PROGRAMS scripts/generate_warehouse.py
+  PROGRAMS scripts/generate_warehouse.py scripts/motor_deadband_emulator.py scripts/nav_regression.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
