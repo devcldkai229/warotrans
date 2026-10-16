@@ -301,9 +301,23 @@ Không ghi "target" vào cột measured value.
 
 ## 8. IMU calibration/orientation
 
+**Sensor:** GY-BNO055 on Raspberry Pi I²C-1, address `0x29` (CHIP_ID `0xA0` verified 2026-10-16).
+
+**Mount (operator 2026-10-16):** giữa tâm robot tầng 2; trục module = REP-103
+(+X Front, +Y Left, +Z Up), **không xoay** so với `base_link`.
+
+| Parameter | Value | Date | Method | Status |
+|---|---:|---|---|---|
+| `imu_x` | 0.0 m | 2026-10-16 | center of deck | measured / initial |
+| `imu_y` | 0.0 m | 2026-10-16 | center of deck | measured / initial |
+| `imu_z` | 0.112 m | 2026-10-16 | thước: base_link (tâm bánh) → IMU = **112.0 mm** | measured / initial |
+| roll / pitch / yaw | 0 / 0 / 0 | 2026-10-16 | axes aligned, no rotation | measured / initial |
+
+Sync: `geometry.yaml` `imu.*` → URDF `imu_link`.
+
 | Date | Mounting orientation | Calibration status | Static yaw behavior | Notes |
 |---|---|---|---|---|
-| | | | | |
+| 2026-10-16 | +X F / +Y L / +Z U | pose recorded; NDOF runtime TBD | TBD on robot | I²C smoke PASS (CHIP_ID + accel) |
 
 ---
 

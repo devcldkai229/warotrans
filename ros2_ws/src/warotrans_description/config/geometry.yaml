@@ -62,3 +62,14 @@ ultrasonic:
     y: null
     z: null
     yaw: null   # expect ~-pi/2 ( -Y ) — not used by Nav2
+
+# GY-BNO055 mount relative to base_link (REP-103).
+# Operator 2026-10-16: center of deck layer 2; axes aligned (no rotation).
+# Evidence: docs/calibration.md §8 — 112.0 mm above wheel-axle (base_link).
+imu:
+  x: 0.0
+  y: 0.0
+  z: 0.112
+  roll: 0.0
+  pitch: 0.0
+  yaw: 0.0

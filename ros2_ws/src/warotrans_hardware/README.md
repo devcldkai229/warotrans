@@ -13,7 +13,8 @@ diagnostics_node.py
 `esp32_bridge_node` reads cumulative encoder telemetry from `/dev/warotrans`,
 publishes `/wheel_ticks`, and forwards `/cmd_vel` to the ESP32 as
 `V <linear_mps> <angular_rps>`. `wheel_odom_node` consumes that topic and publishes
-`/odom` plus the dynamic TF `odom -> base_footprint`.
+`/odom`. By default it also publishes TF `odom -> base_footprint`. When bringup
+uses `enable_ekf:=true`, pass `publish_tf:=false` so EKF is the sole TF owner.
 
 ## Responsibilities
 
@@ -40,7 +41,8 @@ Initially wheel odometry may publish:
 odom -> base_footprint
 ```
 
-When EKF becomes authoritative, disable that TF publication in wheel odometry and let EKF own it.
+When EKF is authoritative (`enable_ekf:=true`), set `publish_tf:=false` on
+`wheel_odom_node` (launch arg / `hardware.yaml`) and let EKF own the edge.
 
 ## Calibration gate
 

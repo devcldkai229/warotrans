@@ -60,6 +60,15 @@ lidar:
   # +π/2: mount xoay trái 90° (operator box-in-front 2026-09-07) — sync geometry.yaml
   yaw: 1.5707963267948966
 
+imu:
+  # GY-BNO055 — sync geometry.yaml imu.*; evidence docs/calibration.md §8
+  x: 0.0
+  y: 0.0
+  z: 0.112
+  roll: 0.0
+  pitch: 0.0
+  yaw: 0.0
+
 camera:
   # Fill only after exact model, interface and mounting are verified.
   x: null

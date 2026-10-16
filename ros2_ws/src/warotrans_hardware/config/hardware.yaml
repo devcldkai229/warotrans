@@ -15,5 +15,8 @@ wheel_odom_node:
 
     odom_frame: odom
     base_frame: base_footprint
+    # true = wheel owns TF odom→base_footprint (Phase 0 default).
+    # false when bringup enable_ekf:=true (EKF is sole TF publisher).
+    publish_tf: true
     serial_port: "/dev/warotrans"
     baud_rate: 921600

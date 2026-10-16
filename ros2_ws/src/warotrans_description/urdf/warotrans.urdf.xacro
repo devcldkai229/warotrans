@@ -6,13 +6,15 @@
 
     TF published from this model (fixed joints only):
       base_footprint -> base_link -> laser
+      base_link -> imu_link
       base_link -> ultrasonic_front | ultrasonic_rear
         (only when enable_ultrasonic_front_rear:=true after measured geometry)
 
-    odom -> base_footprint is NOT in this URDF; wheel_odom_node owns that edge.
+    odom -> base_footprint is NOT in this URDF:
+      wheel_odom_node (default) OR ekf_filter_node when enable_ekf:=true.
 
-    Physical values come from config/geometry.yaml. Launch may override laser
-    pose and base_link_z via xacro args after validation.
+    Physical values come from config/geometry.yaml. Launch may override laser,
+    IMU pose and base_link_z via xacro args after validation.
     LEFT/RIGHT ultrasonic frames are intentionally omitted (not Nav2 Phase 0.5).
   -->
 
@@ -23,6 +25,13 @@
   <xacro:arg name="lidar_y" default="0.0"/>
   <xacro:arg name="lidar_z" default="0.0"/>
   <xacro:arg name="lidar_yaw" default="0.0"/>
+  <xacro:arg name="enable_imu" default="true"/>
+  <xacro:arg name="imu_x" default="0.0"/>
+  <xacro:arg name="imu_y" default="0.0"/>
+  <xacro:arg name="imu_z" default="0.0"/>
+  <xacro:arg name="imu_roll" default="0.0"/>
+  <xacro:arg name="imu_pitch" default="0.0"/>
+  <xacro:arg name="imu_yaw" default="0.0"/>
   <xacro:arg name="enable_ultrasonic_front_rear" default="false"/>
   <xacro:arg name="ultrasonic_front_x" default="0.0"/>
   <xacro:arg name="ultrasonic_front_y" default="0.0"/>
@@ -95,6 +104,23 @@
     <origin xyz="$(arg lidar_x) $(arg lidar_y) $(arg lidar_z)"
             rpy="0 0 $(arg lidar_yaw)"/>
   </joint>
+
+  <xacro:if value="$(arg enable_imu)">
+    <link name="imu_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.020 0.020 0.005"/>
+        </geometry>
+      </visual>
+    </link>
+    <joint name="base_link_to_imu_link" type="fixed">
+      <parent link="base_link"/>
+      <child link="imu_link"/>
+      <origin xyz="$(arg imu_x) $(arg imu_y) $(arg imu_z)"
+              rpy="$(arg imu_roll) $(arg imu_pitch) $(arg imu_yaw)"/>
+    </joint>
+  </xacro:if>
 
   <xacro:if value="$(arg enable_ultrasonic_front_rear)">
     <link name="ultrasonic_front">

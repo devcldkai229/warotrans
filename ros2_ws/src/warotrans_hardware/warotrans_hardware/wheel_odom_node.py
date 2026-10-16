@@ -26,6 +26,8 @@ class WheelOdomNode(Node):
         self.declare_parameter("wheel_separation", 0.0)
         self.declare_parameter("odom_frame", "odom")
         self.declare_parameter("base_frame", "base_footprint")
+        # When EKF owns odom→base_footprint, set publish_tf:=false (topic /odom stays).
+        self.declare_parameter("publish_tf", True)
 
         self._ticks_per_rev_left = float(
             self.get_parameter("ticks_per_rev_left").value
@@ -44,11 +46,18 @@ class WheelOdomNode(Node):
         )
         self._odom_frame = str(self.get_parameter("odom_frame").value)
         self._base_frame = str(self.get_parameter("base_frame").value)
-
+        self._publish_tf = bool(self.get_parameter("publish_tf").value)
         self._validate_parameters()
 
         self._odom_publisher = self.create_publisher(Odometry, "/odom", 10)
-        self._tf_broadcaster = TransformBroadcaster(self)
+        self._tf_broadcaster = (
+            TransformBroadcaster(self) if self._publish_tf else None
+        )
+        if not self._publish_tf:
+            self.get_logger().info(
+                "publish_tf=false — /odom topic only; EKF must own "
+                f"{self._odom_frame} → {self._base_frame}"
+            )
         self._subscription = self.create_subscription(
             WheelTicks,
             "/wheel_ticks",
@@ -178,6 +187,9 @@ class WheelOdomNode(Node):
         odometry.twist.twist.linear.x = linear_velocity
         odometry.twist.twist.angular.z = angular_velocity
         self._odom_publisher.publish(odometry)
+
+        if self._tf_broadcaster is None:
+            return
 
         transform = TransformStamped()
         transform.header.stamp = stamp_message

@@ -3,7 +3,9 @@
 Thành phần:
 
     description  -> robot_state_publisher, TF tĩnh
-    hardware     -> /wheel_ticks, /odom, TF odom -> base_footprint
+    hardware     -> /wheel_ticks, /odom [, TF odom -> base_footprint]
+    imu+ekf      -> /imu/data, /odometry/filtered, TF odom -> base_footprint
+                   (optional, enable_ekf:=true)
     sensors      -> /scan
     teleop       -> /cmd_vel (web UI cổng 8080)
     slam         -> /map, TF map -> odom
@@ -19,7 +21,11 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import (
+    LaunchConfiguration,
+    PathJoinSubstitution,
+    PythonExpression,
+)
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
@@ -33,6 +39,10 @@ def generate_launch_description() -> LaunchDescription:
     slam_params_file = LaunchConfiguration("slam_params_file")
     lidar_serial_port = LaunchConfiguration("lidar_serial_port")
     foxglove_port = LaunchConfiguration("foxglove_port")
+    enable_ekf = LaunchConfiguration("enable_ekf")
+    publish_tf = PythonExpression(
+        ["'false' if '", enable_ekf, "' == 'true' else 'true'"]
+    )
 
     default_slam_params = PathJoinSubstitution(
         [FindPackageShare("warotrans_slam"), "config", "slam_toolbox.yaml"]
@@ -44,6 +54,14 @@ def generate_launch_description() -> LaunchDescription:
                 "start_hardware",
                 default_value="true",
                 description="Start ESP32 bridge and wheel odometry",
+            ),
+            DeclareLaunchArgument(
+                "enable_ekf",
+                default_value="false",
+                description=(
+                    "Start BNO055 + EKF; EKF owns odom→base_footprint "
+                    "(wheel publish_tf off)"
+                ),
             ),
             DeclareLaunchArgument(
                 "start_lidar",
@@ -90,7 +108,20 @@ def generate_launch_description() -> LaunchDescription:
                 PythonLaunchDescriptionSource(
                     _subsystem_launch("warotrans_hardware", "hardware.launch.py")
                 ),
+                launch_arguments={"publish_tf": publish_tf}.items(),
                 condition=IfCondition(LaunchConfiguration("start_hardware")),
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    _subsystem_launch("warotrans_sensors", "imu.launch.py")
+                ),
+                condition=IfCondition(enable_ekf),
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    _subsystem_launch("warotrans_localization", "ekf.launch.py")
+                ),
+                condition=IfCondition(enable_ekf),
             ),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(

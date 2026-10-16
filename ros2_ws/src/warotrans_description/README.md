@@ -5,9 +5,10 @@ Owns robot geometry and static TF relationships published by `robot_state_publis
 ## TF ownership
 
 ```text
-odom -> base_footprint          # wheel_odom_node (warotrans_hardware)
+odom -> base_footprint          # wheel_odom OR EKF (not this package)
 base_footprint -> base_link     # robot_state_publisher (this package)
 base_link -> laser              # robot_state_publisher (this package)
+base_link -> imu_link           # robot_state_publisher (geometry.yaml imu.*)
 ```
 
 This package does **not** publish `odom` or any `odom -> *` transform.
@@ -16,9 +17,9 @@ This package does **not** publish `odom` or any `odom -> *` transform.
 
 | Path | Purpose |
 |---|---|
-| `urdf/warotrans.urdf.xacro` | Robot model (base_footprint, base_link, laser) |
+| `urdf/warotrans.urdf.xacro` | Robot model (base_footprint, base_link, laser, imu_link) |
 | `config/geometry.yaml` | Static URDF geometry (machine values) |
-| `config/calibration.yaml` | Cross-package calibration (wheel, limits); sync `lidar.*` here when measured |
+| `config/calibration.yaml` | Cross-package calibration; sync `lidar.*` / `imu.*` when measured |
 | `launch/description.launch.py` | Start `robot_state_publisher` |
 
 ## Geometry policy

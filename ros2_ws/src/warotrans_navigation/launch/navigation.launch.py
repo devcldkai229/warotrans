@@ -39,9 +39,14 @@ def _setup(context, *args, **kwargs):
         LaunchConfiguration("enable_costmap_filters").perform(context).strip().lower()
         in ("true", "1", "yes")
     )
+    enable_ekf = (
+        LaunchConfiguration("enable_ekf").perform(context).strip().lower()
+        in ("true", "1", "yes")
+    )
 
     outdoor_overlay = os.path.join(pkg, "config", "nav2_params_outdoor.yaml")
     filters_on_overlay = os.path.join(pkg, "config", "nav2_params_filters_on.yaml")
+    ekf_overlay = os.path.join(pkg, "config", "nav2_params_ekf.yaml")
     bt_xml = os.path.join(
         pkg, "behavior_trees", "navigate_to_pose_w_replanning_resilient.xml"
     )
@@ -56,6 +61,10 @@ def _setup(context, *args, **kwargs):
     else:
         if os.path.isfile(outdoor_overlay):
             param_files.append(outdoor_overlay)
+    if enable_ekf:
+        if not os.path.isfile(ekf_overlay):
+            raise RuntimeError(f"EKF overlay missing: {ekf_overlay}")
+        param_files.append(ekf_overlay)
 
     # Optional last overlay (e.g. warotrans_simulation nav2_params_sim.yaml). Empty = none.
     extra_params = os.path.expanduser(
@@ -83,6 +92,14 @@ def _setup(context, *args, **kwargs):
             msg=[
                 "[warotrans_navigation] enable_costmap_filters=",
                 "true" if enable_filters else "false",
+            ]
+        ),
+        LogInfo(
+            msg=[
+                "[warotrans_navigation] enable_ekf=",
+                "true" if enable_ekf else "false",
+                " odom_topic=",
+                "/odometry/filtered" if enable_ekf else "/odom",
             ]
         ),
         LogInfo(msg=["[warotrans_navigation] default_nav_to_pose_bt_xml=", bt_xml]),
@@ -250,6 +267,14 @@ def generate_launch_description():
                 "enable_costmap_filters",
                 default_value="false",
                 description="Phase 3 keepout/speed filters (default off for outdoor)",
+            ),
+            DeclareLaunchArgument(
+                "enable_ekf",
+                default_value="false",
+                description=(
+                    "Use /odometry/filtered (nav2_params_ekf.yaml). "
+                    "Must match bringup enable_ekf:=true + ekf_filter_node."
+                ),
             ),
             DeclareLaunchArgument(
                 "keepout_mask",
