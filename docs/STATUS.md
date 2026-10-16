@@ -59,12 +59,17 @@
       **chỉ FRONT + REAR** vào Nav2; LEFT/RIGHT không dùng. Node GPIO sẵn;
       mount FRONT/REAR **CHƯA XÁC NHẬN**; CM overlay sẵn nhưng tắt. Runbook:
       `docs/nav2-rviz-operator.md`, enable: `docs/ultrasonic-front-rear-nav2.md`.
-- [ ] BNO055 / IMU integration — **code landed** (`bno055_node`, `imu_link` z=0.112 m,
-      I²C `0x29`); **runtime DoD chưa PASS**: `ros2 topic hz /imu/data`, yaw sense,
-      standing `|acc|≈9.8`. Xem `docs/calibration.md` §8.
-- [ ] EKF localization fusion — **code landed** (`ekf.yaml`, `ekf.launch.py`,
-      bringup `enable_ekf:=true`); **runtime DoD chưa PASS**: một publisher
-      `odom→base_footprint`, `/odometry/filtered` không nhảy. Default vẫn wheel TF.
+- [ ] BNO055 / IMU integration — `bno055_node` (IMUPLUS), `imu_link` z=0.112 m, I²C `0x29`.
+      2026-10-16 trên robot (đứng yên): `/imu/data` 50 Hz, `|acc|≈9.9` Z-up, gyro ≈ 0.
+      **Còn thiếu**: yaw sense/scale khi quay thật (±90°, 360°). Xem `docs/calibration.md` §8.
+- [ ] EKF localization fusion — bringup `enable_ekf:=true` (default vẫn wheel TF).
+      2026-10-16 smoke đứng yên PASS cho cả `mapping.launch.py` và `navigation.launch.py`:
+      `odom→base_footprint` chỉ do `ekf_filter_node` phát (wheel `publish_tf=false`),
+      `map→odom` do slam_toolbox / AMCL; `/odometry/filtered` 30 Hz, drift 10 s = 0 mm / 0.01°;
+      Nav2 lifecycle active, `odom_topic=/odometry/filtered`. Fix: `imu.launch.py`/`ekf.launch.py`
+      dùng arg `imu_params_file`/`ekf_params_file` (trước đó `params_file` rò giữa các include →
+      EKF chạy param default, không có output); EKF 50 → 30 Hz (trượt deadline dưới tải Nav2).
+      **Còn thiếu**: mapping có EKF khi chạy thật, NavigateToPose SUCCEEDED trên robot.
 - [ ] Closed-loop motor PID.
 - [ ] Camera model/interface được xác nhận và stream được.
 - [ ] Fleet bridge end-to-end.

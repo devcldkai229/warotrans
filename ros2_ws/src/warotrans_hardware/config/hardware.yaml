@@ -18,5 +18,9 @@ wheel_odom_node:
     # true = wheel owns TF odom→base_footprint (Phase 0 default).
     # false when bringup enable_ekf:=true (EKF is sole TF publisher).
     publish_tf: true
+    # PROVISIONAL tuning (not physical constants). Large twist yaw variance so
+    # EKF trusts BNO055 gyro for heading when skid-steer slips.
+    pose_covariance_diagonal: [0.01, 0.01, 1000000.0, 1000000.0, 1000000.0, 0.05]
+    twist_covariance_diagonal: [0.01, 0.001, 1000000.0, 1000000.0, 1000000.0, 0.1]
     serial_port: "/dev/warotrans"
     baud_rate: 921600

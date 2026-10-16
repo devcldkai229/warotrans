@@ -318,6 +318,7 @@ Sync: `geometry.yaml` `imu.*` → URDF `imu_link`.
 | Date | Mounting orientation | Calibration status | Static yaw behavior | Notes |
 |---|---|---|---|---|
 | 2026-10-16 | +X F / +Y L / +Z U | pose recorded; NDOF runtime TBD | TBD on robot | I²C smoke PASS (CHIP_ID + accel) |
+| 2026-10-16 | +X F / +Y L / +Z U (đã lắp) | `OPR_MODE=IMUPLUS` (yaw tương đối, không dùng magnetometer) | EKF đứng yên 10 s: dxy 0.0 mm, dyaw +0.01° | `/imu/data` 50.0 Hz, `frame_id=imu_link`, acc (+0.63, −0.28, +9.9) → Z-up OK, gyro rest ≈ 0.002 rad/s. **Chưa** test yaw khi quay (±90°/360°) |
 
 ---
 

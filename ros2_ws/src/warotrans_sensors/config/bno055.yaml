@@ -7,7 +7,10 @@ bno055_node:
     i2c_address: 0x29
     frame_id: imu_link
     publish_rate_hz: 50.0
+    # IMUPLUS = relative yaw (gyro+accel), no magnetometer near motors.
+    operation_mode: IMUPLUS
     # Diagonal entries for orientation / gyro / accel (SI units^2)
+    # Gyro noise at rest measured ~0.002 rad/s (2026-10-16) -> 0.0004 keeps margin.
     orientation_covariance: 0.01
-    angular_velocity_covariance: 0.02
+    angular_velocity_covariance: 0.0004
     linear_acceleration_covariance: 0.04

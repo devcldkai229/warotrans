@@ -23,8 +23,10 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription(
         [
+            # Tên riêng: IncludeLaunchDescription không scope launch config,
+            # "params_file" chung sẽ rò sang ekf/lidar include trong bringup.
             DeclareLaunchArgument(
-                "params_file",
+                "imu_params_file",
                 default_value=default_params,
                 description="YAML with BNO055 I2C and publish parameters",
             ),
@@ -33,7 +35,7 @@ def generate_launch_description() -> LaunchDescription:
                 executable="bno055_node",
                 name="bno055_node",
                 output="screen",
-                parameters=[LaunchConfiguration("params_file")],
+                parameters=[LaunchConfiguration("imu_params_file")],
             ),
         ]
     )

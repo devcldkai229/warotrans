@@ -28,6 +28,14 @@ class WheelOdomNode(Node):
         self.declare_parameter("base_frame", "base_footprint")
         # When EKF owns odom→base_footprint, set publish_tf:=false (topic /odom stays).
         self.declare_parameter("publish_tf", True)
+        # Diagonal covariances (x, y, z, roll, pitch, yaw) for pose / twist.
+        # Zero covariance makes robot_localization over-trust the wheels.
+        self.declare_parameter(
+            "pose_covariance_diagonal", [0.01, 0.01, 1e6, 1e6, 1e6, 0.05]
+        )
+        self.declare_parameter(
+            "twist_covariance_diagonal", [0.01, 0.001, 1e6, 1e6, 1e6, 0.1]
+        )
 
         self._ticks_per_rev_left = float(
             self.get_parameter("ticks_per_rev_left").value
@@ -47,6 +55,8 @@ class WheelOdomNode(Node):
         self._odom_frame = str(self.get_parameter("odom_frame").value)
         self._base_frame = str(self.get_parameter("base_frame").value)
         self._publish_tf = bool(self.get_parameter("publish_tf").value)
+        self._pose_cov = self._covariance_matrix("pose_covariance_diagonal")
+        self._twist_cov = self._covariance_matrix("twist_covariance_diagonal")
         self._validate_parameters()
 
         self._odom_publisher = self.create_publisher(Odometry, "/odom", 10)
@@ -71,6 +81,17 @@ class WheelOdomNode(Node):
         self._x = 0.0
         self._y = 0.0
         self._theta = 0.0
+
+    def _covariance_matrix(self, name: str) -> list[float]:
+        diagonal = [float(v) for v in self.get_parameter(name).value]
+        if len(diagonal) != 6 or any(
+            not math.isfinite(v) or v < 0.0 for v in diagonal
+        ):
+            raise ValueError(f"{name} must be 6 finite non-negative values")
+        matrix = [0.0] * 36
+        for i, value in enumerate(diagonal):
+            matrix[i * 7] = value
+        return matrix
 
     def _validate_parameters(self) -> None:
         physical_values = {
@@ -186,6 +207,8 @@ class WheelOdomNode(Node):
         odometry.pose.pose.orientation.w = math.cos(self._theta / 2.0)
         odometry.twist.twist.linear.x = linear_velocity
         odometry.twist.twist.angular.z = angular_velocity
+        odometry.pose.covariance = self._pose_cov
+        odometry.twist.covariance = self._twist_cov
         self._odom_publisher.publish(odometry)
 
         if self._tf_broadcaster is None:

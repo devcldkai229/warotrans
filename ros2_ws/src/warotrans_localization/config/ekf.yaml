@@ -6,7 +6,9 @@
 
 ekf_filter_node:
   ros__parameters:
-    frequency: 50.0
+    # 50 Hz trượt deadline ~1 lần/s trên Pi 5 khi chạy full Nav2 (2026-10-16);
+    # 30 Hz vẫn gấp 3 controller_frequency 10 Hz.
+    frequency: 30.0
     sensor_timeout: 0.2
     two_d_mode: true
     publish_tf: true
@@ -17,10 +19,13 @@ ekf_filter_node:
     base_link_frame: base_footprint
     world_frame: odom
 
-    # Wheel odometry: absolute x/y in odom + body velocities
+    # Wheel odometry: body velocities only (vx, vy=0 constraint, vyaw).
+    # Absolute x/y from /odom is integrated with wheel yaw, so fusing it next
+    # to IMU yaw would give two conflicting headings. vyaw variance in /odom is
+    # large (hardware.yaml) so the IMU gyro dominates heading.
     odom0: /odom
     odom0_config: [
-      true,  true,  false,
+      false, false, false,
       false, false, false,
       true,  true,  false,
       false, false, true,
@@ -30,7 +35,7 @@ ekf_filter_node:
     odom0_relative: false
     odom0_queue_size: 10
 
-    # BNO055: absolute yaw + yaw rate (planar)
+    # BNO055 (IMUPLUS): yaw relative to start + yaw rate (planar).
     imu0: /imu/data
     imu0_config: [
       false, false, false,
@@ -40,9 +45,8 @@ ekf_filter_node:
       false, false, false
     ]
     imu0_differential: false
-    imu0_relative: false
+    imu0_relative: true
     imu0_queue_size: 10
-    imu0_remove_gravitational_acceleration: true
 
     process_noise_covariance: [
       0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,

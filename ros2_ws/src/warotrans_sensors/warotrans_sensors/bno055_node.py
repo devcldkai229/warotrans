@@ -33,7 +33,9 @@ REG_SYS_TRIGGER = 0x3F
 
 CHIP_ID_EXPECTED = 0xA0
 MODE_CONFIG = 0x00
-MODE_NDOF = 0x0C
+# IMUPLUS: accel+gyro fusion, relative heading (no magnetometer).
+# NDOF: adds magnetometer -> absolute heading, distorted near motors indoors.
+FUSION_MODES = {"IMUPLUS": 0x08, "NDOF": 0x0C}
 
 # Scale factors (Android orientation / m/s^2 / dps units after UNIT_SEL)
 ACC_SCALE = 100.0  # 1 LSB = 0.01 m/s^2
@@ -51,6 +53,7 @@ class Bno055Node(Node):
         self.declare_parameter("i2c_address", 0x29)
         self.declare_parameter("frame_id", "imu_link")
         self.declare_parameter("publish_rate_hz", 50.0)
+        self.declare_parameter("operation_mode", "IMUPLUS")
         self.declare_parameter("orientation_covariance", 0.01)
         self.declare_parameter("angular_velocity_covariance", 0.02)
         self.declare_parameter("linear_acceleration_covariance", 0.04)
@@ -61,6 +64,12 @@ class Bno055Node(Node):
         rate = float(self.get_parameter("publish_rate_hz").value)
         if not math.isfinite(rate) or rate <= 0.0:
             raise ValueError("publish_rate_hz must be > 0")
+        self._mode_name = str(self.get_parameter("operation_mode").value).upper()
+        if self._mode_name not in FUSION_MODES:
+            raise ValueError(
+                f"operation_mode must be one of {sorted(FUSION_MODES)}, "
+                f"got '{self._mode_name}'"
+            )
 
         self._ori_cov = float(self.get_parameter("orientation_covariance").value)
         self._gyr_cov = float(
@@ -116,7 +125,7 @@ class Bno055Node(Node):
                 "Is GY-BNO055 at this address?"
             )
 
-        # Enter CONFIG, select page 0, set units, then NDOF fusion mode.
+        # Enter CONFIG, select page 0, set units, then the fusion mode.
         self._write_reg(REG_OPR_MODE, MODE_CONFIG)
         time.sleep(0.025)
         self._write_reg(REG_PAGE_ID, 0x00)
@@ -125,9 +134,9 @@ class Bno055Node(Node):
         self._write_reg(REG_UNIT_SEL, 0x00)
         self._write_reg(REG_SYS_TRIGGER, 0x00)
         time.sleep(0.010)
-        self._write_reg(REG_OPR_MODE, MODE_NDOF)
+        self._write_reg(REG_OPR_MODE, FUSION_MODES[self._mode_name])
         time.sleep(0.025)
-        self.get_logger().info("BNO055 CHIP_ID OK, OPR_MODE=NDOF")
+        self.get_logger().info(f"BNO055 CHIP_ID OK, OPR_MODE={self._mode_name}")
 
     def _on_timer(self) -> None:
         try:

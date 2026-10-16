@@ -22,8 +22,10 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription(
         [
+            # Tên riêng: IncludeLaunchDescription không scope launch config,
+            # "params_file" chung sẽ nhận nhầm YAML của include khác.
             DeclareLaunchArgument(
-                "params_file",
+                "ekf_params_file",
                 default_value=default_params,
                 description="EKF parameter YAML",
             ),
@@ -38,7 +40,7 @@ def generate_launch_description() -> LaunchDescription:
                 name="ekf_filter_node",
                 output="screen",
                 parameters=[
-                    LaunchConfiguration("params_file"),
+                    LaunchConfiguration("ekf_params_file"),
                     {"use_sim_time": LaunchConfiguration("use_sim_time")},
                 ],
             ),
