@@ -1,6 +1,9 @@
 """WaroTrans Nav2 navigation launch — Phase 0 + optional Phase 3 costmap filters.
 
-Controller publishes /cmd_vel (Twist) directly to esp32_bridge_node.
+cmd_vel (Twist) reaches esp32_bridge_node through
+controller/behaviors -> cmd_vel_nav -> velocity_smoother -> cmd_vel_smoothed
+-> collision_monitor (LiDAR "approach") -> /cmd_vel.
+enable_cmd_vel_pipeline:=false restores the direct controller -> /cmd_vel path.
 
 IMPORTANT: launch arg is nav2_params_file (NOT params_file) to avoid colliding
 with lidar.launch.py / slam.launch.py which also declare params_file in the
@@ -86,6 +89,17 @@ def _setup(context, *args, **kwargs):
         "bt_navigator",
     ]
 
+    # cmd_vel pipeline (default on): controller/behaviors -> cmd_vel_nav -> velocity_smoother
+    # -> cmd_vel_smoothed -> collision_monitor (LiDAR) -> /cmd_vel. Off = controller writes
+    # /cmd_vel directly (Phase 0 behaviour).
+    enable_pipeline = (
+        LaunchConfiguration("enable_cmd_vel_pipeline").perform(context).strip().lower()
+        in ("true", "1", "yes")
+    )
+    motion_remappings = remappings + ([("cmd_vel", "cmd_vel_nav")] if enable_pipeline else [])
+    if enable_pipeline:
+        lifecycle_nodes += ["velocity_smoother", "collision_monitor"]
+
     actions = [
         LogInfo(msg=["[warotrans_navigation] nav2_params_file=", params_path]),
         LogInfo(
@@ -104,6 +118,14 @@ def _setup(context, *args, **kwargs):
         ),
         LogInfo(msg=["[warotrans_navigation] default_nav_to_pose_bt_xml=", bt_xml]),
         LogInfo(msg=["[warotrans_navigation] param_files=", ", ".join(param_files)]),
+        LogInfo(
+            msg=[
+                "[warotrans_navigation] cmd_vel pipeline=",
+                "controller->velocity_smoother->collision_monitor(/scan)->/cmd_vel"
+                if enable_pipeline
+                else "controller->/cmd_vel (direct)",
+            ]
+        ),
         Node(
             package="nav2_controller",
             executable="controller_server",
@@ -112,7 +134,7 @@ def _setup(context, *args, **kwargs):
             respawn=True,
             respawn_delay=2.0,
             parameters=common_params,
-            remappings=remappings,
+            remappings=motion_remappings,
         ),
         Node(
             package="nav2_planner",
@@ -132,7 +154,7 @@ def _setup(context, *args, **kwargs):
             respawn=True,
             respawn_delay=2.0,
             parameters=common_params,
-            remappings=remappings,
+            remappings=motion_remappings,
         ),
         Node(
             package="nav2_bt_navigator",
@@ -144,6 +166,34 @@ def _setup(context, *args, **kwargs):
             parameters=bt_navigator_params,
             remappings=remappings,
         ),
+    ]
+
+    if enable_pipeline:
+        actions += [
+            Node(
+                package="nav2_velocity_smoother",
+                executable="velocity_smoother",
+                name="velocity_smoother",
+                output="screen",
+                respawn=True,
+                respawn_delay=2.0,
+                parameters=common_params,
+                # in: cmd_vel_nav (remapped "cmd_vel"), out: cmd_vel_smoothed
+                remappings=remappings + [("cmd_vel", "cmd_vel_nav")],
+            ),
+            Node(
+                package="nav2_collision_monitor",
+                executable="collision_monitor",
+                name="collision_monitor",
+                output="screen",
+                respawn=True,
+                respawn_delay=2.0,
+                parameters=common_params,
+                remappings=remappings,
+            ),
+        ]
+
+    actions.append(
         Node(
             package="nav2_lifecycle_manager",
             executable="lifecycle_manager",
@@ -155,8 +205,8 @@ def _setup(context, *args, **kwargs):
                 {"node_names": lifecycle_nodes},
                 {"bond_timeout": 25.0},
             ],
-        ),
-    ]
+        )
+    )
 
     if enable_filters:
         keepout_mask = LaunchConfiguration("keepout_mask").perform(context).strip()
@@ -267,6 +317,14 @@ def generate_launch_description():
                 "enable_costmap_filters",
                 default_value="false",
                 description="Phase 3 keepout/speed filters (default off for outdoor)",
+            ),
+            DeclareLaunchArgument(
+                "enable_cmd_vel_pipeline",
+                default_value="true",
+                description=(
+                    "controller -> velocity_smoother -> collision_monitor (LiDAR) -> /cmd_vel. "
+                    "false = controller publishes /cmd_vel directly"
+                ),
             ),
             DeclareLaunchArgument(
                 "enable_ekf",

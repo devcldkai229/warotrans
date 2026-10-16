@@ -137,6 +137,7 @@ class WheelOdomNode(Node):
 
         # A backwards MCU clock normally means the ESP32 restarted. Rebaseline
         # instead of integrating the tick reset as a large robot movement.
+        mcu_delta = None
         if self._last_mcu_millis is not None:
             mcu_delta = (
                 int(message.mcu_millis) - self._last_mcu_millis
@@ -173,8 +174,12 @@ class WheelOdomNode(Node):
         self._y += d_s * math.sin(midpoint_theta)
         self._theta = self._normalize_angle(self._theta + d_theta)
 
+        # Velocity over the MCU's own sampling interval: ROS receive time jitters with
+        # serial/USB and executor latency, which made /odom twist noisy for the EKF.
         dt = 0.0
-        if self._last_stamp is not None:
+        if mcu_delta:
+            dt = mcu_delta / 1000.0
+        elif self._last_stamp is not None:
             dt = (now.nanoseconds - self._last_stamp.nanoseconds) / 1e9
         linear_velocity = d_s / dt if dt > 0.0 else 0.0
         angular_velocity = d_theta / dt if dt > 0.0 else 0.0
