@@ -1,0 +1,225 @@
+{
+  "mapName": "sim_warehouse",
+  "frame": "map",
+  "spawn": {
+    "x": 5.75,
+    "y": 0.9,
+    "yaw": 1.570796
+  },
+  "endpoints": [
+    {
+      "code": "A",
+      "name": "Rack A",
+      "endpointType": "STORAGE",
+      "x": 3.2,
+      "y": 3.75,
+      "yaw": 0.0
+    },
+    {
+      "code": "B",
+      "name": "Rack B",
+      "endpointType": "STORAGE",
+      "x": 4.875,
+      "y": 3.75,
+      "yaw": 0.0
+    },
+    {
+      "code": "C",
+      "name": "Rack C",
+      "endpointType": "STORAGE",
+      "x": 6.625,
+      "y": 3.75,
+      "yaw": 0.0
+    },
+    {
+      "code": "IN1",
+      "name": "Inbound 1",
+      "endpointType": "INBOUND",
+      "x": 0.9,
+      "y": 5.5,
+      "yaw": 3.14159
+    },
+    {
+      "code": "IN2",
+      "name": "Inbound 2",
+      "endpointType": "INBOUND",
+      "x": 0.9,
+      "y": 2.0,
+      "yaw": 3.14159
+    },
+    {
+      "code": "OUT1",
+      "name": "Outbound 1",
+      "endpointType": "OUTBOUND",
+      "x": 10.1,
+      "y": 5.5,
+      "yaw": 0.0
+    },
+    {
+      "code": "OUT2",
+      "name": "Outbound 2",
+      "endpointType": "OUTBOUND",
+      "x": 10.1,
+      "y": 2.0,
+      "yaw": 0.0
+    },
+    {
+      "code": "CHG",
+      "name": "Charger",
+      "endpointType": "CHARGING",
+      "x": 5.75,
+      "y": 6.75,
+      "yaw": 1.570796
+    },
+    {
+      "code": "PARK",
+      "name": "Parking",
+      "endpointType": "PARKING",
+      "x": 5.75,
+      "y": 0.9,
+      "yaw": 1.570796
+    }
+  ],
+  "zones": [
+    {
+      "name": "Inbound Area",
+      "zoneType": "OPERATIONAL_AREA",
+      "capacity": 2,
+      "maxSpeed": null,
+      "polygon": [
+        [
+          0.15,
+          0.6
+        ],
+        [
+          2.3,
+          0.6
+        ],
+        [
+          2.3,
+          6.9
+        ],
+        [
+          0.15,
+          6.9
+        ],
+        [
+          0.15,
+          0.6
+        ]
+      ]
+    },
+    {
+      "name": "Outbound Area",
+      "zoneType": "OPERATIONAL_AREA",
+      "capacity": 2,
+      "maxSpeed": null,
+      "polygon": [
+        [
+          8.7,
+          0.6
+        ],
+        [
+          10.85,
+          0.6
+        ],
+        [
+          10.85,
+          6.9
+        ],
+        [
+          8.7,
+          6.9
+        ],
+        [
+          8.7,
+          0.6
+        ]
+      ]
+    },
+    {
+      "name": "Rack Area",
+      "zoneType": "NARROW_AREA",
+      "capacity": 1,
+      "maxSpeed": 0.3,
+      "polygon": [
+        [
+          2.75,
+          2.2
+        ],
+        [
+          8.05,
+          2.2
+        ],
+        [
+          8.05,
+          5.3
+        ],
+        [
+          2.75,
+          5.3
+        ],
+        [
+          2.75,
+          2.2
+        ]
+      ]
+    },
+    {
+      "name": "Charging Area",
+      "zoneType": "OPERATIONAL_AREA",
+      "capacity": 1,
+      "maxSpeed": null,
+      "polygon": [
+        [
+          5.2,
+          6.25
+        ],
+        [
+          6.3,
+          6.25
+        ],
+        [
+          6.3,
+          7.45
+        ],
+        [
+          5.2,
+          7.45
+        ],
+        [
+          5.2,
+          6.25
+        ]
+      ]
+    },
+    {
+      "name": "Parking Area",
+      "zoneType": "OPERATIONAL_AREA",
+      "capacity": 1,
+      "maxSpeed": null,
+      "polygon": [
+        [
+          5.3,
+          0.35
+        ],
+        [
+          6.2,
+          0.35
+        ],
+        [
+          6.2,
+          1.45
+        ],
+        [
+          5.3,
+          1.45
+        ],
+        [
+          5.3,
+          0.35
+        ]
+      ]
+    }
+  ]
+}

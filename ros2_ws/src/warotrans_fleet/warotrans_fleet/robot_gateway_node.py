@@ -12,11 +12,13 @@ from __future__ import annotations
 
 import os
 import queue
+import time
 from typing import Any, Optional
 
 import rclpy
-from geometry_msgs.msg import PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Odometry
+from sensor_msgs.msg import LaserScan
 from rclpy.duration import Duration
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
@@ -26,11 +28,13 @@ from tf2_ros import Buffer, TransformException, TransformListener
 
 from warotrans_fleet import navigation_state as nav_state
 from warotrans_fleet.command_stack import build_command_stack
+from warotrans_fleet.drive_assist import Footprint, Gaps, corridor_gaps, scan_to_base_points
 from warotrans_fleet.mqtt_publisher import ReconnectingMqttPublisher, default_paho_factory
 from warotrans_fleet.nav2_status_tracker import Nav2StatusTracker
 from warotrans_fleet.navigator import NavigatorPort, UnavailableNavigator
 from warotrans_fleet.payload_builder import build_heartbeat, build_telemetry
 from warotrans_fleet.sequence import SequenceClock
+from warotrans_fleet.teleop import TeleopController
 from warotrans_fleet.transforms import quaternion_to_yaw
 
 
@@ -83,6 +87,24 @@ class RobotGatewayNode(Node):
         self.declare_parameter("terminal_status_hold_sec", 3.0)
         self.declare_parameter("command_tick_hz", 5.0)
         self.declare_parameter("command_ledger_size", 500)
+        # Robot has no battery sensor yet → telemetry sends null. Simulation only: a fixed value
+        # (0..100) so backend CHECK.BATTERY_MIN can be exercised. < 0 = disabled (real robot).
+        self.declare_parameter("simulated_battery_percent", -1.0)
+        # Manual drive (MQTT `teleop` topic → /cmd_vel). Limits default to the real robot's provisional
+        # motor limits (calibration.yaml); the simulation overrides them.
+        self.declare_parameter("teleop_enabled", True)
+        self.declare_parameter("cmd_vel_topic", "/cmd_vel")
+        self.declare_parameter("teleop_max_linear", 0.10)
+        self.declare_parameter("teleop_max_angular", 0.45)
+        self.declare_parameter("teleop_deadman_sec", 0.5)
+        self.declare_parameter("teleop_max_message_age_sec", 0.0)  # 0 = off (robot clock may not be synced)
+        # Drive Assist (teleop `assist`): lidar corridor as wide as the chassis (geometry.yaml 0.32 x 0.26 m).
+        self.declare_parameter("assist_scan_topic", "/scan")
+        self.declare_parameter("assist_half_length", 0.16)
+        self.declare_parameter("assist_half_width", 0.13)
+        self.declare_parameter("assist_stop_gap", 0.15)
+        self.declare_parameter("assist_slow_gap", 0.6)
+        self.declare_parameter("assist_max_scan_age_sec", 0.5)
 
         self._robot_code = _env_or(self._str_param("robot_code"), "WARO_ROBOT_CODE")
         self._mqtt_host = _env_or(self._str_param("mqtt_host"), "WARO_MQTT_HOST")
@@ -94,6 +116,8 @@ class RobotGatewayNode(Node):
         self._map_frame = self._str_param("map_frame")
         self._base_frame = self._str_param("base_frame")
         self._max_transform_age = self._float_param("max_transform_age_sec")
+        simulated_battery = self._float_param("simulated_battery_percent")
+        self._battery_percent = min(simulated_battery, 100.0) if simulated_battery >= 0.0 else None
         client_id = self._str_param("mqtt_client_id")
 
         default_timeout = self._float_param("default_navigate_timeout_sec")
@@ -129,12 +153,14 @@ class RobotGatewayNode(Node):
 
         navigator = self._setup_nav2()
 
+        self._teleop_enabled = bool(self.get_parameter("teleop_enabled").get_parameter_value().bool_value)
+        subscribe_topics = [self.topic("command")] + ([self.topic("teleop")] if self._teleop_enabled else [])
         self.mqtt = ReconnectingMqttPublisher(
             host=self._mqtt_host,
             port=self._mqtt_port,
             client_id=f"{client_id}-{self._robot_code}",
             client_factory=default_paho_factory,
-            subscribe_topic=self.topic("command"),
+            subscribe_topic=subscribe_topics,
             on_message=self._on_mqtt_message,
         )
 
@@ -154,8 +180,38 @@ class RobotGatewayNode(Node):
             external_goal_active=lambda: self._nav_tracker.has_active_goal,
         )
 
-        # Inbox: MQTT thread → executor thread.
-        self._inbox: "queue.SimpleQueue[dict[str, Any]]" = queue.SimpleQueue()
+        self._teleop: Optional[TeleopController] = None
+        if self._teleop_enabled:
+            self._cmd_vel_pub = self.create_publisher(Twist, self._str_param("cmd_vel_topic"), 10)
+            self._footprint = Footprint(
+                half_length=self._float_param("assist_half_length"),
+                half_width=self._float_param("assist_half_width"),
+            )
+            self._scan_max_age = self._float_param("assist_max_scan_age_sec")
+            self._gaps: Optional[Gaps] = None
+            self._gaps_at = 0.0
+            self._laser_mount: dict[str, tuple[float, float, float]] = {}
+            self.create_subscription(LaserScan, self._str_param("assist_scan_topic"), self._on_scan, qos_profile_sensor_data)
+            self._teleop = TeleopController(
+                robot_code=self._robot_code,
+                publish_twist=self._publish_cmd_vel,
+                monotonic=time.monotonic,
+                navigation_busy=lambda: (
+                    self._commands.move.active_command_id is not None or self._nav_tracker.has_active_goal
+                ),
+                max_linear=self._float_param("teleop_max_linear"),
+                max_angular=self._float_param("teleop_max_angular"),
+                deadman_sec=self._float_param("teleop_deadman_sec"),
+                max_message_age_sec=self._float_param("teleop_max_message_age_sec"),
+                log=self.get_logger(),
+                gaps_provider=self._fresh_gaps,
+                assist_stop_gap=self._float_param("assist_stop_gap"),
+                assist_slow_gap=self._float_param("assist_slow_gap"),
+            )
+            self.create_timer(0.1, self._teleop.tick)
+
+        # Inbox: MQTT thread → executor thread (commands and teleop, in arrival order).
+        self._inbox: "queue.SimpleQueue[tuple[str, dict[str, Any]]]" = queue.SimpleQueue()
         self._inbox_signal = self.create_guard_condition(self._drain_inbox)
         self.create_timer(1.0 / tick_hz, self._commands.router.tick)
 
@@ -170,7 +226,7 @@ class RobotGatewayNode(Node):
             f"Robot gateway started robot_code={self._robot_code} "
             f"mqtt={self._mqtt_host}:{self._mqtt_port} "
             f"frames={self._map_frame}->{self._base_frame} bootId={self._seq.boot_id} "
-            f"subscribe={self.topic('command')} commands={list(self._commands.router.supported_types)} "
+            f"subscribe={subscribe_topics} commands={list(self._commands.router.supported_types)} "
             f"mapVersion={self._map_version_code}"
         )
 
@@ -201,25 +257,62 @@ class RobotGatewayNode(Node):
         return f"{self._topic_prefix}/robots/{self._robot_code}/{leaf}"
 
     def destroy_node(self) -> bool:
+        if self._teleop is not None:
+            self._teleop.stop()
         self.mqtt.stop()
         return super().destroy_node()
 
-    # ------------------------------------------------------------------ command downlink
+    # ------------------------------------------------------------------ command / teleop downlink
 
     def _on_mqtt_message(self, topic: str, body: dict) -> None:
         # MQTT network thread: chỉ enqueue, không xử lý.
-        if topic != self.topic("command"):
+        if topic == self.topic("command"):
+            self._inbox.put(("command", body))
+        elif topic == self.topic("teleop") and self._teleop is not None:
+            self._inbox.put(("teleop", body))
+        else:
             return
-        self._inbox.put(body)
         self._inbox_signal.trigger()
 
     def _drain_inbox(self) -> None:
         while True:
             try:
-                body = self._inbox.get_nowait()
+                kind, body = self._inbox.get_nowait()
             except queue.Empty:
                 return
-            self._commands.router.handle_message(body)
+            if kind == "command":
+                self._commands.router.handle_message(body)
+            elif self._teleop is not None:
+                self._teleop.handle(body)
+
+    def _on_scan(self, msg: LaserScan) -> None:
+        frame = msg.header.frame_id
+        mount = self._laser_mount.get(frame)
+        if mount is None:
+            # Static mount (geometry.yaml: laser yaw +pi/2): look it up once per frame id.
+            try:
+                tf = self._tf_buffer.lookup_transform(self._base_frame, frame, Time()).transform
+            except TransformException:
+                return
+            q = tf.rotation
+            mount = (float(tf.translation.x), float(tf.translation.y), quaternion_to_yaw(q.x, q.y, q.z, q.w))
+            self._laser_mount[frame] = mount
+        points = scan_to_base_points(
+            msg.ranges, msg.angle_min, msg.angle_increment, msg.range_min, msg.range_max, *mount
+        )
+        self._gaps = corridor_gaps(points, self._footprint)
+        self._gaps_at = time.monotonic()
+
+    def _fresh_gaps(self) -> Optional[Gaps]:
+        if self._gaps is None or time.monotonic() - self._gaps_at > self._scan_max_age:
+            return None  # assist cannot see → no linear motion
+        return self._gaps
+
+    def _publish_cmd_vel(self, linear: float, angular: float) -> None:
+        msg = Twist()
+        msg.linear.x = float(linear)
+        msg.angular.z = float(angular)
+        self._cmd_vel_pub.publish(msg)
 
     # ------------------------------------------------------------------ ROS inputs
 
@@ -288,7 +381,7 @@ class RobotGatewayNode(Node):
             sequence=seq,
             map_version_code=self._map_version_code,
             pose=pose,
-            battery_percent=None,
+            battery_percent=self._battery_percent,
             navigation_status=self._navigation_status(),
             localization_status=localization_status,
             linear_velocity=self._lin_vel,

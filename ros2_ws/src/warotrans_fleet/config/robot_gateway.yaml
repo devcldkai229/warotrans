@@ -27,3 +27,22 @@ robot_gateway:
     command_tick_hz: 5.0
     # Số commandId nhớ để chống duplicate (QoS1). Command đang chạy không bao giờ bị evict.
     command_ledger_size: 500
+    # --- Lái tay từ web (MQTT warotrans/v1/robots/{code}/teleop → /cmd_vel) ---
+    # Bỏ qua khi đang có lệnh navigate / goal Nav2. Không nhận lệnh trong teleop_deadman_sec → tự dừng.
+    teleop_enabled: true
+    cmd_vel_topic: "/cmd_vel"
+    # PROVISIONAL: bằng giới hạn motor tạm thời (calibration.yaml, nav2 desired_linear_vel 0.10).
+    teleop_max_linear: 0.10
+    teleop_max_angular: 0.45
+    teleop_deadman_sec: 0.5
+    # 0 = tắt kiểm tra sentAt (Pi có thể chưa đồng bộ giờ với backend).
+    teleop_max_message_age_sec: 0.0
+    # Drive Assist (teleop `assist`, mặc định bật): hành lang lidar rộng bằng thân xe theo hướng đang chạy.
+    # Khoảng trống < slow_gap → giảm tốc; <= stop_gap → không tiến/lùi thêm (quay tại chỗ vẫn được).
+    # Không có scan mới trong assist_max_scan_age_sec → coi như không nhìn thấy → không tiến/lùi.
+    assist_scan_topic: "/scan"
+    assist_half_length: 0.16   # geometry.yaml chassis.length / 2
+    assist_half_width: 0.13    # geometry.yaml chassis.width / 2
+    assist_stop_gap: 0.15
+    assist_slow_gap: 0.6
+    assist_max_scan_age_sec: 0.5

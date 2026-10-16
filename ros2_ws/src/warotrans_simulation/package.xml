@@ -1,12 +1,29 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>warotrans_simulation</name>
-  <version>0.1.0</version>
-  <description>WaroTrans simulation assets and launch files.</description>
+  <version>0.2.0</version>
+  <description>WaroTrans simulation: Gazebo Harmonic warehouse world, simulated robot and full-stack launch (ADR 0006).</description>
   <maintainer email="dev@warotrans.local">WaroTrans Team</maintainer>
   <license>Proprietary</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>ros_gz_sim</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <exec_depend>nav2_map_server</exec_depend>
+  <exec_depend>nav2_amcl</exec_depend>
+  <exec_depend>nav2_lifecycle_manager</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <exec_depend>warotrans_description</exec_depend>
+  <exec_depend>warotrans_localization</exec_depend>
+  <exec_depend>warotrans_navigation</exec_depend>
+  <exec_depend>warotrans_fleet</exec_depend>
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>
