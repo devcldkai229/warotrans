@@ -14,3 +14,16 @@ robot_gateway:
     heartbeat_hz: 1.0
     telemetry_hz: 5.0
     max_transform_age_sec: 0.5
+    # --- MOVE (NAVIGATE_TO_POSE) command ---
+    # Timeout mặc định khi command không gửi payload.timeoutSeconds. 0 = không timeout.
+    default_navigate_timeout_sec: 0.0
+    # Nav2 không trả lời goal request trong khoảng này → RESULT FAILED / NAV2_UNAVAILABLE.
+    goal_response_timeout_sec: 10.0
+    # Đã gửi cancel mà Nav2 không kết thúc goal trong khoảng này → RESULT FAILED / NAV2_CANCEL_UNCONFIRMED.
+    cancel_confirm_timeout_sec: 10.0
+    # Giữ navigationStatus SUCCEEDED/FAILED/CANCELED trên telemetry bao lâu trước khi về IDLE.
+    terminal_status_hold_sec: 3.0
+    # Tần số kiểm tra timeout/deadline của command.
+    command_tick_hz: 5.0
+    # Số commandId nhớ để chống duplicate (QoS1). Command đang chạy không bao giờ bị evict.
+    command_ledger_size: 500

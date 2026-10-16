@@ -64,6 +64,11 @@
 - [ ] Closed-loop motor PID.
 - [ ] Camera model/interface được xác nhận và stream được.
 - [ ] Fleet bridge end-to-end.
+- [ ] MOVE command (`NAVIGATE_TO_POSE` / `CANCEL` qua MQTT → Nav2) trên robot thật.
+      2026-10-13: code + test xong — unit + integration (gateway node thật + mock
+      Nav2 action server, Jazzy container) + E2E qua Mosquitto thật với mock Nav2.
+      **Chưa** chạy trên robot; DoD: CLI `fleet_command_cli.py navigate` → ACK →
+      robot tới pose → RESULT SUCCEEDED, CANCEL giữa đường dừng robot, timeout.
 - [ ] Multi-robot.
 
 ## KNOWN UNKNOWNS

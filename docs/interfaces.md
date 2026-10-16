@@ -245,22 +245,29 @@ ADR: `docs/adr/0005-fleet-mqtt-command-protocol.md`. Không dùng VDA5050.
 ### Backend → Robot
 
 ```text
-command: NAVIGATE_TO_POSE | CANCEL
-commandId (Guid)
-payload: pose (frameId/x/y/yaw) hoặc targetCommandId
+topic   warotrans/v1/robots/{robotCode}/command        QoS1
+type    NAVIGATE_TO_POSE | CANCEL
+commandId (Guid), jobAssignmentId?, jobStepId?
+payload NAVIGATE_TO_POSE: frameId(=map)/x/y/yaw [+ timeoutSeconds?, mapVersionCode?]
+        CANCEL:           targetCommandId
 ```
+
+`timeoutSeconds` / `mapVersionCode` là field optional robot hỗ trợ từ 2026-10-13
+(backend hiện chưa gửi). Robot không query Endpoint — backend resolve thành pose.
 
 ### Robot → Backend
 
 ```text
-robot_id
-online state
-pose
-battery state
-current task
-navigation state
-error state
-task result
+…/heartbeat        QoS0  ~1 Hz
+…/telemetry        QoS0  ~5 Hz  pose, navigationStatus, localizationStatus, currentCommandId
+…/command_ack      QoS1  accepted + reasonCode (+ reasonMessage, jobAssignmentId, jobStepId)
+…/command_result   QoS1  outcome SUCCEEDED|FAILED|CANCELED + errorCode (+ errorMessage, result)
 ```
+
+Timeout navigate = `outcome FAILED` + `errorCode NAVIGATION_TIMEOUT` (backend chỉ nhận ba outcome).
+Chi tiết mã lỗi, state machine, demo: `ros2_ws/src/warotrans_fleet/README.md` mục *MOVE command*.
+
+ROS side: gateway gọi `/navigate_to_pose` (`nav2_msgs/action/NavigateToPose`) qua ActionClient,
+subscribe `/navigate_to_pose/_action/status` để phát hiện goal không do fleet gửi (RViz).
 
 Transport/protocol cụ thể phải được quyết định bằng ADR. **VDA5050 là một option tương lai, không phải mặc định bắt buộc.**
