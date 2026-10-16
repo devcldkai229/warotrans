@@ -33,10 +33,18 @@ USAGE
 """
 
 import os
+import shutil
+import subprocess
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    LogInfo,
+    OpaqueFunction,
+    TimerAction,
+)
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (
@@ -51,6 +59,32 @@ from launch_ros.substitutions import FindPackageShare
 
 def _subsystem_launch(package: str, launch_file: str):
     return PathJoinSubstitution([FindPackageShare(package), "launch", launch_file])
+
+
+def _warn_if_teleop_running(context, *args, **kwargs):
+    """warotrans-teleop (mobile_base + web teleop) also drives /cmd_vel and owns the ESP32 port."""
+    del context, args, kwargs
+    if shutil.which("systemctl") is None:
+        return []
+    try:
+        state = subprocess.run(
+            ["systemctl", "is-active", "warotrans-teleop"],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if state != "active":
+        return []
+    return [
+        LogInfo(
+            msg=(
+                "[warotrans_bringup] WARNING: warotrans-teleop.service is active — it fights Nav2 "
+                "for /cmd_vel and /dev/warotrans. Run: sudo systemctl stop warotrans-teleop"
+            )
+        )
+    ]
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -76,6 +110,7 @@ def generate_launch_description() -> LaunchDescription:
             "nav2_params_file": LaunchConfiguration("nav2_params_file"),
             "enable_costmap_filters": LaunchConfiguration("enable_costmap_filters"),
             "enable_ekf": enable_ekf,
+            "enable_cmd_vel_pipeline": LaunchConfiguration("enable_cmd_vel_pipeline"),
             "keepout_mask": LaunchConfiguration("keepout_mask"),
             "speed_mask": LaunchConfiguration("speed_mask"),
         }.items(),
@@ -166,9 +201,9 @@ def generate_launch_description() -> LaunchDescription:
                 "start_ultrasonic",
                 default_value="false",
                 description=(
-                    "Start ultrasonic_node (Range topics). "
-                    "Nav2 Collision Monitor still OFF until FRONT/REAR mounts measured "
-                    "— see docs/ultrasonic-front-rear-nav2.md"
+                    "Start ultrasonic_node (Range topics, monitoring only). "
+                    "Nav2 Collision Monitor uses the LiDAR, not ultrasonic "
+                    "(docs/navigation-hardening.md)"
                 ),
             ),
             DeclareLaunchArgument(
@@ -176,6 +211,14 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="12.0",
                 description="Delay Nav2 start so /scan and AMCL map->odom exist first",
             ),
+            DeclareLaunchArgument(
+                "enable_cmd_vel_pipeline",
+                default_value="true",
+                description=(
+                    "controller -> velocity_smoother -> collision_monitor (LiDAR) -> /cmd_vel"
+                ),
+            ),
+            OpaqueFunction(function=_warn_if_teleop_running),
 
             # --- robot_state_publisher: always required for TF ---
             IncludeLaunchDescription(
@@ -240,7 +283,7 @@ def generate_launch_description() -> LaunchDescription:
             # --- Navigation: delayed so LiDAR + AMCL TF are ready ---
             # Planner activate needs map->odom; AMCL publishes it after /scan.
             TimerAction(
-                period=12.0,
+                period=LaunchConfiguration("nav_start_delay_sec"),
                 actions=[navigation_include],
             ),
 

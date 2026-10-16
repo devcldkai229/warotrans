@@ -64,9 +64,10 @@ controller_server:
 
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      # Slow platform (~0.1 m/s): allow longer rotate-to-heading / slow crawl.
-      required_movement_radius: 0.08
-      movement_time_allowance: 45.0
+      # 2026-10-16: 45 s hid a stalled robot for most of a minute per attempt (the T-junction
+      # "hang"). With deadband compensation the robot moves 0.10 m in ~1-3 s, so 20 s is ample.
+      required_movement_radius: 0.10
+      movement_time_allowance: 20.0
 
     general_goal_checker:
       stateful: true
@@ -78,13 +79,15 @@ controller_server:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
       # PROVISIONAL velocities: 80% of measured max (see calibration.yaml)
       desired_linear_vel: 0.10     # PROVISIONAL: 0.128 × 0.8 — keep; do not raise without measurement
-      # Lookahead ~1 chassis length (0.32 m): shorter than 0.35 to reduce cutting 90° shelf corners
-      lookahead_dist: 0.25
-      min_lookahead_dist: 0.18
+      # Lookahead ~1 chassis length. With inflation now keeping the path centred in the aisle
+      # (no corner hugging), 0.30 tracks 90° turns without oscillating.
+      lookahead_dist: 0.30
+      min_lookahead_dist: 0.20
       max_lookahead_dist: 0.45
       lookahead_time: 1.5
-      # Below provisional max_angular ~0.45 @ 40% PWM — slightly softer for in-place align
-      rotate_to_heading_angular_vel: 0.35
+      # In-place turn rate. 0.35 rad/s (≈25 % PWM, open loop) stalled the skid-steer wheels at
+      # T-junctions; 0.5 rad/s + firmware min_start_duty / PI loop actually turns the chassis.
+      rotate_to_heading_angular_vel: 0.5
       transform_tolerance: 0.3
       use_velocity_scaled_lookahead_dist: false
       min_approach_linear_velocity: 0.05
@@ -93,9 +96,13 @@ controller_server:
       use_collision_detection: true
       max_allowed_time_to_collision_up_to_carrot: 1.0
       use_regulated_linear_velocity_scaling: true
-      use_cost_regulated_linear_velocity_scaling: false
+      # Slow down near racks/walls (inflation cost) instead of driving full speed into a corner.
+      use_cost_regulated_linear_velocity_scaling: true
+      cost_scaling_dist: 0.4
+      cost_scaling_gain: 1.0
+      inflation_cost_scaling_factor: 4.0   # must equal the costmaps' cost_scaling_factor
       # Slow earlier on tight curves (warehouse 90°); still above crawl min_speed
-      regulated_linear_scaling_min_radius: 0.6
+      regulated_linear_scaling_min_radius: 0.9
       regulated_linear_scaling_min_speed: 0.05
       use_fixed_curvature_lookahead: false
       curvature_lookahead_dist: 0.25
@@ -161,9 +168,9 @@ behavior_server:
     robot_base_frame: base_footprint
     transform_tolerance: 0.3
     simulate_ahead_time: 2.0
-    # PROVISIONAL velocities
-    max_rotational_vel: 0.45
-    min_rotational_vel: 0.1
+    # Spin recovery: 0.1 rad/s min (≈7 % PWM) could never move the skid-steer chassis.
+    max_rotational_vel: 0.6
+    min_rotational_vel: 0.3
     rotational_acc_lim: 0.8
 
 # -----------------------------------------------------------------------------
@@ -174,12 +181,15 @@ velocity_smoother:
     use_sim_time: false
     smoothing_frequency: 20.0
     scale_velocities: false
+    # Stays OPEN_LOOP on purpose: CLOSED_LOOP ramps from the *measured* velocity, so a stalled
+    # wheel (measured 0) would keep the command under the motor deadband forever.
     feedback: "OPEN_LOOP"
-    # PROVISIONAL velocities
-    max_velocity: [0.10, 0.0, 0.45]
-    min_velocity: [-0.10, 0.0, -0.45]
-    max_accel: [0.5, 0.0, 0.8]
-    max_decel: [-0.5, 0.0, -0.8]
+    # In the cmd_vel pipeline since 2026-10-16: controller/behaviors -> cmd_vel_nav ->
+    # velocity_smoother -> cmd_vel_smoothed -> collision_monitor -> cmd_vel -> esp32_bridge
+    max_velocity: [0.10, 0.0, 0.6]
+    min_velocity: [-0.10, 0.0, -0.6]
+    max_accel: [0.5, 0.0, 1.2]
+    max_decel: [-0.5, 0.0, -1.2]
     odom_topic: /odom
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
@@ -219,20 +229,17 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05             # matches map resolution
-      # Footprint 0.320 × 0.260 m
+      # Footprint 0.320 × 0.260 m (+2 cm padding for lidar/odometry noise)
       footprint: "[[0.16, 0.13], [0.16, -0.13], [-0.16, -0.13], [-0.16, 0.13]]"
-      plugins: ["voxel_layer", "inflation_layer"]
+      footprint_padding: 0.02
+      # 2D lidar only (ultrasonic not used): ObstacleLayer is the right (and lighter on the Pi)
+      # layer; VoxelLayer added a 3D grid for a single scan plane.
+      plugins: ["obstacle_layer", "inflation_layer"]
       # Outdoor default: omit filters key (empty [] crashes rclcpp on Jazzy).
       # Phase 3: enable_costmap_filters:=true merges nav2_params_filters_on.yaml
-      voxel_layer:
-        plugin: "nav2_costmap_2d::VoxelLayer"
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
-        publish_voxel_map: true
-        origin_z: 0.0
-        z_resolution: 0.05
-        z_voxels: 16
-        max_obstacle_height: 2.0
-        mark_threshold: 0
         observation_sources: scan
         scan:
           topic: /scan
@@ -244,13 +251,17 @@ local_costmap:
           raytrace_max_range: 3.0
           raytrace_min_range: 0.0
           obstacle_max_range: 2.5
-          obstacle_min_range: 0.0
+          # Ignore returns inside the chassis outline (mast / frame): never mark the robot itself.
+          obstacle_min_range: 0.20
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        # KEEP 0.15 / 2.0: half-width footprint ~0.13 m; do NOT shrink to “fit” shelves.
-        # Class D (cmd~0 near shelves) handled by RPP collision_detection + rotate_to_heading.
-        cost_scaling_factor: 2.0
-        inflation_radius: 0.15
+        # 2026-10-16: was 0.15 / 2.0 — smaller than the circumscribed radius (≈0.21 m), so NavFn
+        # planned along the shelf corners and the rectangular footprint clipped them when turning
+        # at T-junctions (RPP "collision ahead" → FollowPath fails → recovery loop). 0.35 / 4.0
+        # keeps paths in the middle of the aisle; aisles of 0.55–0.9 m stay passable
+        # (centre-line cost ≈ 130 < inscribed 253). Must match RPP inflation_cost_scaling_factor.
+        cost_scaling_factor: 4.0
+        inflation_radius: 0.35
       keepout_filter:
         plugin: "nav2_costmap_2d::KeepoutFilter"
         enabled: false
@@ -271,6 +282,7 @@ global_costmap:
       transform_tolerance: 0.3
       # Footprint 0.320 × 0.260 m
       footprint: "[[0.16, 0.13], [0.16, -0.13], [-0.16, -0.13], [-0.16, 0.13]]"
+      footprint_padding: 0.02
       resolution: 0.05             # matches map resolution
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
@@ -292,12 +304,12 @@ global_costmap:
           raytrace_max_range: 3.0
           raytrace_min_range: 0.0
           obstacle_max_range: 2.5
-          obstacle_min_range: 0.0
+          obstacle_min_range: 0.20
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        # Same as local — keep safety margin; do not reduce for aisle fit.
-        cost_scaling_factor: 2.0
-        inflation_radius: 0.15
+        # Same as local (see the local costmap note): path centred in the aisle.
+        cost_scaling_factor: 4.0
+        inflation_radius: 0.35
       keepout_filter:
         plugin: "nav2_costmap_2d::KeepoutFilter"
         enabled: false
@@ -345,12 +357,16 @@ speed_costmap_filter_info_server:
     multiplier: 0.01
 
 # -----------------------------------------------------------------------------
-# Collision Monitor (optional safety layer)
+# Collision Monitor — last safety layer on /cmd_vel, LiDAR only (2026-10-16)
 # -----------------------------------------------------------------------------
-# Phase 0: disabled (polygons/observation_sources empty).
-# Phase 0.5 FRONT/REAR: do NOT invent mounts. After geometry OK, follow
-# docs/ultrasonic-front-rear-nav2.md and config/nav2_collision_front_rear.yaml
-# (requires remapping controller → /cmd_vel_nav). LEFT/RIGHT not used.
+# Pipeline (navigation.launch.py): controller / behaviors -> cmd_vel_nav -> velocity_smoother
+#   -> cmd_vel_smoothed -> collision_monitor -> cmd_vel -> esp32_bridge_node.
+# "approach": simulates the footprint along the current command and scales it down so the
+# robot stops ~1.2 s before touching a scan point. Unlike a fixed "stop" box at the nose it
+# still lets the robot rotate in place next to a wall (the T-junction case), because an
+# in-place spin does not move the rectangle into the wall.
+# Ultrasonic is intentionally not a source (operator decision; see
+# docs/ultrasonic-front-rear-nav2.md / nav2_collision_front_rear.yaml for that option).
 collision_monitor:
   ros__parameters:
     use_sim_time: false
@@ -363,6 +379,21 @@ collision_monitor:
     source_timeout: 1.0
     base_shift_correction: true
     stop_pub_timeout: 2.0
-    # Disable for Phase 0; enable after FRONT/REAR mounts measured
-    polygons: []
-    observation_sources: []
+    # CRITICAL: esp32_bridge_node expects geometry_msgs/Twist, NOT TwistStamped
+    enable_stamped_cmd_vel: false
+    polygons: ["FootprintApproach"]
+    FootprintApproach:
+      type: "polygon"
+      action_type: "approach"
+      footprint_topic: "/local_costmap/published_footprint"
+      time_before_collision: 1.2
+      simulation_time_step: 0.1
+      min_points: 4               # ignore single noisy returns
+      visualize: true
+      polygon_pub_topic: "collision_monitor_footprint"
+      enabled: true
+    observation_sources: ["scan"]
+    scan:
+      type: "scan"
+      topic: "/scan"
+      enabled: true

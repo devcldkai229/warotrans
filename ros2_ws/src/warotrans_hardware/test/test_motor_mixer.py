@@ -91,3 +91,26 @@ def test_proportional_normalization_on_turn():
 def test_rejects_non_finite():
     assert _mix(math.nan, 0.0) is None
     assert _mix(0.0, math.inf) is None
+
+
+def test_default_ceiling_is_60_percent():
+    result = mix_to_pwm(0.32, 0.0, wheel_separation=WHEEL_SEP, full_scale_linear=FULL_SCALE)
+    assert result is not None
+    assert result.left_pwm_raw == 153
+
+
+def test_min_start_duty_kicks_slow_in_place_spin():
+    # 0.3 rad/s spin: each wheel 0.068 m/s -> 54 counts open-loop, +60 deadband offset
+    result = mix_to_pwm(0.0, 0.3, wheel_separation=WHEEL_SEP, full_scale_linear=FULL_SCALE, min_start_duty=60)
+    assert result is not None
+    assert result.left_pwm_raw == result.right_pwm_raw == 114
+    assert result.left_pwm_percent < 0 < result.right_pwm_percent
+
+
+def test_min_start_duty_not_applied_to_stopped_wheel():
+    # Pivot about the left wheel: left target 0 must stay 0 (no kick on a stopped wheel)
+    result = mix_to_pwm(0.05, 0.05 * 2 / WHEEL_SEP, wheel_separation=WHEEL_SEP,
+                        full_scale_linear=FULL_SCALE, min_start_duty=60)
+    assert result is not None
+    assert result.left_pwm_raw == 0
+    assert result.right_pwm_raw > 60

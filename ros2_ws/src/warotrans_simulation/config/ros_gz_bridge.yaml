@@ -35,6 +35,13 @@
   gz_type_name: "gz.msgs.LaserScan"
   direction: GZ_TO_ROS
 
+# IMU (real robot: BNO055 bno055_node, IMUPLUS)
+- ros_topic_name: "/imu/data"
+  gz_topic_name: "/imu/data"
+  ros_type_name: "sensor_msgs/msg/Imu"
+  gz_type_name: "gz.msgs.IMU"
+  direction: GZ_TO_ROS
+
 # wheel joints -> robot_state_publisher (wheel TF for RViz)
 - ros_topic_name: "/joint_states"
   gz_topic_name: "/joint_states"

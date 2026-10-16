@@ -3,6 +3,8 @@
 # =============================================================================
 # Real-robot speeds (0.10 m/s) are PROVISIONAL limits of the physical motors.
 # The simulated diff drive has no such limit, so the demo runs faster here.
+# Costmaps, inflation (0.35 / 4.0), BT and collision_monitor come from the base nav2_params.yaml,
+# so Gazebo exercises the same navigation config as the Pi.
 # This file is only loaded by warotrans_simulation launches — never on the Pi.
 # =============================================================================
 
@@ -11,23 +13,6 @@ controller_server:
     FollowPath:
       desired_linear_vel: 0.35
       rotate_to_heading_angular_vel: 0.8
-
-# Demo warehouse 11 x 7.5 m (aisles between racks 1.15 m): with the real-robot inflation (0.15 m) NavFn hugs shelf edges and
-# RPP's footprint check reports "collision ahead". A wider cost keeps paths in the middle of the aisles
-# while still letting the robot reach docking points 0.35 m from a shelf. Only larger margins — never smaller.
-local_costmap:
-  local_costmap:
-    ros__parameters:
-      inflation_layer:
-        inflation_radius: 0.35
-        cost_scaling_factor: 4.0
-
-global_costmap:
-  global_costmap:
-    ros__parameters:
-      inflation_layer:
-        inflation_radius: 0.35
-        cost_scaling_factor: 4.0
 
 velocity_smoother:
   ros__parameters:

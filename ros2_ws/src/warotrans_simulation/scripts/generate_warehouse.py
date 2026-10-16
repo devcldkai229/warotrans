@@ -310,6 +310,7 @@ def world_sdf(name: str, models: str, center: tuple[float, float], span: float) 
     <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
       <render_engine>ogre2</render_engine>
     </plugin>
+    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
 
     <gui fullscreen="0">
       <camera name="user_camera">

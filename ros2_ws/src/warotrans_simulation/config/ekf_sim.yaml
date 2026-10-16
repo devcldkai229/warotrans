@@ -1,0 +1,15 @@
+# Simulation overlay for warotrans_localization/config/ekf.yaml (merged after it).
+# Gazebo's DiffDrive odometry carries no covariance (all zeros), so robot_localization would
+# fully trust its skid-steer yaw rate. On the robot, wheel_odom_node publishes a large yaw-rate
+# variance for the same reason; here we simply do not fuse the wheel vyaw and let the IMU gyro
+# own heading. vx and the vy = 0 constraint are still fused from the wheels.
+ekf_filter_node:
+  ros__parameters:
+    use_sim_time: true
+    odom0_config: [
+      false, false, false,
+      false, false, false,
+      true,  true,  false,
+      false, false, false,
+      false, false, false
+    ]

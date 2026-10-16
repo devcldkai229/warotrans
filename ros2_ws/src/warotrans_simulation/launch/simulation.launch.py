@@ -40,6 +40,7 @@ def robot_description_xml() -> str:
     geometry_file = os.path.join(desc_pkg, "config", "geometry.yaml")
     geometry = load_yaml(geometry_file)
     laser = geometry["laser"]
+    imu = geometry.get("imu") or {}
     mappings = {
         "geometry_file": geometry_file,
         "base_link_z": str(geometry["base_footprint_to_base_link"]["z"]),
@@ -48,6 +49,9 @@ def robot_description_xml() -> str:
         "lidar_z": str(laser["z"]),
         "lidar_yaw": str(laser["yaw"]),
         "enable_ultrasonic_front_rear": "false",
+        # Same imu_link pose as the real robot (BNO055 mount, geometry.yaml imu.*).
+        "enable_imu": "true",
+        **{f"imu_{k}": str(imu.get(k) or 0.0) for k in ("x", "y", "z", "roll", "pitch", "yaw")},
     }
     doc = xacro.process_file(os.path.join(sim_pkg, "urdf", "warotrans_sim.urdf.xacro"), mappings=mappings)
     return doc.toxml()
@@ -63,9 +67,38 @@ def _setup(context: LaunchContext, *args, **kwargs):
 
     gz_args = f"-r {'' if gui else '-s '}{world}"
     robot_description = robot_description_xml()
+    flag = lambda name: LaunchConfiguration(name).perform(context).lower() in ("true", "1", "yes")  # noqa: E731
+    enable_ekf = flag("enable_ekf")
+    # enable_ekf: /odom = drifting wheel odometry, no TF from Gazebo (the EKF owns odom->base_footprint).
+    bridge_config = os.path.join(sim_pkg, "config", "ros_gz_bridge_ekf.yaml" if enable_ekf else "ros_gz_bridge.yaml")
+    # motor_deadband > 0: Nav2 / teleop /cmd_vel goes through motor_deadband_emulator, which feeds
+    # Gazebo on /cmd_vel_motor (reproduces the real skid-steer that cannot turn at low PWM).
+    deadband = float(LaunchConfiguration("motor_deadband").perform(context))
+    bridge_remaps = [("/cmd_vel", "/cmd_vel_motor")] if deadband > 0.0 else []
+    extra_nodes = []
+    if deadband > 0.0:
+        extra_nodes.append(
+            Node(
+                package="warotrans_simulation",
+                executable="motor_deadband_emulator.py",
+                name="motor_deadband_emulator",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": True,
+                        "deadband_mps": deadband,
+                        "compensate": flag("deadband_compensation"),
+                        "wheel_separation": 0.4535,
+                    }
+                ],
+            )
+        )
 
-    return [
-        LogInfo(msg=f"[warotrans_simulation] world={world} gui={gui} spawn={spawn}"),
+    return extra_nodes + [
+        LogInfo(
+            msg=f"[warotrans_simulation] world={world} gui={gui} spawn={spawn} ekf={enable_ekf} "
+            f"motor_deadband={deadband}"
+        ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(get_package_share_directory("ros_gz_sim"), "launch", "gz_sim.launch.py")
@@ -99,9 +132,10 @@ def _setup(context: LaunchContext, *args, **kwargs):
             name="ros_gz_bridge",
             output="screen",
             parameters=[
-                {"config_file": os.path.join(sim_pkg, "config", "ros_gz_bridge.yaml")},
+                {"config_file": bridge_config},
                 {"use_sim_time": True},
             ],
+            remappings=bridge_remaps,
         ),
     ]
 
@@ -113,6 +147,21 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("world", default_value=os.path.join(sim_pkg, "worlds", "warehouse.sdf")),
             DeclareLaunchArgument("layout", default_value=os.path.join(sim_pkg, "config", "warehouse_layout.yaml")),
             DeclareLaunchArgument("gui", default_value="true", description="Show the Gazebo window"),
+            DeclareLaunchArgument(
+                "enable_ekf",
+                default_value="false",
+                description="Bridge wheel odometry as /odom without TF (EKF + IMU own odom->base_footprint)",
+            ),
+            DeclareLaunchArgument(
+                "motor_deadband",
+                default_value="0.0",
+                description="Wheel speed (m/s) below which the simulated motors stall; 0 = ideal motors",
+            ),
+            DeclareLaunchArgument(
+                "deadband_compensation",
+                default_value="false",
+                description="Emulate firmware min_start_duty: slow wheels are raised to the deadband",
+            ),
             OpaqueFunction(function=_setup),
         ]
     )

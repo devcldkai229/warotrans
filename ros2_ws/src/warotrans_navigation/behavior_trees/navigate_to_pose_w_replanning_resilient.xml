@@ -1,12 +1,14 @@
 <!--
   WaroTrans resilient NavigateToPose BT
-  - Rate replan chậm hơn (0.33 Hz) để giảm thrash path
-  - FollowPath fail → clear local costmap → Wait → ComputePathToPose (retry trong goal)
-  - Recovery hệ thống ưu tiên clear/wait/backup trước spin mạnh
+  - Replan chậm (0.33 Hz) để giảm thrash path
+  - FollowPath fail → clear local costmap → wait → replan (thử lại trong goal)
+  - Recovery theo thứ tự: clear costmaps → BackUp → Spin 90° → Wait
+  - 2026-10-16: giới hạn tổng số lần thử (4 vòng ngoài × 2 vòng trong) để goal không giải
+    được sẽ ABORT trong khoảng ≤ 2–3 phút thay vì "treo" nhiều phút (progress checker 20 s).
 -->
 <root main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
-    <RecoveryNode number_of_retries="6" name="NavigateRecovery">
+    <RecoveryNode number_of_retries="4" name="NavigateRecovery">
       <PipelineSequence name="NavigateWithReplanning">
         <RateController hz="0.33">
           <RecoveryNode number_of_retries="1" name="ComputePathToPose">
@@ -16,13 +18,13 @@
               service_name="global_costmap/clear_entirely_global_costmap"/>
           </RecoveryNode>
         </RateController>
-        <RecoveryNode number_of_retries="3" name="FollowPath">
+        <RecoveryNode number_of_retries="2" name="FollowPath">
           <FollowPath path="{path}" controller_id="FollowPath"
             error_code_id="{follow_path_error_code}"/>
           <Sequence name="FollowPathRecovery">
             <ClearEntireCostmap name="ClearLocalCostmap-Context"
               service_name="local_costmap/clear_entirely_local_costmap"/>
-            <Wait wait_duration="2.5"/>
+            <Wait wait_duration="1.5"/>
             <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"
               error_code_id="{compute_path_error_code}"/>
           </Sequence>
@@ -37,9 +39,10 @@
             <ClearEntireCostmap name="ClearGlobalCostmap-Subtree"
               service_name="global_costmap/clear_entirely_global_costmap"/>
           </Sequence>
-          <Wait wait_duration="3.0"/>
-          <BackUp backup_dist="0.15" backup_speed="0.05"/>
-          <Spin spin_dist="0.78"/>
+          <!-- Lùi khỏi tường / góc kệ trước khi quay (tránh quay chạm góc ở ngã 3) -->
+          <BackUp backup_dist="0.15" backup_speed="0.06"/>
+          <Spin spin_dist="1.57"/>
+          <Wait wait_duration="2.0"/>
         </RoundRobin>
       </ReactiveFallback>
     </RecoveryNode>

@@ -28,17 +28,19 @@ amcl:
     scan_topic: "/scan"
     laser_max_range: 12.0      # RPLIDAR A1M8 max ~12m, matches slam_toolbox
     laser_min_range: 0.15      # A1M8 min ~0.15m
-    max_beams: 60              # TUNING: subsample for CPU; A1M8 has ~360 points
+    max_beams: 90              # TUNING: subsample for CPU; A1M8 has ~360 points (60 was sparse at corners)
 
     # ----- Motion model (DifferentialMotionModel for skid-steer approx) -----
     robot_model_type: "nav2_amcl::DifferentialMotionModel"
 
     # Alpha parameters — noise in odometry motion model
-    # Skid-steer has higher rotational slip; raise alpha1/alpha2 vs defaults
-    alpha1: 0.3                # TUNING: rotation→rotation noise
-    alpha2: 0.3                # TUNING: translation→rotation noise
-    alpha3: 0.2                # TUNING: translation→translation noise
-    alpha4: 0.2                # TUNING: rotation→translation noise
+    # 2026-10-16: odom→base_footprint now comes from the EKF (wheel velocities + BNO055 gyro
+    # yaw, enable_ekf:=true), so rotation is no longer as noisy as raw skid-steer wheel yaw.
+    # Lower than the wheel-only 0.3/0.2; raise again if running with enable_ekf:=false.
+    alpha1: 0.15               # TUNING: rotation→rotation noise
+    alpha2: 0.15               # TUNING: translation→rotation noise
+    alpha3: 0.15               # TUNING: translation→translation noise
+    alpha4: 0.15               # TUNING: rotation→translation noise
     alpha5: 0.1                # TUNING: translation→translation (strafe, usually 0 for diff)
 
     # ----- Particle filter -----
@@ -53,8 +55,11 @@ amcl:
 
     # ----- Resample -----
     resample_interval: 1       # resample every N updates
-    recovery_alpha_slow: 0.001
-    recovery_alpha_fast: 0.1
+    # 0 = no random particle injection. Shelf aisles look alike; injection teleported the
+    # estimate into a neighbouring aisle (seen in the Gazebo warehouse: "success" while the
+    # robot was elsewhere). Re-localize with RViz "2D Pose Estimate" instead.
+    recovery_alpha_slow: 0.0
+    recovery_alpha_fast: 0.0
 
     # ----- Laser likelihood model -----
     laser_model_type: "likelihood_field"

@@ -130,6 +130,26 @@
     </sensor>
   </gazebo>
 
+  <!-- IMU on the real "imu_link" (geometry.yaml imu.*), like the BNO055 in IMUPLUS mode:
+       orientation + gyro, publishes /imu/data. Needs the world's gz-sim-imu-system plugin. -->
+  <gazebo reference="imu_link">
+    <sensor name="imu" type="imu">
+      <gz_frame_id>imu_link</gz_frame_id>
+      <topic>imu/data</topic>
+      <update_rate>50</update_rate>
+      <always_on>true</always_on>
+      <imu>
+        <angular_velocity>
+          <z><noise type="gaussian"><mean>0.0</mean><stddev>0.002</stddev></noise></z>
+        </angular_velocity>
+        <linear_acceleration>
+          <x><noise type="gaussian"><mean>0.0</mean><stddev>0.02</stddev></noise></x>
+          <y><noise type="gaussian"><mean>0.0</mean><stddev>0.02</stddev></noise></y>
+        </linear_acceleration>
+      </imu>
+    </sensor>
+  </gazebo>
+
   <gazebo>
     <!-- Skid steer = DiffDrive with two joints per side. -->
     <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
@@ -142,8 +162,9 @@
       <max_linear_acceleration>1.0</max_linear_acceleration>
       <max_angular_acceleration>2.0</max_angular_acceleration>
       <topic>cmd_vel</topic>
-      <!-- Wheel-integrated odometry is NOT used: with 4 skidding wheels it drifts badly in heading,
-           which made AMCL jump to a look-alike aisle on large maps. Kept on unbridged topics. -->
+      <!-- Wheel-integrated odometry drifts in heading with 4 skidding wheels (like the real robot).
+           Default sim: unused (ground-truth /odom below). enable_ekf:=true bridges it as /odom and
+           the EKF fixes the heading with the IMU, exactly the real-robot pipeline. -->
       <odom_topic>wheel_odom</odom_topic>
       <tf_topic>wheel_tf</tf_topic>
       <frame_id>odom</frame_id>

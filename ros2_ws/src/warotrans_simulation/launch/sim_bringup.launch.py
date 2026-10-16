@@ -13,6 +13,13 @@ USAGE
     ros2 launch warotrans_simulation sim_bringup.launch.py
     ros2 launch warotrans_simulation sim_bringup.launch.py rviz:=true gateway:=false
     ros2 launch warotrans_simulation sim_bringup.launch.py map_version_code:=MAP-WHDEMO-V001
+
+    # T-junction regression (real-robot conditions): EKF + IMU, motors stall below 0.10 m/s
+    ros2 launch warotrans_simulation sim_bringup.launch.py enable_ekf:=true sim_speeds:=false \
+        motor_deadband:=0.10 gateway:=false rviz:=true
+    # ... and with the firmware deadband compensation
+    ros2 launch warotrans_simulation sim_bringup.launch.py enable_ekf:=true sim_speeds:=false \
+        motor_deadband:=0.10 deadband_compensation:=true gateway:=false
 """
 
 from __future__ import annotations
@@ -47,11 +54,24 @@ def _setup(context: LaunchContext, *args, **kwargs):
     gateway_delay = nav_delay + float(LaunchConfiguration("gateway_extra_delay").perform(context))
     remappings = [("/tf", "tf"), ("/tf_static", "tf_static")]
     amcl_params = os.path.join(loc_pkg, "config", "amcl.yaml")
+    enable_ekf = _flag(context, "enable_ekf")
+    if enable_ekf:
+        # Drifting wheel odometry + IMU through the EKF: keep the real-robot AMCL motion noise.
+        amcl_noise = {}
+    else:
+        # Sim odometry is exact (OdometryPublisher), unlike the skidding real robot.
+        amcl_noise = {"alpha1": 0.05, "alpha2": 0.05, "alpha3": 0.05, "alpha4": 0.05}
 
     actions = [
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(sim_pkg, "launch", "simulation.launch.py")),
-            launch_arguments={"gui": LaunchConfiguration("gui"), "layout": layout_path}.items(),
+            launch_arguments={
+                "gui": LaunchConfiguration("gui"),
+                "layout": layout_path,
+                "enable_ekf": "true" if enable_ekf else "false",
+                "motor_deadband": LaunchConfiguration("motor_deadband"),
+                "deadband_compensation": LaunchConfiguration("deadband_compensation"),
+            }.items(),
         ),
         # Localization: same nodes/params as warotrans_localization, plus sim clock and a
         # known initial pose (the spawn pose) so no manual "2D Pose Estimate" is needed.
@@ -77,15 +97,9 @@ def _setup(context: LaunchContext, *args, **kwargs):
                     "initial_pose.y": float(spawn["y"]),
                     "initial_pose.z": 0.0,
                     "initial_pose.yaw": float(spawn["yaw"]),
-                    # Sim odometry is exact (OdometryPublisher), unlike the skidding real robot:
-                    # low motion noise, and NO random particle injection (recovery_alpha_*), which in a
-                    # warehouse of identical aisles teleported the estimate into a look-alike aisle.
-                    "alpha1": 0.05,
-                    "alpha2": 0.05,
-                    "alpha3": 0.05,
-                    "alpha4": 0.05,
-                    "recovery_alpha_slow": 0.0,
-                    "recovery_alpha_fast": 0.0,
+                    # No random particle injection (amcl.yaml recovery_alpha_* = 0): in a warehouse of
+                    # identical aisles it teleported the estimate into a look-alike aisle.
+                    **amcl_noise,
                     "max_beams": 120,
                 },
             ],
@@ -107,12 +121,33 @@ def _setup(context: LaunchContext, *args, **kwargs):
                     launch_arguments={
                         "use_sim_time": "true",
                         "enable_costmap_filters": "false",
-                        "extra_params_file": os.path.join(sim_pkg, "config", "nav2_params_sim.yaml"),
+                        "enable_ekf": "true" if enable_ekf else "false",
+                        # sim_speeds:=false keeps the real-robot speeds (0.10 m/s), needed to
+                        # reproduce motor-deadband stalls in turns.
+                        "extra_params_file": (
+                            os.path.join(sim_pkg, "config", "nav2_params_sim.yaml") if _flag(context, "sim_speeds") else ""
+                        ),
                     }.items(),
                 ),
             ],
         ),
     ]
+
+    if enable_ekf:
+        # Same robot_localization node/params as the Pi (warotrans_localization ekf.yaml) + sim overlay.
+        actions.append(
+            Node(
+                package="robot_localization",
+                executable="ekf_node",
+                name="ekf_filter_node",
+                output="screen",
+                parameters=[
+                    os.path.join(loc_pkg, "config", "ekf.yaml"),
+                    os.path.join(sim_pkg, "config", "ekf_sim.yaml"),
+                    {"use_sim_time": True},
+                ],
+            )
+        )
 
     if _flag(context, "gateway"):
         gateway_params: list = [os.path.join(sim_pkg, "config", "robot_gateway_sim.yaml")]
@@ -167,6 +202,26 @@ def generate_launch_description() -> LaunchDescription:
                 "gateway_extra_delay",
                 default_value="15.0",
                 description="Extra seconds after Nav2 before the MQTT gateway starts (robot shows online only when Nav2 accepts goals)",
+            ),
+            DeclareLaunchArgument(
+                "enable_ekf",
+                default_value="false",
+                description="Real-robot localization: wheel odom + simulated IMU fused by robot_localization",
+            ),
+            DeclareLaunchArgument(
+                "motor_deadband",
+                default_value="0.0",
+                description="Wheel speed (m/s) below which simulated motors stall (T-junction regression); 0 = off",
+            ),
+            DeclareLaunchArgument(
+                "deadband_compensation",
+                default_value="false",
+                description="Emulate the firmware min_start_duty fix (slow wheels raised to the deadband)",
+            ),
+            DeclareLaunchArgument(
+                "sim_speeds",
+                default_value="true",
+                description="Faster demo speeds (nav2_params_sim.yaml); false = real-robot Nav2 params unchanged",
             ),
             DeclareLaunchArgument("robot_code", default_value="", description="Override gateway robot_code"),
             DeclareLaunchArgument("mqtt_host", default_value="", description="Override MQTT broker host"),
