@@ -36,6 +36,7 @@ def _resolve_geometry(context: LaunchContext) -> dict[str, Any]:
 
     footprint = geometry.get("base_footprint_to_base_link", {})
     laser = geometry.get("laser", {})
+    imu = geometry.get("imu") or {}
     ultrasonic = geometry.get("ultrasonic") or {}
 
     base_link_z = _parse_override(context.launch_configurations["base_link_z"])
@@ -47,12 +48,23 @@ def _resolve_geometry(context: LaunchContext) -> dict[str, Any]:
         override = _parse_override(context.launch_configurations[f"lidar_{key}"])
         lidar_values[key] = override if override is not None else laser.get(key)
 
+    imu_values: dict[str, float | None] = {}
+    for key in ("x", "y", "z", "roll", "pitch", "yaw"):
+        override = _parse_override(context.launch_configurations[f"imu_{key}"])
+        imu_values[key] = override if override is not None else imu.get(key)
+
     missing: list[str] = []
     if base_link_z is None:
         missing.append("base_footprint_to_base_link.z (use base_link_z:=...)")
     for key, value in lidar_values.items():
         if value is None:
             missing.append(f"laser.{key} (use lidar_{key}:=...)")
+
+    enable_imu = all(imu_values[k] is not None for k in ("x", "y", "z", "roll", "pitch", "yaw"))
+    if not enable_imu:
+        for key, value in imu_values.items():
+            if value is None:
+                missing.append(f"imu.{key} (use imu_{key}:=...)")
 
     if missing:
         joined = ", ".join(missing)
@@ -76,6 +88,13 @@ def _resolve_geometry(context: LaunchContext) -> dict[str, Any]:
         "lidar_y": float(lidar_values["y"]),
         "lidar_z": float(lidar_values["z"]),
         "lidar_yaw": float(lidar_values["yaw"]),
+        "enable_imu": enable_imu,
+        "imu_x": float(imu_values["x"]),
+        "imu_y": float(imu_values["y"]),
+        "imu_z": float(imu_values["z"]),
+        "imu_roll": float(imu_values["roll"]),
+        "imu_pitch": float(imu_values["pitch"]),
+        "imu_yaw": float(imu_values["yaw"]),
         "enable_ultrasonic_front_rear": enable_us,
     }
     if enable_us:
@@ -123,6 +142,20 @@ def _launch_setup(context: LaunchContext, *args: object, **kwargs: object) -> li
         str(resolved["lidar_z"]),
         " lidar_yaw:=",
         str(resolved["lidar_yaw"]),
+        " enable_imu:=",
+        "true" if resolved["enable_imu"] else "false",
+        " imu_x:=",
+        str(resolved["imu_x"]),
+        " imu_y:=",
+        str(resolved["imu_y"]),
+        " imu_z:=",
+        str(resolved["imu_z"]),
+        " imu_roll:=",
+        str(resolved["imu_roll"]),
+        " imu_pitch:=",
+        str(resolved["imu_pitch"]),
+        " imu_yaw:=",
+        str(resolved["imu_yaw"]),
         " enable_ultrasonic_front_rear:=",
         "true" if resolved["enable_ultrasonic_front_rear"] else "false",
     ]
@@ -207,6 +240,36 @@ def generate_launch_description() -> LaunchDescription:
                 "lidar_yaw",
                 default_value="",
                 description="Override laser.yaw in radians (base_link frame)",
+            ),
+            DeclareLaunchArgument(
+                "imu_x",
+                default_value="",
+                description="Override imu.x in metres (base_link frame)",
+            ),
+            DeclareLaunchArgument(
+                "imu_y",
+                default_value="",
+                description="Override imu.y in metres (base_link frame)",
+            ),
+            DeclareLaunchArgument(
+                "imu_z",
+                default_value="",
+                description="Override imu.z in metres (base_link frame)",
+            ),
+            DeclareLaunchArgument(
+                "imu_roll",
+                default_value="",
+                description="Override imu.roll in radians (base_link frame)",
+            ),
+            DeclareLaunchArgument(
+                "imu_pitch",
+                default_value="",
+                description="Override imu.pitch in radians (base_link frame)",
+            ),
+            DeclareLaunchArgument(
+                "imu_yaw",
+                default_value="",
+                description="Override imu.yaw in radians (base_link frame)",
             ),
             OpaqueFunction(function=_launch_setup),
         ]

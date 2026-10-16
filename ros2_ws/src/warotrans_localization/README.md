@@ -6,13 +6,14 @@ Owns localization/state-estimation configuration for WaroTrans.
 
 - **AMCL** — Adaptive Monte Carlo Localization for static map
 - **Map Server** — serves pre-built map from YAML/PGM files
+- **EKF** (`robot_localization`) — fuse `/odom` + `/imu/data` → TF `odom→base_footprint`
 
 ## Configuration Files
 
 | File | Purpose |
 |---|---|
 | `config/amcl.yaml` | AMCL parameters (particles, motion model, laser model) |
-| `config/ekf.yaml` | (Placeholder) robot_localization EKF params |
+| `config/ekf.yaml` | EKF fuse wheel odom + BNO055 yaw (provisional covariances) |
 
 ## Usage
 
@@ -20,6 +21,20 @@ Owns localization/state-estimation configuration for WaroTrans.
 
 ```bash
 ros2 launch warotrans_localization localization.launch.py map:=/path/to/map.yaml
+```
+
+### Launch EKF only (after wheel odom + IMU)
+
+```bash
+ros2 launch warotrans_sensors imu.launch.py
+# elsewhere: hardware with publish_tf:=false
+ros2 launch warotrans_localization ekf.launch.py
+```
+
+Bringup flag (mapping / navigation / mobile_base):
+
+```bash
+ros2 launch warotrans_bringup mobile_base.launch.py enable_ekf:=true
 ```
 
 ### Check lifecycle state
@@ -40,10 +55,15 @@ Both should be `active`.
 
 ## TF Ownership
 
-When this launch is running:
+When AMCL localization launch is running:
 
 - **AMCL owns `map → odom`**
 - Do NOT run `slam_toolbox` simultaneously
+
+When `enable_ekf:=true`:
+
+- **EKF owns `odom → base_footprint`**
+- `wheel_odom_node` must use `publish_tf:=false` (still publishes `/odom`)
 
 ## DoD (Definition of Done)
 
@@ -53,12 +73,19 @@ When this launch is running:
 - [ ] Particle cloud converges after setting initial pose
 - [ ] AMCL continues localizing during robot motion
 
+### EKF / IMU DoD
+
+- [ ] `ros2 topic hz /imu/data` stable; `frame_id=imu_link`
+- [ ] Standing: `|acc| ≈ 9.8`; rotate: yaw sense not flipped
+- [ ] With EKF: one publisher for `odom→base_footprint` (no TF_REPEATED_DATA)
+- [ ] `/odometry/filtered` does not jump
+
 ## Planned Stages
 
 1. ✓ Wheel odometry baseline (Phase 7)
-2. BNO055 verification (future)
-3. Optional `robot_localization` EKF (future)
-4. ✓ Static-map localization with AMCL (Phase 9)
+2. ✓ BNO055 driver + mount geometry (code); runtime DoD on robot
+3. ✓ `robot_localization` EKF config + `enable_ekf` bringup gate
+4. ✓ Static-map localization with AMCL (Phase 9 / Nav2 Phase 0)
 
 ## Invariant
 

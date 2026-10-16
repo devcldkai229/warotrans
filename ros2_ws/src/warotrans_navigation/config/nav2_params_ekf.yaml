@@ -1,0 +1,19 @@
+# =============================================================================
+# WaroTrans Nav2 — EKF overlay (use when bringup enable_ekf:=true)
+# =============================================================================
+# Merged AFTER nav2_params.yaml (+ outdoor/filters overlays).
+# Wheel still publishes /odom (raw) into EKF; Nav2 must consume filtered odom
+# so controller twist/pose matches TF odom→base_footprint from ekf_filter_node.
+# =============================================================================
+
+bt_navigator:
+  ros__parameters:
+    odom_topic: /odometry/filtered
+
+controller_server:
+  ros__parameters:
+    odom_topic: /odometry/filtered
+
+velocity_smoother:
+  ros__parameters:
+    odom_topic: /odometry/filtered

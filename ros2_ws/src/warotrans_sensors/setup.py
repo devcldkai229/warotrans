@@ -23,6 +23,7 @@ setup(
     entry_points={
         "console_scripts": [
             "ultrasonic_node = warotrans_sensors.ultrasonic_node:main",
+            "bno055_node = warotrans_sensors.bno055_node:main",
         ],
     },
 )

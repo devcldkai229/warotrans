@@ -10,6 +10,7 @@ map
       └── base_footprint
            └── base_link
                 ├── laser
+                ├── imu_link
                 └── camera_link   # chỉ tồn tại sau khi camera pose được xác nhận
 ```
 
@@ -21,6 +22,7 @@ Ownership:
 | `odom → base_footprint` | wheel odom **hoặc** EKF, không phải cả hai |
 | `base_footprint → base_link` | `robot_state_publisher` từ URDF |
 | `base_link → laser` | `robot_state_publisher` từ URDF |
+| `base_link → imu_link` | `robot_state_publisher` từ URDF (`geometry.yaml` imu.*) |
 | `base_link → camera_link` | `robot_state_publisher` từ URDF |
 
 **Invariant:** một transform cụ thể chỉ có một publisher.
@@ -56,9 +58,15 @@ Ownership:
 
 Owner của mỗi topic là package sinh ra nó: `/scan`, `/ultrasonic/*` và `/imu/data` thuộc
 `warotrans_sensors`; `/wheel_ticks`, `/odom` và forwarding `/cmd_vel` thuộc `warotrans_hardware`;
-`/motor_command_state` thuộc `warotrans_teleop`; `/map` và `/map_metadata` thuộc
-`warotrans_slam` khi mapping, hoặc map server khi chạy static map;
-`/camera/image_raw` thuộc `warotrans_perception`.
+`/odometry/filtered` và TF `odom→base_footprint` (khi EKF bật) thuộc
+`warotrans_localization` / `robot_localization`; `/motor_command_state` thuộc
+`warotrans_teleop`; `/map` và `/map_metadata` thuộc `warotrans_slam` khi mapping,
+hoặc map server khi chạy static map; `/camera/image_raw` thuộc `warotrans_perception`.
+
+**EKF gate:** `enable_ekf:=true` trên `mobile_base` / `mapping` / `navigation` →
+start `imu.launch` + `ekf.launch`, `wheel_odom_node` `publish_tf:=false`, và
+Nav2 overlay `nav2_params_ekf.yaml` (`odom_topic: /odometry/filtered`).
+Default `enable_ekf:=false` giữ Phase 0 (wheel owns TF, Nav2 đọc `/odom`).
 
 `/ultrasonic/*` hiện là **monitoring only** (không dừng motor). Collision Monitor /
 RangeSensorLayer **chưa bật**. Sau khi đo mount **FRONT + REAR** (xem
@@ -70,7 +78,8 @@ topic đó vào Nav2 safety. LEFT/RIGHT không wire Nav2 Phase 0.5.
 | `/odom` | `nav_msgs/msg/Odometry` | base → localization/SLAM/Nav2 | **stable (Phase 0)** |
 | `/cmd_vel` | `geometry_msgs/msg/Twist` | teleop/Nav2 → `esp32_bridge_node` | **stable (Phase 0)** |
 | `/motor_command_state` | `warotrans_msgs/msg/MotorCommandState` | teleop → UI/debug | target |
-| `/imu/data` | `sensor_msgs/msg/Imu` | IMU → EKF | future |
+| `/imu/data` | `sensor_msgs/msg/Imu` | BNO055 → EKF | **target** (`bno055_node`; bringup `enable_ekf:=true`) |
+| `/odometry/filtered` | `nav_msgs/msg/Odometry` | EKF → Nav2/debug | **target** (`ekf_filter_node` khi `enable_ekf:=true`) |
 | `/map` | `nav_msgs/msg/OccupancyGrid` | SLAM/map server → clients | target |
 | `/map_metadata` | `nav_msgs/msg/MapMetaData` | SLAM/map server → clients | target |
 | `/camera/image_raw` | `sensor_msgs/msg/Image` | camera → UI/perception | future |

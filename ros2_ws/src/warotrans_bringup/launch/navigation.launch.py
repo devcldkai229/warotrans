@@ -15,7 +15,8 @@ KHÔNG BAO GỒM:
 
 TF ownership khi navigation:
     map -> odom:           AMCL
-    odom -> base_footprint: wheel_odom_node
+    odom -> base_footprint: wheel_odom_node (default)
+                            HOẶC ekf_filter_node khi enable_ekf:=true
     static geometry:        robot_state_publisher (URDF)
 
 CẢNH BÁO: không chạy đồng thời với mapping.launch.py, demo.launch.py,
@@ -38,7 +39,11 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import (
+    LaunchConfiguration,
+    PathJoinSubstitution,
+    PythonExpression,
+)
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
@@ -54,6 +59,10 @@ def generate_launch_description() -> LaunchDescription:
     lidar_serial_port = LaunchConfiguration("lidar_serial_port")
     foxglove_port = LaunchConfiguration("foxglove_port")
     autostart = LaunchConfiguration("autostart")
+    enable_ekf = LaunchConfiguration("enable_ekf")
+    publish_tf = PythonExpression(
+        ["'false' if '", enable_ekf, "' == 'true' else 'true'"]
+    )
 
     # Default map path
     default_map = os.path.expanduser("~/maps/warotrans.yaml")
@@ -66,6 +75,7 @@ def generate_launch_description() -> LaunchDescription:
             "autostart": autostart,
             "nav2_params_file": LaunchConfiguration("nav2_params_file"),
             "enable_costmap_filters": LaunchConfiguration("enable_costmap_filters"),
+            "enable_ekf": enable_ekf,
             "keepout_mask": LaunchConfiguration("keepout_mask"),
             "speed_mask": LaunchConfiguration("speed_mask"),
         }.items(),
@@ -84,6 +94,14 @@ def generate_launch_description() -> LaunchDescription:
                 "start_hardware",
                 default_value="true",
                 description="Start ESP32 bridge and wheel odometry",
+            ),
+            DeclareLaunchArgument(
+                "enable_ekf",
+                default_value="false",
+                description=(
+                    "Start BNO055 + EKF; EKF owns odom→base_footprint "
+                    "(wheel publish_tf off)"
+                ),
             ),
             DeclareLaunchArgument(
                 "start_lidar",
@@ -171,7 +189,22 @@ def generate_launch_description() -> LaunchDescription:
                 PythonLaunchDescriptionSource(
                     _subsystem_launch("warotrans_hardware", "hardware.launch.py")
                 ),
+                launch_arguments={"publish_tf": publish_tf}.items(),
                 condition=IfCondition(LaunchConfiguration("start_hardware")),
+            ),
+
+            # --- IMU + EKF (optional; single owner of odom→base_footprint) ---
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    _subsystem_launch("warotrans_sensors", "imu.launch.py")
+                ),
+                condition=IfCondition(enable_ekf),
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    _subsystem_launch("warotrans_localization", "ekf.launch.py")
+                ),
+                condition=IfCondition(enable_ekf),
             ),
 
             # --- LiDAR ---

@@ -11,6 +11,7 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     serial_port = LaunchConfiguration("serial_port")
     baud_rate = LaunchConfiguration("baud_rate")
+    publish_tf = LaunchConfiguration("publish_tf")
     hardware_config = PathJoinSubstitution(
         [
             FindPackageShare("warotrans_hardware"),
@@ -30,6 +31,14 @@ def generate_launch_description():
                 "baud_rate",
                 default_value="921600",
                 description="ESP32 serial baud rate",
+            ),
+            DeclareLaunchArgument(
+                "publish_tf",
+                default_value="true",
+                description=(
+                    "wheel_odom publish TF odom→base_footprint "
+                    "(set false when EKF owns that edge)"
+                ),
             ),
             Node(
                 package="warotrans_hardware",
@@ -52,7 +61,15 @@ def generate_launch_description():
                 executable="wheel_odom_node",
                 name="wheel_odom_node",
                 output="screen",
-                parameters=[hardware_config],
+                parameters=[
+                    hardware_config,
+                    {
+                        "publish_tf": ParameterValue(
+                            publish_tf,
+                            value_type=bool,
+                        ),
+                    },
+                ],
             ),
         ]
     )

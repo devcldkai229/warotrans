@@ -8,7 +8,7 @@ Owns:
 - LiDAR driver launch and driver configuration;
 - Ultrasonic (MKE-S01 ×4 on Pi GPIO) — monitoring only until Nav2 phase;
   **Nav2 Phase 0.5 chỉ FRONT + REAR** (sau đo mount); LEFT/RIGHT không wire Nav2;
-- IMU driver later;
+- GY-BNO055 IMU on Pi I²C → `/imu/data` (`imu_link`);
 - any additional raw sensor source later.
 
 Does **not** own:
@@ -85,6 +85,17 @@ Record results in `docs/calibration.md` §4b.
 (see STOP in Phase 0.5 plan). Do not invent poses.
 
 Not in full bringup until STEP 6 validation PASS. No motor-stop / Nav2 yet.
+
+## IMU (GY-BNO055, Pi I²C)
+
+```bash
+ros2 launch warotrans_sensors imu.launch.py
+ros2 topic hz /imu/data
+```
+
+- Bus / address: I²C-1 / `0x29` (see `config/bno055.yaml`, `docs/calibration.md` §8).
+- `frame_id`: `imu_link` (URDF from `geometry.yaml` imu pose).
+- With EKF: `enable_ekf:=true` on bringup (wheel `publish_tf:=false`).
 
 ## Checkpoint
 
