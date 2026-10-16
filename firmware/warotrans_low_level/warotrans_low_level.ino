@@ -37,9 +37,12 @@ constexpr float commissioning_full_scale_angular =
 constexpr bool LEFT_MOTOR_INVERTED = true;
 constexpr bool RIGHT_MOTOR_INVERTED = false;
 
-// Hard PWM safety ceiling for commissioning.
-constexpr uint8_t MOTOR_PWM_ABSOLUTE_MAX_PERCENT = 40;
-constexpr uint8_t MOTOR_PWM_LIMIT_PERCENT = 40;
+// Hard PWM safety ceiling. Raised 40 -> 60 % (2026-10-16, operator approved):
+// skid-steer in-place turns need more torque than straight driving (wheels scrub
+// sideways); at 40 % with no deadband compensation the robot could not turn at
+// T-junctions. Nav2 speeds stay low (<= 0.15 m/s); the ceiling only bounds torque.
+constexpr uint8_t MOTOR_PWM_ABSOLUTE_MAX_PERCENT = 60;
+constexpr uint8_t MOTOR_PWM_LIMIT_PERCENT = 60;
 static_assert(MOTOR_PWM_LIMIT_PERCENT <= MOTOR_PWM_ABSOLUTE_MAX_PERCENT,
               "PWM limit exceeds commissioning ceiling");
 
@@ -57,7 +60,7 @@ constexpr uint8_t pwm_resolution_bits = 8;
 constexpr uint32_t max_pwm_duty =
     (static_cast<uint32_t>(1) << pwm_resolution_bits) - 1U;
 constexpr uint32_t motor_pwm_limit_duty =
-    (max_pwm_duty * MOTOR_PWM_LIMIT_PERCENT) / 100U;  // 40% of 255 = 102
+    (max_pwm_duty * MOTOR_PWM_LIMIT_PERCENT) / 100U;  // 60% of 255 = 153
 
 // ---------------------------------------------------------------------------
 // Wheel-velocity closed-loop scaffold (Class B actuator mismatch)
@@ -70,9 +73,11 @@ constexpr uint32_t motor_pwm_limit_duty =
 // ---------------------------------------------------------------------------
 constexpr bool USE_WHEEL_VELOCITY_CLOSED_LOOP = false;
 // PROVISIONAL — require physical step-response / in-place 90° calib. Do NOT invent.
+// Units: KP = duty counts per (m/s) of wheel-speed error, KI = duty counts per metre.
 constexpr float WHEEL_VEL_KP = 0.0F;
 constexpr float WHEEL_VEL_KI = 0.0F;
-constexpr float WHEEL_VEL_KD = 0.0F;
+// Wheels commanded slower than this are treated as stopped (no deadband kick).
+constexpr float wheel_moving_epsilon_mps = 0.005F;
 constexpr float odom_ticks_per_rev_left = 2478.1F;
 constexpr float odom_ticks_per_rev_right = 2478.1F;
 constexpr float odom_wheel_radius_left = 0.03296F;
@@ -109,7 +114,18 @@ uint32_t last_valid_command_ms = 0;
 uint32_t next_report_ms = 0;
 uint32_t next_wheel_vel_control_ms = 0;
 
-// Closed-loop targets / PID state (used only when USE_WHEEL_VELOCITY_CLOSED_LOOP)
+// Runtime drive tuning, set from the Pi with "C <name> <value>" (acknowledged "K <name> <value>").
+// Defaults reproduce the commissioning open-loop behaviour, so a fresh flash drives exactly as
+// before until esp32_bridge_node sends the measured values from hardware.yaml.
+//   min_duty    duty added whenever a wheel must move: overcomes static friction / motor deadband
+//   closed_loop 1 = PI on encoder wheel speed (feedforward = open-loop map + min_duty)
+//   kp, ki      PI gains (units above)
+uint32_t cfg_min_start_duty = 0;
+bool cfg_closed_loop = USE_WHEEL_VELOCITY_CLOSED_LOOP;
+float cfg_kp = WHEEL_VEL_KP;
+float cfg_ki = WHEEL_VEL_KI;
+
+// Closed-loop targets / PI state (used only when cfg_closed_loop)
 float target_left_mps = 0.0F;
 float target_right_mps = 0.0F;
 bool have_wheel_targets = false;
@@ -118,8 +134,6 @@ int32_t speed_sample_right_ticks = 0;
 uint32_t speed_sample_ms = 0;
 float pid_integral_left = 0.0F;
 float pid_integral_right = 0.0F;
-float pid_last_err_left = 0.0F;
-float pid_last_err_right = 0.0F;
 
 IRAM_ATTR uint8_t read_encoder_state(uint8_t c2_pin, uint8_t c1_pin) {
   const uint8_t c2 = static_cast<uint8_t>(
@@ -227,6 +241,54 @@ bool parse_velocity_command(const char* line,
   return *cursor == '\0';
 }
 
+// "C <name> <value>": runtime drive tuning (see cfg_* above). Returns false if not a
+// config line; replies "K <name> <applied value>" or "K ERR <name>".
+bool handle_config_command(const char* line) {
+  const char* cursor = line;
+  skip_whitespace(cursor);
+  if (*cursor != 'C') {
+    return false;
+  }
+  ++cursor;
+  if (!is_whitespace(*cursor)) {
+    return false;
+  }
+  skip_whitespace(cursor);
+  char name[16];
+  size_t length = 0;
+  while (*cursor != '\0' && !is_whitespace(*cursor) && length < sizeof(name) - 1) {
+    name[length++] = *cursor++;
+  }
+  name[length] = '\0';
+  float value = 0.0F;
+  if (length == 0 || !parse_float_token(cursor, value)) {
+    Serial.printf("K ERR %s\n", name);
+    return true;
+  }
+
+  if (strcmp(name, "min_duty") == 0) {
+    const float clamped = constrain(value, 0.0F, static_cast<float>(motor_pwm_limit_duty));
+    cfg_min_start_duty = static_cast<uint32_t>(lroundf(clamped));
+    Serial.printf("K min_duty %lu\n", static_cast<unsigned long>(cfg_min_start_duty));
+  } else if (strcmp(name, "closed_loop") == 0) {
+    cfg_closed_loop = value != 0.0F;
+    pid_integral_left = 0.0F;
+    pid_integral_right = 0.0F;
+    Serial.printf("K closed_loop %d\n", cfg_closed_loop ? 1 : 0);
+  } else if (strcmp(name, "kp") == 0) {
+    cfg_kp = fmaxf(0.0F, value);
+    Serial.printf("K kp %.3f\n", cfg_kp);
+  } else if (strcmp(name, "ki") == 0) {
+    cfg_ki = fmaxf(0.0F, value);
+    pid_integral_left = 0.0F;
+    pid_integral_right = 0.0F;
+    Serial.printf("K ki %.3f\n", cfg_ki);
+  } else {
+    Serial.printf("K ERR %s\n", name);
+  }
+  return true;
+}
+
 bool is_reset_command(const char* line) {
   const char* cursor = line;
   skip_whitespace(cursor);
@@ -251,6 +313,9 @@ uint32_t duty_from_wheel_speed(float wheel_speed) {
     return 0;
   }
 
+  if (fabsf(wheel_speed) <= wheel_moving_epsilon_mps) {
+    return 0;
+  }
   float ratio = fabsf(wheel_speed) / commissioning_full_scale_linear;
   if (!isfinite(ratio) || ratio <= 0.0F) {
     return 0;
@@ -259,7 +324,10 @@ uint32_t duty_from_wheel_speed(float wheel_speed) {
     ratio = 1.0F;
   }
 
-  const float duty = ratio * static_cast<float>(max_pwm_duty);
+  // Deadband compensation: a slow wheel (e.g. the inner wheel of a turn, or both wheels
+  // of a 0.3 rad/s in-place spin ≈ 0.07 m/s ≈ 22 % duty) otherwise never breaks static friction.
+  const float duty = static_cast<float>(cfg_min_start_duty) +
+                     ratio * static_cast<float>(max_pwm_duty);
   if (duty >= static_cast<float>(motor_pwm_limit_duty)) {
     return motor_pwm_limit_duty;
   }
@@ -299,8 +367,6 @@ void stop_motors() {
   target_right_mps = 0.0F;
   pid_integral_left = 0.0F;
   pid_integral_right = 0.0F;
-  pid_last_err_left = 0.0F;
-  pid_last_err_right = 0.0F;
 }
 
 void write_motor_velocity(uint8_t pwm_pin,
@@ -367,8 +433,36 @@ void reset_wheel_speed_sampler(uint32_t now) {
   speed_sample_ms = now;
 }
 
+// One wheel of the PI loop. Works on magnitudes in the commanded direction:
+// error > 0 means the wheel is slower than asked (in that direction), whatever the sign
+// of the target. (The previous scaffold used the signed error, which reduced duty for a
+// wheel that was too slow while reversing.) Conditional integration = anti-windup.
+uint32_t wheel_pi_duty(float target_mps, float measured_mps, float dt_s, float& integral) {
+  if (fabsf(target_mps) <= wheel_moving_epsilon_mps) {
+    integral = 0.0F;
+    return 0;
+  }
+  const float direction = target_mps >= 0.0F ? 1.0F : -1.0F;
+  const float error = direction * (target_mps - measured_mps);
+  const float feedforward = static_cast<float>(duty_from_wheel_speed(target_mps));
+  const float limit = static_cast<float>(motor_pwm_limit_duty);
+
+  const float unsaturated = feedforward + cfg_kp * error + cfg_ki * integral;
+  const bool pushing_up = unsaturated >= limit && error > 0.0F;
+  const bool pushing_down = unsaturated <= 0.0F && error < 0.0F;
+  if (!pushing_up && !pushing_down && dt_s > 0.0F) {
+    integral += error * dt_s;
+    if (cfg_ki > 0.0F) {
+      // The integral alone may never ask for more than half the duty range.
+      const float max_integral = 0.5F * limit / cfg_ki;
+      integral = constrain(integral, -max_integral, max_integral);
+    }
+  }
+  return clamp_duty_u32(feedforward + cfg_kp * error + cfg_ki * integral);
+}
+
 void update_wheel_velocity_closed_loop(uint32_t now) {
-  if (!USE_WHEEL_VELOCITY_CLOSED_LOOP || !have_wheel_targets || !pwm_ready) {
+  if (!cfg_closed_loop || !have_wheel_targets || !pwm_ready) {
     return;
   }
   if (static_cast<int32_t>(now - next_wheel_vel_control_ms) < 0) {
@@ -393,30 +487,9 @@ void update_wheel_velocity_closed_loop(uint32_t now) {
   speed_sample_right_ticks = signed_right;
   speed_sample_ms = now;
 
-  const float err_l = target_left_mps - meas_left;
-  const float err_r = target_right_mps - meas_right;
-  pid_integral_left += err_l * dt_s;
-  pid_integral_right += err_r * dt_s;
-  const float d_l =
-      (dt_s > 0.0F) ? (err_l - pid_last_err_left) / dt_s : 0.0F;
-  const float d_r =
-      (dt_s > 0.0F) ? (err_r - pid_last_err_right) / dt_s : 0.0F;
-  pid_last_err_left = err_l;
-  pid_last_err_right = err_r;
-
-  // Feedforward (open-loop map) + PID. With K*=0 this equals open-loop duty.
-  const float ff_l = static_cast<float>(duty_from_wheel_speed(target_left_mps));
-  const float ff_r =
-      static_cast<float>(duty_from_wheel_speed(target_right_mps));
-  const float corr_l =
-      WHEEL_VEL_KP * err_l + WHEEL_VEL_KI * pid_integral_left +
-      WHEEL_VEL_KD * d_l;
-  const float corr_r =
-      WHEEL_VEL_KP * err_r + WHEEL_VEL_KI * pid_integral_right +
-      WHEEL_VEL_KD * d_r;
-
-  const uint32_t duty_l = clamp_duty_u32(ff_l + corr_l);
-  const uint32_t duty_r = clamp_duty_u32(ff_r + corr_r);
+  // Feedforward (open-loop map + min_duty) + PI. With kp = ki = 0 this equals open-loop duty.
+  const uint32_t duty_l = wheel_pi_duty(target_left_mps, meas_left, dt_s, pid_integral_left);
+  const uint32_t duty_r = wheel_pi_duty(target_right_mps, meas_right, dt_s, pid_integral_right);
   write_motor_duty(left_pwm_pin, left_dir_pin, target_left_mps, duty_l,
                    LEFT_MOTOR_INVERTED);
   write_motor_duty(right_pwm_pin, right_dir_pin, target_right_mps, duty_r,
@@ -464,16 +537,29 @@ void handle_velocity_command(float linear_mps, float angular_rps) {
     return;
   }
 
+  // A wheel that reverses direction starts its integral from zero.
+  if (left_speed * target_left_mps < 0.0F) {
+    pid_integral_left = 0.0F;
+  }
+  if (right_speed * target_right_mps < 0.0F) {
+    pid_integral_right = 0.0F;
+  }
+  const bool was_driving = have_wheel_targets;
   target_left_mps = left_speed;
   target_right_mps = right_speed;
   have_wheel_targets = true;
   valid_velocity_command = true;
   last_valid_command_ms = millis();
 
-  if (USE_WHEEL_VELOCITY_CLOSED_LOOP) {
-    reset_wheel_speed_sampler(last_valid_command_ms);
-    next_wheel_vel_control_ms = last_valid_command_ms;
-    update_wheel_velocity_closed_loop(last_valid_command_ms);
+  if (cfg_closed_loop) {
+    // Commands arrive at ~10-20 Hz; the loop runs every 20 ms on its own (loop()).
+    // Only (re)start the speed sampler when starting from rest, so the PI keeps a
+    // continuous measurement while a stream of commands is being received.
+    if (!was_driving) {
+      reset_wheel_speed_sampler(last_valid_command_ms);
+      next_wheel_vel_control_ms = last_valid_command_ms + wheel_vel_control_period_ms;
+      apply_wheel_velocities(left_speed, right_speed);  // feedforward until first sample
+    }
   } else {
     apply_wheel_velocities(left_speed, right_speed);
   }
@@ -482,6 +568,9 @@ void handle_velocity_command(float linear_mps, float angular_rps) {
 void handle_command(const char* line) {
   if (is_reset_command(line)) {
     reset_ticks();
+    return;
+  }
+  if (handle_config_command(line)) {
     return;
   }
 
@@ -624,7 +713,7 @@ void loop() {
   if (!valid_velocity_command ||
       now - last_valid_command_ms >= command_watchdog_ms) {
     stop_motors();
-  } else if (USE_WHEEL_VELOCITY_CLOSED_LOOP) {
+  } else if (cfg_closed_loop) {
     update_wheel_velocity_closed_loop(now);
   }
 

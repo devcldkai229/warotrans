@@ -54,3 +54,37 @@ def format_velocity_command(linear_mps: float, angular_rps: float) -> str:
     if not math.isfinite(linear_mps) or not math.isfinite(angular_rps):
         raise ValueError("linear and angular must be finite")
     return f"V {linear_mps:.6f} {angular_rps:.6f}\n"
+
+
+# Runtime drive tuning understood by warotrans_low_level.ino ("C <name> <value>").
+CONFIG_NAMES = ("min_duty", "closed_loop", "kp", "ki")
+
+
+def format_config_command(name: str, value: float) -> str:
+    """Format a Pi -> ESP32 drive-tuning line, e.g. ``C min_duty 60``."""
+
+    if name not in CONFIG_NAMES:
+        raise ValueError(f"unknown config name {name!r}; expected one of {CONFIG_NAMES}")
+    if not math.isfinite(value) or value < 0.0:
+        raise ValueError(f"{name} must be a finite non-negative number")
+    return f"C {name} {value:g}\n"
+
+
+def parse_config_ack(line: bytes | str) -> Optional[tuple[str, str]]:
+    """Parse an ESP32 ``K <name> <value>`` / ``K ERR <name>`` acknowledgement.
+
+    Returns ``(name, value)`` (``("ERR", name)`` on rejection) or ``None`` for other lines.
+    """
+
+    if isinstance(line, bytes):
+        try:
+            text = line.decode("ascii").strip()
+        except UnicodeDecodeError:
+            return None
+    else:
+        text = line.strip()
+
+    fields = text.split()
+    if len(fields) != 3 or fields[0] != "K":
+        return None
+    return fields[1], fields[2]

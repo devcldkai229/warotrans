@@ -2,6 +2,15 @@ esp32_bridge_node:
   ros__parameters:
     serial_port: /dev/warotrans
     baud_rate: 921600
+    # Drive tuning pushed to the ESP32 on connect (firmware "C" commands, needs the
+    # 2026-10-16 warotrans_low_level build). 0 / false = old open-loop behaviour.
+    # MEASURE before changing — procedure in docs/navigation-hardening.md:
+    #   wheel_min_start_duty: lowest duty (0..153) at which an in-place spin starts
+    #   closed loop: kp / ki from the step test (duty per m/s error, per metre)
+    wheel_min_start_duty: 0
+    wheel_velocity_closed_loop: false
+    wheel_velocity_kp: 0.0
+    wheel_velocity_ki: 0.0
 
 wheel_odom_node:
   ros__parameters:

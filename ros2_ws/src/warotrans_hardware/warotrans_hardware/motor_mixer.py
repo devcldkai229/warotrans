@@ -1,10 +1,10 @@
 """Skid-steer mixing and PWM command calculation mirroring ESP32 firmware.
 
-Open-loop map: duty ∝ |wheel_speed| / commissioning_full_scale_linear, clamp 40%.
-ESP32 may optionally run a closed-loop wheel-velocity scaffold
-(USE_WHEEL_VELOCITY_CLOSED_LOOP in warotrans_low_level.ino); that loop is
-DEFAULT OFF and is NOT implemented on the Pi. This module stays a UI/debug
-mirror of the mix equation only:
+Open-loop map: duty = min_start_duty + |wheel_speed| / commissioning_full_scale_linear × 255,
+clamped to the PWM ceiling (60 % since 2026-10-16). A wheel commanded slower than 5 mm/s
+gets 0. The ESP32 may also run a PI loop on encoder speed (runtime "C closed_loop 1",
+esp32_bridge_node parameters); that loop is NOT mirrored here. This module stays a
+UI/debug mirror of the mix equation only:
 
   left  = linear - angular * wheel_separation / 2
   right = linear + angular * wheel_separation / 2
@@ -28,14 +28,20 @@ class MixResult:
     right_pwm_percent: float
 
 
+WHEEL_MOVING_EPSILON_MPS = 0.005  # firmware wheel_moving_epsilon_mps
+
+
 def _duty_from_wheel_speed(
     wheel_speed: float,
     *,
     full_scale_linear: float,
     pwm_raw_max: int,
     pwm_limit_duty: int,
+    min_start_duty: int = 0,
 ) -> int:
     if not math.isfinite(wheel_speed) or full_scale_linear <= 0.0:
+        return 0
+    if abs(wheel_speed) <= WHEEL_MOVING_EPSILON_MPS:
         return 0
 
     ratio = abs(wheel_speed) / full_scale_linear
@@ -44,7 +50,7 @@ def _duty_from_wheel_speed(
     if ratio > 1.0:
         ratio = 1.0
 
-    duty = int(ratio * pwm_raw_max + 0.5)
+    duty = int(min_start_duty + ratio * pwm_raw_max + 0.5)
     if duty >= pwm_limit_duty:
         return pwm_limit_duty
     return int(duty)
@@ -57,7 +63,8 @@ def mix_to_pwm(
     wheel_separation: float,
     full_scale_linear: float,
     pwm_raw_max: int = 255,
-    pwm_limit_percent: float = 40.0,
+    pwm_limit_percent: float = 60.0,
+    min_start_duty: int = 0,
 ) -> MixResult | None:
     """Mirror firmware mixing and PWM clamping.
 
@@ -90,12 +97,14 @@ def mix_to_pwm(
         full_scale_linear=full_scale_linear,
         pwm_raw_max=pwm_raw_max,
         pwm_limit_duty=pwm_limit_duty,
+        min_start_duty=min_start_duty,
     )
     right_raw = _duty_from_wheel_speed(
         right_speed,
         full_scale_linear=full_scale_linear,
         pwm_raw_max=pwm_raw_max,
         pwm_limit_duty=pwm_limit_duty,
+        min_start_duty=min_start_duty,
     )
 
     def signed_percent(wheel_speed: float, pwm_raw: int) -> float:
