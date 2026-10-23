@@ -28,7 +28,14 @@ from tf2_ros import Buffer, TransformException, TransformListener
 
 from warotrans_fleet import navigation_state as nav_state
 from warotrans_fleet.command_stack import build_command_stack
+from warotrans_fleet.confirm_button import ButtonEdgeDetector, LgpioButtonInput
 from warotrans_fleet.drive_assist import Footprint, Gaps, corridor_gaps, scan_to_base_points
+from warotrans_fleet.interaction_contract import (
+    InteractionContractError,
+    parse_interaction_request,
+    parse_interaction_result,
+)
+from warotrans_fleet.interaction_controller import InteractionController
 from warotrans_fleet.mqtt_publisher import ReconnectingMqttPublisher, default_paho_factory
 from warotrans_fleet.nav2_status_tracker import Nav2StatusTracker
 from warotrans_fleet.navigator import NavigatorPort, UnavailableNavigator
@@ -105,6 +112,14 @@ class RobotGatewayNode(Node):
         self.declare_parameter("assist_stop_gap", 0.15)
         self.declare_parameter("assist_slow_gap", 0.6)
         self.declare_parameter("assist_max_scan_age_sec", 0.5)
+        # HUMAN_CONFIRM button (not E-stop): BCM12 ↔ GND, active-low pull-up.
+        self.declare_parameter("human_confirm_enabled", False)
+        self.declare_parameter("human_confirm_gpiochip", 4)
+        self.declare_parameter("human_confirm_gpio_pin", 12)
+        self.declare_parameter("human_confirm_active_low", True)
+        self.declare_parameter("human_confirm_debounce_ms", 50)
+        self.declare_parameter("human_confirm_min_interval_ms", 300)
+        self.declare_parameter("human_confirm_resend_sec", 5.0)
 
         self._robot_code = _env_or(self._str_param("robot_code"), "WARO_ROBOT_CODE")
         self._mqtt_host = _env_or(self._str_param("mqtt_host"), "WARO_MQTT_HOST")
@@ -154,7 +169,27 @@ class RobotGatewayNode(Node):
         navigator = self._setup_nav2()
 
         self._teleop_enabled = bool(self.get_parameter("teleop_enabled").get_parameter_value().bool_value)
-        subscribe_topics = [self.topic("command")] + ([self.topic("teleop")] if self._teleop_enabled else [])
+        human_env = os.environ.get("WARO_HUMAN_CONFIRM_ENABLED", "").strip().lower()
+        if human_env in ("1", "true", "yes", "on"):
+            self._human_confirm_enabled = True
+        elif human_env in ("0", "false", "no", "off"):
+            self._human_confirm_enabled = False
+        else:
+            self._human_confirm_enabled = bool(
+                self.get_parameter("human_confirm_enabled").get_parameter_value().bool_value
+            )
+        pin_env = os.environ.get("WARO_HUMAN_CONFIRM_GPIO_PIN")
+        self._human_confirm_pin = (
+            int(pin_env)
+            if pin_env
+            else int(self.get_parameter("human_confirm_gpio_pin").get_parameter_value().integer_value)
+        )
+
+        subscribe_topics = [
+            self.topic("command"),
+            self.topic("interaction_request"),
+            self.topic("interaction_result"),
+        ] + ([self.topic("teleop")] if self._teleop_enabled else [])
         self.mqtt = ReconnectingMqttPublisher(
             host=self._mqtt_host,
             port=self._mqtt_port,
@@ -210,7 +245,39 @@ class RobotGatewayNode(Node):
             )
             self.create_timer(0.1, self._teleop.tick)
 
-        # Inbox: MQTT thread → executor thread (commands and teleop, in arrival order).
+        self._interaction = InteractionController(
+            robot_code=self._robot_code,
+            boot_id=self._seq.boot_id,
+            next_sequence=self._seq.next_interaction,
+            publish_confirm=self._publish_interaction_confirm,
+            log_info=lambda m: self.get_logger().info(m),
+            log_warn=lambda m: self.get_logger().warning(m),
+            resend_interval_sec=self._float_param("human_confirm_resend_sec"),
+        )
+        self._button_input: Optional[LgpioButtonInput] = None
+        self._button_detector: Optional[ButtonEdgeDetector] = None
+        if self._human_confirm_enabled:
+            self._button_input = LgpioButtonInput(
+                gpiochip=int(self.get_parameter("human_confirm_gpiochip").get_parameter_value().integer_value),
+                pin=self._human_confirm_pin,
+                log=self.get_logger(),
+            )
+            self._button_detector = ButtonEdgeDetector(
+                active_low=bool(self.get_parameter("human_confirm_active_low").get_parameter_value().bool_value),
+                debounce_ms=int(self.get_parameter("human_confirm_debounce_ms").get_parameter_value().integer_value),
+                min_interval_ms=int(
+                    self.get_parameter("human_confirm_min_interval_ms").get_parameter_value().integer_value
+                ),
+            )
+            self.create_timer(0.01, self._on_button_timer)
+            self.get_logger().info(
+                f"HUMAN_CONFIRM_BUTTON enabled BCM={self._human_confirm_pin} "
+                f"(available={self._button_input.available})"
+            )
+        else:
+            self.get_logger().info("HUMAN_CONFIRM_BUTTON disabled (human_confirm_enabled=false)")
+
+        # Inbox: MQTT thread → executor thread (commands, teleop, interaction, in arrival order).
         self._inbox: "queue.SimpleQueue[tuple[str, dict[str, Any]]]" = queue.SimpleQueue()
         self._inbox_signal = self.create_guard_condition(self._drain_inbox)
         self.create_timer(1.0 / tick_hz, self._commands.router.tick)
@@ -259,10 +326,28 @@ class RobotGatewayNode(Node):
     def destroy_node(self) -> bool:
         if self._teleop is not None:
             self._teleop.stop()
+        if self._button_input is not None:
+            self._button_input.close()
         self.mqtt.stop()
         return super().destroy_node()
 
-    # ------------------------------------------------------------------ command / teleop downlink
+    # ------------------------------------------------------------------ command / teleop / interaction downlink
+
+    def _publish_interaction_confirm(self, payload: dict[str, Any]) -> None:
+        if not self.mqtt.publish(self.topic("interaction_confirm"), payload, qos=1):
+            self.get_logger().warning("interaction_confirm queue full; message dropped")
+
+    def _on_button_timer(self) -> None:
+        if self._button_input is None or self._button_detector is None:
+            return
+        level = self._button_input.read_level()
+        if level is None:
+            return
+        t_ms = int(time.monotonic() * 1000)
+        if self._button_detector.sample(level, t_ms):
+            self._interaction.set_monotonic(time.monotonic())
+            self._interaction.on_button_press()
+        self._interaction.tick(time.monotonic())
 
     def _on_mqtt_message(self, topic: str, body: dict) -> None:
         # MQTT network thread: chỉ enqueue, không xử lý.
@@ -270,6 +355,10 @@ class RobotGatewayNode(Node):
             self._inbox.put(("command", body))
         elif topic == self.topic("teleop") and self._teleop is not None:
             self._inbox.put(("teleop", body))
+        elif topic == self.topic("interaction_request"):
+            self._inbox.put(("interaction_request", body))
+        elif topic == self.topic("interaction_result"):
+            self._inbox.put(("interaction_result", body))
         else:
             return
         self._inbox_signal.trigger()
@@ -282,8 +371,28 @@ class RobotGatewayNode(Node):
                 return
             if kind == "command":
                 self._commands.router.handle_message(body)
-            elif self._teleop is not None:
+            elif kind == "teleop" and self._teleop is not None:
                 self._teleop.handle(body)
+            elif kind == "interaction_request":
+                self._handle_interaction_request(body)
+            elif kind == "interaction_result":
+                self._handle_interaction_result(body)
+
+    def _handle_interaction_request(self, body: dict) -> None:
+        try:
+            req = parse_interaction_request(body, local_robot_code=self._robot_code)
+        except InteractionContractError as exc:
+            self.get_logger().warning(f"interaction_request rejected: {exc}")
+            return
+        self._interaction.handle_request(req)
+
+    def _handle_interaction_result(self, body: dict) -> None:
+        try:
+            result = parse_interaction_result(body, local_robot_code=self._robot_code)
+        except InteractionContractError as exc:
+            self.get_logger().warning(f"interaction_result rejected: {exc}")
+            return
+        self._interaction.handle_result(result)
 
     def _on_scan(self, msg: LaserScan) -> None:
         frame = msg.header.frame_id

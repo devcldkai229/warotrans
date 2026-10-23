@@ -46,3 +46,13 @@ robot_gateway:
     assist_stop_gap: 0.15
     assist_slow_gap: 0.6
     assist_max_scan_age_sec: 0.5
+    # --- HUMAN_CONFIRM button (PHYSICAL handover confirm; NOT E-stop) ---
+    # Wiring: physical pin 32 BCM12 (red) ↔ button ↔ physical pin 34 GND (black).
+    # Internal pull-up: idle=1, pressed=0 (active-low). Env: WARO_HUMAN_CONFIRM_ENABLED, WARO_HUMAN_CONFIRM_GPIO_PIN.
+    human_confirm_enabled: false
+    human_confirm_gpiochip: 4
+    human_confirm_gpio_pin: 12
+    human_confirm_active_low: true
+    human_confirm_debounce_ms: 50
+    human_confirm_min_interval_ms: 300
+    human_confirm_resend_sec: 5.0

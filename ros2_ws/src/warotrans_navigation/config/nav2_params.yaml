@@ -73,7 +73,10 @@ controller_server:
       stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.15       # TUNING: metres
-      yaw_goal_tolerance: 0.25      # TUNING: radians (~14°)
+      # 2026-10-16: RViz (WSL) gửi goal luôn có yaw = 0 (17/17 goal đo được) → robot quay tại chỗ
+      # tới heading giả, open-loop vọt lố + đảo chiều liên tục. π = bỏ qua heading khi đến đích.
+      # Đặt lại 0.25 khi cần heading thật (docking) và nguồn goal gửi yaw đúng.
+      yaw_goal_tolerance: 3.14      # TUNING: radians
 
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"

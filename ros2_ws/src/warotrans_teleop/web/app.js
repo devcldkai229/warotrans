@@ -7,10 +7,14 @@
   let activeDirection = null;
   let heartbeatTimer = null;
   let currentSpeedPercent = 20;
+  let maxPowerEnabled = false;
 
   const els = {
     rosStatus: document.getElementById("ros-status"),
     commandStatus: document.getElementById("command-status"),
+    maxPowerStatus: document.getElementById("max-power-status"),
+    maxPowerToggle: document.getElementById("max-power-toggle"),
+    presetsMax: document.getElementById("presets-max"),
     speedStatus: document.getElementById("speed-status"),
     speedLevel: document.getElementById("speed-level"),
     linearCmd: document.getElementById("linear-cmd"),
@@ -48,8 +52,30 @@
     }
   }
 
+  function updateMaxPowerUi(status) {
+    maxPowerEnabled = Boolean(status.max_power_enabled);
+    const safeCap = Number(status.safe_max_speed_percent ?? 40);
+    const hotCap = Number(status.max_power_speed_percent ?? 100);
+    if (els.maxPowerToggle) {
+      els.maxPowerToggle.classList.toggle("on", maxPowerEnabled);
+      els.maxPowerToggle.setAttribute("aria-pressed", maxPowerEnabled ? "true" : "false");
+      els.maxPowerToggle.textContent = maxPowerEnabled
+        ? `MAX POWER: ON (≤${hotCap.toFixed(0)}%)`
+        : `MAX POWER: OFF (≤${safeCap.toFixed(0)}%)`;
+    }
+    if (els.maxPowerStatus) {
+      els.maxPowerStatus.textContent = maxPowerEnabled
+        ? `ON (≤${hotCap.toFixed(0)}%)`
+        : `OFF (≤${safeCap.toFixed(0)}%)`;
+    }
+    if (els.presetsMax) {
+      els.presetsMax.classList.toggle("hidden", !maxPowerEnabled);
+    }
+  }
+
   function updateStatus(status) {
     currentSpeedPercent = status.speed_level_percent;
+    updateMaxPowerUi(status);
     els.commandStatus.textContent = status.direction;
     els.speedStatus.textContent = `${status.speed_level_percent.toFixed(0)}%`;
     els.speedLevel.textContent = `${status.speed_level_percent.toFixed(0)}%`;
@@ -174,6 +200,22 @@
       }
     });
   });
+
+  if (els.maxPowerToggle) {
+    els.maxPowerToggle.addEventListener("click", async () => {
+      try {
+        const status = await postJson("/api/max_power", {
+          enabled: !maxPowerEnabled,
+        });
+        updateStatus(status);
+        if (activeDirection) {
+          await sendCommand(activeDirection);
+        }
+      } catch (_err) {
+        /* ignore */
+      }
+    });
+  }
 
   ["contextmenu", "selectstart", "dragstart"].forEach((eventName) => {
     document.addEventListener(

@@ -11,6 +11,7 @@ class SequenceClock:
     boot_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     _heartbeat: int = 0
     _telemetry: int = 0
+    _interaction: int = 0
 
     def next_heartbeat(self) -> int:
         self._heartbeat += 1
@@ -20,6 +21,10 @@ class SequenceClock:
         self._telemetry += 1
         return self._telemetry
 
+    def next_interaction(self) -> int:
+        self._interaction += 1
+        return self._interaction
+
     @property
     def heartbeat_sequence(self) -> int:
         return self._heartbeat
@@ -27,3 +32,7 @@ class SequenceClock:
     @property
     def telemetry_sequence(self) -> int:
         return self._telemetry
+
+    @property
+    def interaction_sequence(self) -> int:
+        return self._interaction

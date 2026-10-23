@@ -3,12 +3,18 @@
 > Đây là **trạng thái thực tế**, không phải roadmap. Chỉ tick `[x]` sau khi có evidence trên robot thật.
 > Mỗi session vibe coding nên đọc file này trước.
 
-**Last reviewed:** 2026-09-12  
+**Last reviewed:** 2026-10-20  
 **Operator:** waro  
 **Robot hostname:** `warotrans`
 
 ## VERIFIED
 
+- [x] HUMAN_CONFIRM button wired: physical pin 32 BCM12 (red) ↔ GND pin 34 (black);
+      idle reads HIGH (1) with internal pull-up / active-low when pressed (operator).
+      Library: `python3-lgpio` gpiochip 4. Code: `warotrans_fleet` InteractionController
+      + `LgpioButtonInput` (default `human_confirm_enabled:=false`).
+      Backend MQTT: `interaction_request` / `interaction_confirm` / `interaction_result`.
+      Report: warotrans-system `docs/audits/physical-human-interaction-button-e2e.md`.
 - [x] Raspberry Pi 5 boot được Ubuntu Server 24.04.
 - [x] SSH vào Pi bằng user `waro`.
 - [x] mDNS/hostname dùng được qua `warotrans.local`.
@@ -72,12 +78,24 @@
       **Còn thiếu**: mapping có EKF khi chạy thật, NavigateToPose SUCCEEDED trên robot.
 - [ ] Closed-loop motor PID.
 - [ ] Camera model/interface được xác nhận và stream được.
-- [ ] Fleet bridge end-to-end.
-- [ ] MOVE command (`NAVIGATE_TO_POSE` / `CANCEL` qua MQTT → Nav2) trên robot thật.
-      2026-10-13: code + test xong — unit + integration (gateway node thật + mock
-      Nav2 action server, Jazzy container) + E2E qua Mosquitto thật với mock Nav2.
-      **Chưa** chạy trên robot; DoD: CLI `fleet_command_cli.py navigate` → ACK →
-      robot tới pose → RESULT SUCCEEDED, CANCEL giữa đường dừng robot, timeout.
+- [x] **Fleet bridge heartbeat/telemetry E2E trên robot thật** (2026-10-18):
+      Pi `wlan0` 192.168.11.74 → PC Mosquitto 192.168.11.201:1883;
+      `ros2 launch warotrans_fleet fleet.launch.py` với `WARO_MQTT_HOST` /
+      `WARO_ROBOT_CODE=RBT-001`; backend `POST /api/fleet/robots` + Host MQTT
+      ingest → `isOnline=true`, `status=AVAILABLE`, `batteryPercent=null`
+      (BMS bảo vệ-only, **CHƯA XÁC NHẬN** cảm biến pin); dừng gateway →
+      trong ~5 s `isOnline=false`, `status=OFFLINE`; start lại → AVAILABLE.
+      Teleop `mobile_base` vẫn chạy song song. **Chưa** claim MOVE/Nav2 E2E.
+- [x] MOVE command (`NAVIGATE_TO_POSE` qua MQTT → Nav2) trên robot thật
+      **trong luồng Job physical E2E** (2026-10-21): `RBT-001` + `MAP-WHREAL-V001`
+      (`warotrans_map2`); Job `JOB-20261021-000001` SRC→DST (~1.8 m) cả hai
+      `command_result outcome=SUCCEEDED` (SRC ~0.08 s, DST ~15.4 s). Evidence:
+      `warotrans-system/samples/physical-e2e/responses/10-summary.json`.
+      CANCEL giữa đường / timeout DoD CLI vẫn chưa claim riêng.
+- [x] HUMAN_CONFIRM nút BCM12 trên robot thật trong Job (2026-10-21):
+      PICKUP_CONFIRM + DROPOFF_CONFIRM qua MQTT `interaction_*`,
+      `ConfirmationSource=ROBOT_BUTTON`; Job COMPLETED. Chi tiết:
+      `warotrans-system/docs/audits/physical-human-interaction-button-e2e.md`.
 - [ ] Multi-robot.
 
 ## KNOWN UNKNOWNS

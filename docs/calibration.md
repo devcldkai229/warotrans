@@ -66,12 +66,14 @@ Ghi chú: bài thẳng có yaw odom ~29° (không hoàn toàn thẳng); vẫn d�
 |---|---:|---|---|
 | `commissioning_full_scale_linear` | 0.32 m/s | firmware + teleop YAML | Phase 7.5 provisional — **NOT measured speed** |
 | `commissioning_full_scale_angular` | 1.4112 rad/s | firmware + teleop YAML | derived = 2×0.32/0.4535 |
-| `MOTOR_PWM_LIMIT_PERCENT` | 40 % | firmware hard ceiling | commissioning safety limit |
+| `MOTOR_PWM_LIMIT_PERCENT` | **100 %** (duty max 255/255) | firmware hard ceiling | 2026-10-23: raised 60→100 % (operator) để test max power teleop; mobile UI vẫn cap 40 % trừ khi bật **MAX POWER** |
+| `wheel_min_start_duty` | **35** (0…255) | `hardware.yaml` → ESP32 `C min_duty` | 2026-10-16 sàn `ω=0.15` (operator xác nhận từng đợt): duty 0 ~5° kẹt; 15/25 quay được; **35** rõ và mạnh hơn 15/25 → chọn 35 |
+| `wheel_velocity_closed_loop` / `kp` / `ki` | false / 0 / 0 | `hardware.yaml` | mặc định off đến khi step-test trên robot |
 | default teleop speed level | 20 % | teleop YAML | commissioning default |
 | `LEFT_MOTOR_INVERTED` | false | firmware | verify on robot |
 | `RIGHT_MOTOR_INVERTED` | false | firmware | verify on robot |
 
-PWM raw mapping at 8-bit resolution (255 max, 40% ceiling = 102):
+PWM raw mapping at 8-bit resolution (255 max, **100% ceiling = 255**). Historical 40%/60% rows kept for Phase 7.5 velocity records below:
 
 | Level % | Raw PWM |
 |---:|---:|
@@ -82,6 +84,10 @@ PWM raw mapping at 8-bit resolution (255 max, 40% ceiling = 102):
 | 30 | 77 |
 | 35 | 89 |
 | 40 | 102 |
+| 50 | 128 |
+| 60 | 153 |
+| 80 | 204 |
+| 100 | 255 |
 
 ---
 

@@ -6,7 +6,10 @@ web_teleop_node:
     # YAML integers become ROS INTEGER; declare_parameter expects DOUBLE here.
     default_speed_percent: 20.0
     min_speed_percent: 10.0
+    # Safe UI cap when MAX POWER is off (mobile option).
     max_speed_percent: 40.0
+    # Unlocked only after operator enables MAX POWER on the phone UI.
+    max_power_speed_percent: 100.0
     speed_step_percent: 5.0
 
     # Command setpoint for commissioning; actual robot velocity must be
@@ -17,7 +20,9 @@ web_teleop_node:
 
     wheel_separation: 0.4535
     pwm_raw_max: 255
-    pwm_limit_percent: 40.0
+    # Must match firmware MOTOR_PWM_LIMIT_PERCENT (100%). Soft speed caps
+    # above still keep normal teleop at ≤40% until MAX POWER is enabled.
+    pwm_limit_percent: 100.0
 
     deadman_timeout_ms: 250
     cmd_vel_publish_hz: 20.0

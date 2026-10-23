@@ -29,6 +29,7 @@ VALID_DIRECTIONS = {"STOP", "FORWARD", "BACKWARD", "LEFT", "RIGHT"}
 class TeleopState:
     direction: str = "STOP"
     speed_percent: float = 20.0
+    max_power_enabled: bool = False
     last_heartbeat_monotonic: float = 0.0
     command_active: bool = False
     odom_linear: float = 0.0
@@ -47,12 +48,13 @@ class WebTeleopNode(Node):
         self.declare_parameter("default_speed_percent", 20.0)
         self.declare_parameter("min_speed_percent", 10.0)
         self.declare_parameter("max_speed_percent", 40.0)
+        self.declare_parameter("max_power_speed_percent", 100.0)
         self.declare_parameter("speed_step_percent", 5.0)
         self.declare_parameter("commissioning_linear_command_max", 0.32)
         self.declare_parameter("commissioning_angular_command_max", 2.9317)
         self.declare_parameter("wheel_separation", 0.2183)
         self.declare_parameter("pwm_raw_max", 255)
-        self.declare_parameter("pwm_limit_percent", 40.0)
+        self.declare_parameter("pwm_limit_percent", 100.0)
         self.declare_parameter("deadman_timeout_ms", 250)
         self.declare_parameter("cmd_vel_publish_hz", 20.0)
         self.declare_parameter("motor_state_publish_hz", 10.0)
@@ -60,7 +62,10 @@ class WebTeleopNode(Node):
         self._host = str(self.get_parameter("host").value)
         self._port = int(self.get_parameter("port").value)
         self._min_speed = float(self.get_parameter("min_speed_percent").value)
-        self._max_speed = float(self.get_parameter("max_speed_percent").value)
+        self._safe_max_speed = float(self.get_parameter("max_speed_percent").value)
+        self._max_power_speed = float(
+            self.get_parameter("max_power_speed_percent").value
+        )
         self._speed_step = float(self.get_parameter("speed_step_percent").value)
         self._linear_max = float(
             self.get_parameter("commissioning_linear_command_max").value
@@ -128,15 +133,25 @@ class WebTeleopNode(Node):
     def _validate_parameters(self, default_speed: float) -> None:
         if self._port <= 0 or self._port > 65535:
             raise ValueError("port must be between 1 and 65535")
-        if self._min_speed <= 0.0 or self._max_speed <= 0.0:
+        if self._min_speed <= 0.0 or self._safe_max_speed <= 0.0:
             raise ValueError("speed percent bounds must be positive")
-        if self._min_speed > self._max_speed:
+        if self._min_speed > self._safe_max_speed:
             raise ValueError("min_speed_percent must not exceed max_speed_percent")
-        if self._max_speed > self._pwm_limit_percent:
+        if self._safe_max_speed > self._pwm_limit_percent:
             raise ValueError(
                 "max_speed_percent must not exceed firmware pwm_limit_percent"
             )
-        if not self._min_speed <= default_speed <= self._max_speed:
+        if self._max_power_speed <= 0.0:
+            raise ValueError("max_power_speed_percent must be positive")
+        if self._max_power_speed < self._safe_max_speed:
+            raise ValueError(
+                "max_power_speed_percent must be >= max_speed_percent"
+            )
+        if self._max_power_speed > self._pwm_limit_percent:
+            raise ValueError(
+                "max_power_speed_percent must not exceed firmware pwm_limit_percent"
+            )
+        if not self._min_speed <= default_speed <= self._safe_max_speed:
             raise ValueError("default_speed_percent out of allowed range")
         if self._linear_max <= 0.0 or self._angular_max <= 0.0:
             raise ValueError("commissioning command max values must be positive")
@@ -145,17 +160,25 @@ class WebTeleopNode(Node):
         if self._pwm_raw_max <= 0:
             raise ValueError("pwm_raw_max must be positive")
 
-    def _clamp_speed(self, speed_percent: float) -> float:
-        return max(self._min_speed, min(self._max_speed, speed_percent))
+    def _max_for(self, max_power_enabled: bool) -> float:
+        return self._max_power_speed if max_power_enabled else self._safe_max_speed
 
-    def _direction_to_twist(self, direction: str, speed_percent: float) -> Twist:
+    def _clamp_speed(self, speed_percent: float, max_power_enabled: bool) -> float:
+        return max(
+            self._min_speed,
+            min(self._max_for(max_power_enabled), speed_percent),
+        )
+
+    def _direction_to_twist(
+        self, direction: str, speed_percent: float, max_power_enabled: bool
+    ) -> Twist:
         """Map UI direction to /cmd_vel (ROS REP-103).
 
         FORWARD/BACKWARD -> ±linear.x
         LEFT/RIGHT       -> ±angular.z (positive = CCW / left turn)
         """
         twist = Twist()
-        level = self._clamp_speed(speed_percent) / 100.0
+        level = self._clamp_speed(speed_percent, max_power_enabled) / 100.0
         if direction == "FORWARD":
             twist.linear.x = level * self._linear_max
         elif direction == "BACKWARD":
@@ -170,6 +193,7 @@ class WebTeleopNode(Node):
         with self._state.lock:
             direction = self._state.direction
             speed_percent = self._state.speed_percent
+            max_power = self._state.max_power_enabled
             active = self._state.command_active
             last_hb = self._state.last_heartbeat_monotonic
 
@@ -179,7 +203,7 @@ class WebTeleopNode(Node):
         if time.monotonic() - last_hb > self._deadman_timeout_s:
             return Twist()
 
-        return self._direction_to_twist(direction, speed_percent)
+        return self._direction_to_twist(direction, speed_percent, max_power)
 
     def _publish_cmd_vel(self) -> None:
         self._cmd_vel_publisher.publish(self._current_twist())
@@ -266,8 +290,11 @@ class WebTeleopNode(Node):
         now = time.monotonic()
 
         with self._state.lock:
+            max_power = self._state.max_power_enabled
             if speed_percent is not None:
-                self._state.speed_percent = self._clamp_speed(float(speed_percent))
+                self._state.speed_percent = self._clamp_speed(
+                    float(speed_percent), max_power
+                )
             self._state.direction = direction
             self._state.command_active = direction != "STOP"
             if self._state.command_active:
@@ -278,7 +305,7 @@ class WebTeleopNode(Node):
             self._cmd_vel_publisher.publish(Twist())
         else:
             self._cmd_vel_publisher.publish(
-                self._direction_to_twist(direction, current_speed)
+                self._direction_to_twist(direction, current_speed, max_power)
             )
 
         return self._build_status()
@@ -293,13 +320,36 @@ class WebTeleopNode(Node):
     def _adjust_speed(self, delta: float) -> dict:
         with self._state.lock:
             self._state.speed_percent = self._clamp_speed(
-                self._state.speed_percent + delta
+                self._state.speed_percent + delta,
+                self._state.max_power_enabled,
             )
         return self._build_status()
 
     def _set_speed(self, speed_percent: float) -> dict:
         with self._state.lock:
-            self._state.speed_percent = self._clamp_speed(speed_percent)
+            self._state.speed_percent = self._clamp_speed(
+                speed_percent, self._state.max_power_enabled
+            )
+        twist = self._current_twist()
+        if twist.linear.x != 0.0 or twist.angular.z != 0.0:
+            self._cmd_vel_publisher.publish(twist)
+        return self._build_status()
+
+    def _set_max_power(self, enabled: bool) -> dict:
+        """Unlock / lock the 100% teleop ceiling (default remains the safe 40%)."""
+        with self._state.lock:
+            self._state.max_power_enabled = bool(enabled)
+            self._state.speed_percent = self._clamp_speed(
+                self._state.speed_percent, self._state.max_power_enabled
+            )
+        self.get_logger().warn(
+            "MAX POWER "
+            + (
+                f"ON — teleop up to {self._max_power_speed:.0f}% PWM"
+                if enabled
+                else f"OFF — teleop capped at {self._safe_max_speed:.0f}%"
+            )
+        )
         twist = self._current_twist()
         if twist.linear.x != 0.0 or twist.angular.z != 0.0:
             self._cmd_vel_publisher.publish(twist)
@@ -313,6 +363,7 @@ class WebTeleopNode(Node):
         with self._state.lock:
             direction = self._state.direction
             speed_percent = self._state.speed_percent
+            max_power = self._state.max_power_enabled
             active = self._state.command_active
             last_hb = self._state.last_heartbeat_monotonic
             odom_linear = self._state.odom_linear
@@ -335,6 +386,10 @@ class WebTeleopNode(Node):
             "ros_connected": True,
             "direction": direction if active else "STOP",
             "speed_level_percent": speed_percent,
+            "max_power_enabled": max_power,
+            "max_speed_percent": self._max_for(max_power),
+            "safe_max_speed_percent": self._safe_max_speed,
+            "max_power_speed_percent": self._max_power_speed,
             "linear_cmd": linear,
             "angular_cmd": angular,
             "odom_linear": odom_linear,
@@ -431,6 +486,11 @@ class WebTeleopNode(Node):
                         payload = self._read_json()
                         speed = float(payload.get("speed_percent", 0.0))
                         self._send_json(node._set_speed(speed))
+                        return
+                    if path == "/api/max_power":
+                        payload = self._read_json()
+                        enabled = bool(payload.get("enabled", False))
+                        self._send_json(node._set_max_power(enabled))
                         return
                     self.send_error(404)
                 except (ValueError, json.JSONDecodeError) as exc:

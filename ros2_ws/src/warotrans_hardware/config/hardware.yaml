@@ -7,7 +7,10 @@ esp32_bridge_node:
     # MEASURE before changing — procedure in docs/navigation-hardening.md:
     #   wheel_min_start_duty: lowest duty (0..153) at which an in-place spin starts
     #   closed loop: kp / ki from the step test (duty per m/s error, per metre)
-    wheel_min_start_duty: 0
+    # Floor in-place spin 2026-10-16 (wheels on ground, operator present):
+    #   w=0.15 rad/s bursts: duty 0 ~5° WEAK; 15 ~31°; 25 ~47°; 35 ~62°.
+    #   Operator: go4 (35) visibly clearer/stronger than go2/go3 → use 35.
+    wheel_min_start_duty: 35
     wheel_velocity_closed_loop: false
     wheel_velocity_kp: 0.0
     wheel_velocity_ki: 0.0
