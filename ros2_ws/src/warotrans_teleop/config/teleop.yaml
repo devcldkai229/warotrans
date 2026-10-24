@@ -24,6 +24,7 @@ web_teleop_node:
     # above still keep normal teleop at ≤40% until MAX POWER is enabled.
     pwm_limit_percent: 100.0
 
-    deadman_timeout_ms: 250
+    # 250 ms was too tight over phone Wi-Fi lag (press → deadman stop → "không chạy").
+    deadman_timeout_ms: 800
     cmd_vel_publish_hz: 20.0
     motor_state_publish_hz: 10.0
