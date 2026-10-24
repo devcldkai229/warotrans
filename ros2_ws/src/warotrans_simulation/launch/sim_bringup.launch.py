@@ -20,6 +20,10 @@ USAGE
     # ... and with the firmware deadband compensation
     ros2 launch warotrans_simulation sim_bringup.launch.py enable_ekf:=true sim_speeds:=false \
         motor_deadband:=0.10 deadband_compensation:=true gateway:=false
+
+    # Lane graph navigation (Nav2 Route Server): graph from the backend route-graph API
+    ros2 run warotrans_simulation fetch_route_graph.sh http://localhost:5090 <map_version_id> ~/maps/route_graph.geojson
+    ros2 launch warotrans_simulation sim_bringup.launch.py route_graph:=$HOME/maps/route_graph.geojson
 """
 
 from __future__ import annotations
@@ -127,6 +131,9 @@ def _setup(context: LaunchContext, *args, **kwargs):
                         "extra_params_file": (
                             os.path.join(sim_pkg, "config", "nav2_params_sim.yaml") if _flag(context, "sim_speeds") else ""
                         ),
+                        # Lane graph (fetch_route_graph.sh): Nav2 Route Server + route BT. Empty = free planning.
+                        "route_graph": LaunchConfiguration("route_graph").perform(context).strip(),
+                        "enable_cmd_vel_pipeline": LaunchConfiguration("enable_cmd_vel_pipeline"),
                     }.items(),
                 ),
             ],
@@ -222,6 +229,16 @@ def generate_launch_description() -> LaunchDescription:
                 "sim_speeds",
                 default_value="true",
                 description="Faster demo speeds (nav2_params_sim.yaml); false = real-robot Nav2 params unchanged",
+            ),
+            DeclareLaunchArgument(
+                "route_graph",
+                default_value="",
+                description="Nav2 Route Server graph GeoJSON (fetch_route_graph.sh); empty = free planning",
+            ),
+            DeclareLaunchArgument(
+                "enable_cmd_vel_pipeline",
+                default_value="true",
+                description="velocity_smoother + collision_monitor between Nav2 and /cmd_vel (as on the robot)",
             ),
             DeclareLaunchArgument("robot_code", default_value="", description="Override gateway robot_code"),
             DeclareLaunchArgument("mqtt_host", default_value="", description="Override MQTT broker host"),
