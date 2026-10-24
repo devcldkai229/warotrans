@@ -267,14 +267,23 @@ payload NAVIGATE_TO_POSE: frameId(=map)/x/y/yaw [+ timeoutSeconds?, mapVersionCo
 ### Robot → Backend
 
 ```text
-…/heartbeat        QoS0  ~1 Hz
-…/telemetry        QoS0  ~5 Hz  pose, navigationStatus, localizationStatus, currentCommandId
-…/command_ack      QoS1  accepted + reasonCode (+ reasonMessage, jobAssignmentId, jobStepId)
-…/command_result   QoS1  outcome SUCCEEDED|FAILED|CANCELED + errorCode (+ errorMessage, result)
+…/heartbeat               QoS0  ~1 Hz
+…/telemetry               QoS0  ~5 Hz  pose, navigationStatus, localizationStatus, currentCommandId
+…/command_ack             QoS1  accepted + reasonCode (+ reasonMessage, jobAssignmentId, jobStepId)
+…/command_result          QoS1  outcome SUCCEEDED|FAILED|CANCELED + errorCode (+ errorMessage, result)
+…/interaction_confirm     QoS1  physical HUMAN_CONFIRM button (PICKUP/DROPOFF only)
+```
+
+### Backend → Robot (HUMAN_INTERACTION arming — not RobotCommand)
+
+```text
+…/interaction_request     QoS1  arm button for one waiting JobStep (jobStepId, interactionType, containerId, endpointId)
+…/interaction_result      QoS1  business accept/reject of interaction_confirm
 ```
 
 Timeout navigate = `outcome FAILED` + `errorCode NAVIGATION_TIMEOUT` (backend chỉ nhận ba outcome).
 Chi tiết mã lỗi, state machine, demo: `ros2_ws/src/warotrans_fleet/README.md` mục *MOVE command*.
+GPIO button: BCM12 (physical pin 32) ↔ GND (pin 34), active-low pull-up; `human_confirm_*` params / `WARO_HUMAN_CONFIRM_*` env.
 
 ROS side: gateway gọi `/navigate_to_pose` (`nav2_msgs/action/NavigateToPose`) qua ActionClient,
 subscribe `/navigate_to_pose/_action/status` để phát hiện goal không do fleet gửi (RViz).

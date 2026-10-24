@@ -93,9 +93,9 @@ limits:
   # PROVISIONAL 2026-09-09: theoretical from firmware commissioning scale
   # commissioning_full_scale_linear = 0.32 m/s @ 100% duty
   # commissioning_full_scale_angular = 1.41 rad/s @ 100% duty
-  # PWM ceiling was 40% (=> 0.128 m/s, 0.56 rad/s). 2026-10-16: firmware ceiling raised
-  # to 60% for in-place-turn torque (operator approved), plus runtime min_start_duty /
-  # PI loop (hardware.yaml esp32_bridge_node). Nav2 still commands <= 0.10 m/s.
+  # PWM ceiling was 40% then 60%; 2026-10-23 firmware ceiling = 100% (operator, teleop
+  # MAX POWER test). Soft teleop cap remains 40% unless UI unlocks. Nav2 still <= 0.10 m/s.
+  # Runtime min_start_duty / PI: hardware.yaml → esp32_bridge_node.
   # TODO: measure actual /odom twist at the Nav2 speeds after tuning (docs/navigation-hardening.md)
   #       then replace these values and mark as Calibrated.
   max_linear: 0.128    # PROVISIONAL — 0.32 × 0.4; measure to confirm

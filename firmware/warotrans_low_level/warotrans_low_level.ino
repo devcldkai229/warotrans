@@ -37,12 +37,12 @@ constexpr float commissioning_full_scale_angular =
 constexpr bool LEFT_MOTOR_INVERTED = true;
 constexpr bool RIGHT_MOTOR_INVERTED = false;
 
-// Hard PWM safety ceiling. Raised 40 -> 60 % (2026-10-16, operator approved):
-// skid-steer in-place turns need more torque than straight driving (wheels scrub
-// sideways); at 40 % with no deadband compensation the robot could not turn at
-// T-junctions. Nav2 speeds stay low (<= 0.15 m/s); the ceiling only bounds torque.
-constexpr uint8_t MOTOR_PWM_ABSOLUTE_MAX_PERCENT = 60;
-constexpr uint8_t MOTOR_PWM_LIMIT_PERCENT = 60;
+// Hard PWM safety ceiling. Raised 40 -> 60 % (2026-10-16) then 60 -> 100 %
+// (2026-10-23, operator approved for max-power teleop test). Nav2 still commands
+// << full scale (<= ~0.15 m/s); mobile teleop keeps a 40 % UI cap unless the
+// MAX POWER option is enabled. Ceiling only bounds the duty the ESP32 may emit.
+constexpr uint8_t MOTOR_PWM_ABSOLUTE_MAX_PERCENT = 100;
+constexpr uint8_t MOTOR_PWM_LIMIT_PERCENT = 100;
 static_assert(MOTOR_PWM_LIMIT_PERCENT <= MOTOR_PWM_ABSOLUTE_MAX_PERCENT,
               "PWM limit exceeds commissioning ceiling");
 
@@ -60,7 +60,7 @@ constexpr uint8_t pwm_resolution_bits = 8;
 constexpr uint32_t max_pwm_duty =
     (static_cast<uint32_t>(1) << pwm_resolution_bits) - 1U;
 constexpr uint32_t motor_pwm_limit_duty =
-    (max_pwm_duty * MOTOR_PWM_LIMIT_PERCENT) / 100U;  // 60% of 255 = 153
+    (max_pwm_duty * MOTOR_PWM_LIMIT_PERCENT) / 100U;  // 100% of 255 = 255
 
 // ---------------------------------------------------------------------------
 // Wheel-velocity closed-loop scaffold (Class B actuator mismatch)

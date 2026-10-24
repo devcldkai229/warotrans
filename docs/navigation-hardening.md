@@ -23,15 +23,15 @@ Gửi NavigateToPose trên RViz thì Nav2 vẫn plan ra đường đi và robot 
 ## 3. Đã sửa
 
 ### Firmware ESP32-S3 (`firmware/warotrans_low_level/warotrans_low_level.ino`)
-- Trần PWM 40 % → **60 %** (duty 153/255).
+- Trần PWM 40 % → 60 % (2026-10-16) → **100 %** (2026-10-23, duty 255/255). Mobile teleop mặc định vẫn ≤40 %; option **MAX POWER** mới mở tới 100 %.
 - **Bù vùng chết:** khi bánh được lệnh chạy, `duty = min_start_duty + tỉ lệ·255`.
 - **Vòng kín PI tốc độ bánh** (feedforward + PI):
   - sai số tính theo độ lớn và có xét dấu, sửa lỗi dấu khi chạy lùi;
   - chống bão hòa tích phân;
   - reset tích phân khi bánh đảo chiều hoặc khi lệnh = 0.
 - **Lệnh cấu hình runtime mới:** `C <name> <value>` với `name` là `min_duty`, `closed_loop`, `kp`, `ki`. ESP32 trả về `K name value`, hoặc `K ERR name` nếu sai.
-- Giá trị mặc định cho kết quả **giống hệt firmware cũ**. Hành vi mới chỉ bật khi `esp32_bridge_node` gửi tham số từ `hardware.yaml`.
-- Watchdog 300 ms giữ nguyên.
+- `min_duty` / `closed_loop` / `kp` / `ki` mặc định **giống open-loop cũ** (0 / off / 0 / 0). Hành vi bù deadband + PI chỉ bật khi `esp32_bridge_node` gửi tham số từ `hardware.yaml`.
+- **Ngoại lệ:** trần PWM 100 % luôn bật sau khi nạp firmware mới (không còn 40/60 %). Soft cap teleop 40 % vẫn mặc định. Watchdog 300 ms giữ nguyên.
 
 ### ROS
 - `esp32_bridge_node`:

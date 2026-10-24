@@ -111,6 +111,30 @@ html, body {
   color: var(--accent);
 }
 
+.max-power {
+  margin-bottom: 12px;
+}
+
+.btn.max-power-btn {
+  width: 100%;
+  min-height: 52px;
+  background: #7f1d1d;
+  outline: 2px solid #f87171;
+}
+
+.btn.max-power-btn.on {
+  background: #b91c1c;
+  outline-color: #fde047;
+  color: #fef08a;
+}
+
+.max-power-hint {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  opacity: 0.85;
+  line-height: 1.35;
+}
+
 .presets {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -118,9 +142,21 @@ html, body {
   margin-bottom: 16px;
 }
 
+.presets-max {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.presets.hidden {
+  display: none;
+}
+
 .btn.preset {
   min-height: 44px;
   font-size: 0.9rem;
+}
+
+.btn.preset-hot {
+  background: #9a3412;
 }
 
 .status {
