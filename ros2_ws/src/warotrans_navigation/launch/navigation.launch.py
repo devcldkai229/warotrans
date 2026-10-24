@@ -14,6 +14,11 @@ enable_costmap_filters:=false (default, outdoor):
 
 enable_costmap_filters:=true (Phase 3 demo):
   KEEP_OUT / SPEED_LIMIT mask servers + filters_on overlay.
+
+route_graph:=<file.geojson> (lane graph from the backend route-graph API):
+  adds nav2_route route_server (config/route_server.yaml) and switches NavigateToPose to
+  behavior_trees/navigate_to_pose_route.xml: the robot drives only along the graph, in the lane
+  directions. Empty (default, real robot) = free GridBased planning as before.
 """
 
 import os
@@ -50,8 +55,16 @@ def _setup(context, *args, **kwargs):
     outdoor_overlay = os.path.join(pkg, "config", "nav2_params_outdoor.yaml")
     filters_on_overlay = os.path.join(pkg, "config", "nav2_params_filters_on.yaml")
     ekf_overlay = os.path.join(pkg, "config", "nav2_params_ekf.yaml")
+    route_graph = os.path.expanduser(LaunchConfiguration("route_graph").perform(context).strip())
+    if route_graph and not os.path.isfile(route_graph):
+        raise RuntimeError(
+            f"route_graph not found: {route_graph} "
+            "(fetch it with warotrans_simulation/scripts/fetch_route_graph.sh)"
+        )
     bt_xml = os.path.join(
-        pkg, "behavior_trees", "navigate_to_pose_w_replanning_resilient.xml"
+        pkg,
+        "behavior_trees",
+        "navigate_to_pose_route.xml" if route_graph else "navigate_to_pose_w_replanning_resilient.xml",
     )
     if not os.path.isfile(bt_xml):
         raise RuntimeError(f"BT XML not found: {bt_xml}")
@@ -78,16 +91,27 @@ def _setup(context, *args, **kwargs):
             raise RuntimeError(f"extra_params_file not found: {extra_params}")
         param_files.append(extra_params)
 
+    # Lane graph mode: track the lane centre line closely (tight lanes); merged after every other overlay.
+    if route_graph:
+        param_files.append(os.path.join(pkg, "config", "nav2_params_route.yaml"))
+
     common_params = param_files + [{"use_sim_time": use_sim_time}]
     bt_navigator_params = common_params + [{"default_nav_to_pose_bt_xml": bt_xml}]
+    if route_graph:
+        bt_navigator_params.append(
+            {"error_code_names": ["compute_route_error_code", "follow_path_error_code"]}
+        )
 
     remappings = [("/tf", "tf"), ("/tf_static", "tf_static")]
     lifecycle_nodes = [
         "controller_server",
         "planner_server",
         "behavior_server",
-        "bt_navigator",
     ]
+    # route_server before bt_navigator: the route BT nodes need its actions when the tree loads.
+    if route_graph:
+        lifecycle_nodes.append("route_server")
+    lifecycle_nodes.append("bt_navigator")
 
     # cmd_vel pipeline (default on): controller/behaviors -> cmd_vel_nav -> velocity_smoother
     # -> cmd_vel_smoothed -> collision_monitor (LiDAR) -> /cmd_vel. Off = controller writes
@@ -167,6 +191,24 @@ def _setup(context, *args, **kwargs):
             remappings=remappings,
         ),
     ]
+
+    if route_graph:
+        actions += [
+            LogInfo(msg=["[warotrans_navigation] route_graph=", route_graph, " (lane graph navigation)"]),
+            Node(
+                package="nav2_route",
+                executable="route_server",
+                name="route_server",
+                output="screen",
+                respawn=True,
+                respawn_delay=2.0,
+                parameters=[
+                    os.path.join(pkg, "config", "route_server.yaml"),
+                    {"graph_filepath": route_graph, "use_sim_time": use_sim_time},
+                ],
+                remappings=remappings,
+            ),
+        ]
 
     if enable_pipeline:
         actions += [
@@ -332,6 +374,14 @@ def generate_launch_description():
                 description=(
                     "Use /odometry/filtered (nav2_params_ekf.yaml). "
                     "Must match bringup enable_ekf:=true + ekf_filter_node."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "route_graph",
+                default_value="",
+                description=(
+                    "Nav2 Route Server graph (GeoJSON from the backend route-graph API). "
+                    "Set = drive only along the lane graph; empty = free planning (default)."
                 ),
             ),
             DeclareLaunchArgument(

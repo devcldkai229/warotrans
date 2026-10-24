@@ -1,0 +1,49 @@
+<!--
+  WaroTrans NavigateToPose on the lane graph (Nav2 Route Server), used when navigation.launch.py gets route_graph:=...
+  - ComputeRoute once: the robot only drives along the graph. No route (goal off the graph, one-way lane trap) → the
+    goal FAILS; there is deliberately no fallback to the free GridBased planner, so the robot never drives against
+    a one-way lane.
+  - Then, in parallel until BOTH finish: ComputeAndTrackRoute tracks progress along the route (runs the
+    AdjustSpeedLimit / ReroutingService operations and updates {path} on reroute) and FollowPath drives {path}.
+    ComputeAndTrackRoute stays RUNNING for the whole trip, which is why this is a Parallel and not a
+    PipelineSequence (a PipelineSequence would never tick FollowPath).
+  - Recovery as navigate_to_pose_w_replanning_resilient.xml: clear costmaps → back up → wait.
+  Ports checked against /opt/ros/jazzy/share/nav2_behavior_tree/nav2_tree_nodes.xml (1.3.13): use_poses="true" makes
+  the route go from the robot (TF) to the {goal} pose instead of node ids.
+-->
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="3" name="NavigateOnRouteRecovery">
+      <Sequence name="NavigateOnRoute">
+        <ComputeRoute goal="{goal}" use_poses="true" path="{path}"
+          error_code_id="{compute_route_error_code}"/>
+        <Parallel success_count="2" failure_count="1" name="TrackAndFollow">
+          <ComputeAndTrackRoute goal="{goal}" use_poses="true" path="{path}" rerouted="{rerouted}"
+            error_code_id="{compute_route_error_code}"/>
+          <RecoveryNode number_of_retries="2" name="FollowPath">
+            <FollowPath path="{path}" controller_id="FollowPath"
+              error_code_id="{follow_path_error_code}"/>
+            <Sequence name="FollowPathRecovery">
+              <ClearEntireCostmap name="ClearLocalCostmap-Context"
+                service_name="local_costmap/clear_entirely_local_costmap"/>
+              <Wait wait_duration="1.5"/>
+            </Sequence>
+          </RecoveryNode>
+        </Parallel>
+      </Sequence>
+      <ReactiveFallback name="RecoveryFallback">
+        <GoalUpdated/>
+        <RoundRobin name="RecoveryActions">
+          <Sequence name="ClearingActions">
+            <ClearEntireCostmap name="ClearLocalCostmap-Subtree"
+              service_name="local_costmap/clear_entirely_local_costmap"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Subtree"
+              service_name="global_costmap/clear_entirely_global_costmap"/>
+          </Sequence>
+          <BackUp backup_dist="0.15" backup_speed="0.06"/>
+          <Wait wait_duration="2.0"/>
+        </RoundRobin>
+      </ReactiveFallback>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>
