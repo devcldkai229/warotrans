@@ -1,0 +1,36 @@
+# =============================================================================
+# Nav2 Route Server (nav2_route 1.3.13, ROS 2 Jazzy) — lane graph navigation.
+# Only started when navigation.launch.py gets route_graph:=<file.geojson>; the robot default is unchanged.
+# Graph file: backend GET /api/navigation/maps/{id}/route-graph, fetched with
+#   warotrans_simulation/scripts/fetch_route_graph.sh (converts abs_speed_limit m/s → speed_limit %).
+# Parameter names checked against the installed libroute_server_core.so / plugins.xml (1.3.13).
+# =============================================================================
+route_server:
+  ros__parameters:
+    use_sim_time: false            # overridden by the launch
+    graph_filepath: ""             # set by the launch (route_graph)
+    route_frame: map
+    base_frame: base_footprint
+    path_density: 0.05             # m between poses of the dense path handed to FollowPath
+    smooth_corners: true
+    smoothing_radius: 0.1          # lanes are 0.45–0.6 m wide: a larger arc pulls the robot off the lane at corners
+    enable_nn_search: true         # start / goal pose → nearest reachable node (searched on the global costmap)
+    # A node counts as passed within this radius (tracking, speed-limit and rerouting operations).
+    radius_to_achieve_node: 0.25
+    # Start / goal nodes: must cover the goal checker tolerance, or tracking never finishes at the goal.
+    boundary_radius_to_achieve_node: 0.3
+    tracker_update_rate: 20.0
+    edge_cost_functions: ["DistanceScorer", "PenaltyScorer", "DynamicEdgesScorer"]
+    DistanceScorer:
+      plugin: "nav2_route::DistanceScorer"
+    PenaltyScorer:                 # metadata "penalty" on an edge raises its cost
+      plugin: "nav2_route::PenaltyScorer"
+    DynamicEdgesScorer:            # close / reopen edges at runtime: service route_server/DynamicEdgesScorer/adjust_edges
+      plugin: "nav2_route::DynamicEdgesScorer"
+    operations: ["AdjustSpeedLimit", "ReroutingService"]
+    AdjustSpeedLimit:
+      # Reads edge metadata "speed_limit" as a PERCENTAGE of the controller's max speed (Jazzy has no absolute
+      # key) and publishes nav2_msgs/SpeedLimit on "speed_limit" — the topic controller_server listens to.
+      plugin: "nav2_route::AdjustSpeedLimit"
+    ReroutingService:
+      plugin: "nav2_route::ReroutingService"
