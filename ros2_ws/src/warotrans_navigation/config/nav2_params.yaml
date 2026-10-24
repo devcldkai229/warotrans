@@ -26,7 +26,9 @@ bt_navigator:
     odom_topic: /odom
     bt_loop_duration: 10
     default_server_timeout: 20
-    wait_for_service_timeout: 1000
+    # ms each BT node waits for its action server when the tree loads. 1000 was too short on a loaded
+    # machine (Gazebo GUI in WSL, Pi 5): "wait" not ready → bt_navigator activation fails → every goal rejected.
+    wait_for_service_timeout: 5000
     action_server_result_timeout: 900.0
     navigators: ["navigate_to_pose", "navigate_through_poses"]
     navigate_to_pose:
