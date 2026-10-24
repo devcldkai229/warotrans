@@ -17,7 +17,9 @@ from warotrans_fleet.command_contract import (
     CANCEL,
     ERROR_CANCEL_INEFFECTIVE,
     ERROR_CANCEL_REJECTED,
+    ERROR_CORRIDOR_VIOLATION,
     ERROR_GOAL_REJECTED,
+    ERROR_GRANT_LOSS,
     ERROR_INTERNAL_ERROR,
     ERROR_NAV2_CANCEL_UNCONFIRMED,
     ERROR_NAV2_UNAVAILABLE,
@@ -39,6 +41,7 @@ from warotrans_fleet.command_contract import (
     parse_cancel_target,
     parse_navigate_target,
 )
+from warotrans_fleet.route_enforcer import RouteEnforcer
 from warotrans_fleet.command_router import AckDecision, CommandSession, LogSink
 from warotrans_fleet.navigator import (
     STATUS_ABORTED,
@@ -60,6 +63,8 @@ _CANCELING = "CANCELING"  # đã gửi cancel_goal_async, chờ Nav2 kết thúc
 # Lý do cancel
 _CANCEL_BY_BACKEND = "BACKEND"
 _CANCEL_BY_TIMEOUT = "TIMEOUT"
+_CANCEL_BY_CORRIDOR = "CORRIDOR"
+_CANCEL_BY_GRANT_LOSS = "GRANT_LOSS"
 
 
 @dataclass
@@ -103,6 +108,7 @@ class MoveCommandHandler:
         terminal_status_hold_sec: float = 3.0,
         progress_log_interval_sec: float = 5.0,
         external_goal_active: Callable[[], bool] = lambda: False,
+        route_enforcer: Optional[RouteEnforcer] = None,
     ) -> None:
         self._navigator = navigator
         self._localization_provider = localization_provider
@@ -116,6 +122,7 @@ class MoveCommandHandler:
         self._cancel_confirm_timeout_sec = float(cancel_confirm_timeout_sec)
         self._progress_log_interval_sec = float(progress_log_interval_sec)
         self._external_goal_active = external_goal_active
+        self._route_enforcer = route_enforcer
         self._active: Optional[_ActiveMove] = None
         self._state = nav_state.NavigationStateMachine(
             clock=clock,
@@ -172,6 +179,15 @@ class MoveCommandHandler:
             if not self._navigator.is_ready():
                 raise CommandRejected(REASON_NAV2_UNAVAILABLE, "NavigateToPose action server not ready")
 
+            if self._route_enforcer is not None and self._route_enforcer.enabled:
+                self._route_enforcer.prepare_navigate(
+                    dict(command.payload),
+                    goal_x=target.x,
+                    goal_y=target.y,
+                    goal_yaw=target.yaw,
+                    frame_id=target.frame_id,
+                )
+
             move = _ActiveMove(
                 command=command,
                 session=session,
@@ -226,6 +242,21 @@ class MoveCommandHandler:
                     f"{move.timeout_sec}; canceling Nav2 goal"
                 )
                 self._request_cancel(move, _CANCEL_BY_TIMEOUT, None)
+                return
+
+            if (
+                self._route_enforcer is not None
+                and self._route_enforcer.enabled
+                and move.cancel_reason is None
+                and move.phase in (_SENDING, _ACTIVE)
+            ):
+                violation = self._route_enforcer.monitor_tick(now)
+                if violation == ERROR_CORRIDOR_VIOLATION:
+                    self._log.warning(f"[CorridorViolation] commandId={move.command_id}; canceling")
+                    self._request_cancel(move, _CANCEL_BY_CORRIDOR, None)
+                elif violation == ERROR_GRANT_LOSS:
+                    self._log.warning(f"[GrantLoss] commandId={move.command_id}; MQTT disconnect timeout")
+                    self._request_cancel(move, _CANCEL_BY_GRANT_LOSS, None)
 
     # ------------------------------------------------------------------ CANCEL (từ CancelCommandHandler)
 
@@ -356,6 +387,26 @@ class MoveCommandHandler:
                     "TIMEOUT",
                     result,
                 )
+            elif status == STATUS_CANCELED and move.cancel_reason == _CANCEL_BY_CORRIDOR:
+                self._finish(
+                    move,
+                    OUTCOME_FAILED,
+                    ERROR_CORRIDOR_VIOLATION,
+                    "robot left authorized corridor buffer",
+                    status,
+                    "CORRIDOR_VIOLATION",
+                    result,
+                )
+            elif status == STATUS_CANCELED and move.cancel_reason == _CANCEL_BY_GRANT_LOSS:
+                self._finish(
+                    move,
+                    OUTCOME_FAILED,
+                    ERROR_GRANT_LOSS,
+                    "MQTT disconnected beyond grant_loss_timeout_sec",
+                    status,
+                    "GRANT_LOSS",
+                    result,
+                )
             elif status == STATUS_CANCELED:
                 by = "backend CANCEL" if move.cancel_reason == _CANCEL_BY_BACKEND else "outside fleet (RViz/preempt)"
                 self._log.info(f"[NavigationCanceled] commandId={move.command_id} by {by}")
@@ -467,6 +518,8 @@ class MoveCommandHandler:
         if self._active is not move:
             return
         self._active = None
+        if self._route_enforcer is not None:
+            self._route_enforcer.clear_active()
         self._state.finish(
             {
                 OUTCOME_SUCCEEDED: nav_state.SUCCEEDED,

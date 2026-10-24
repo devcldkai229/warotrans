@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Optional
+
+if TYPE_CHECKING:
+    from warotrans_fleet.route_grant import RouteGrant
 
 SCHEMA_VERSION = 1
 
@@ -31,6 +34,9 @@ REASON_WRONG_ROBOT = "WRONG_ROBOT"
 REASON_UNSUPPORTED_COMMAND = "UNSUPPORTED_COMMAND"
 REASON_MAP_MISMATCH = "MAP_MISMATCH"
 REASON_INTERNAL_ERROR = "INTERNAL_ERROR"
+REASON_ROUTE_REQUIRED = "ROUTE_REQUIRED"
+REASON_ROUTE_NOT_AUTHORIZED = "ROUTE_NOT_AUTHORIZED"
+REASON_ROUTE_GRAPH_MISMATCH = "ROUTE_GRAPH_MISMATCH"
 
 # CommandResult.errorCode.
 ERROR_GOAL_REJECTED = "GOAL_REJECTED"
@@ -42,6 +48,8 @@ ERROR_NAV2_CANCEL_UNCONFIRMED = "NAV2_CANCEL_UNCONFIRMED"
 ERROR_CANCEL_REJECTED = "CANCEL_REJECTED"
 ERROR_CANCEL_INEFFECTIVE = "CANCEL_INEFFECTIVE"
 ERROR_INTERNAL_ERROR = "INTERNAL_ERROR"
+ERROR_CORRIDOR_VIOLATION = "CORRIDOR_VIOLATION"
+ERROR_GRANT_LOSS = "GRANT_LOSS"
 
 
 class CommandRejected(Exception):
@@ -74,6 +82,7 @@ class NavigateTarget:
     yaw: float
     timeout_sec: Optional[float]
     map_version_code: Optional[str]
+    route: Optional["RouteGrant"] = None
 
 
 def extract_command_id(body: Any) -> Optional[str]:
@@ -177,6 +186,10 @@ def parse_navigate_target(payload: Mapping[str, Any], *, map_frame: str) -> Navi
     if map_version_code is not None and not isinstance(map_version_code, str):
         raise CommandRejected(REASON_INVALID_PAYLOAD, "'payload.mapVersionCode' must be a string")
 
+    from warotrans_fleet.route_grant import parse_route_grant
+
+    route = parse_route_grant(payload)
+
     return NavigateTarget(
         frame_id=frame_id,
         x=x,
@@ -184,6 +197,7 @@ def parse_navigate_target(payload: Mapping[str, Any], *, map_frame: str) -> Navi
         yaw=yaw,
         timeout_sec=timeout_sec,
         map_version_code=map_version_code or None,
+        route=route,
     )
 
 

@@ -120,6 +120,15 @@ class RobotGatewayNode(Node):
         self.declare_parameter("human_confirm_debounce_ms", 50)
         self.declare_parameter("human_confirm_min_interval_ms", 300)
         self.declare_parameter("human_confirm_resend_sec", 5.0)
+        # Route-grant enforcement (traffic coordinator). Off by default; enabled when
+        # route_enforcement:=true OR route_graph path is non-empty.
+        self.declare_parameter("route_enforcement", False)
+        self.declare_parameter("route_graph", "")
+        self.declare_parameter("route_graph_hash", "")
+        self.declare_parameter("route_corridor_buffer_m", 0.35)
+        self.declare_parameter("grant_loss_timeout_sec", 3.0)
+        self.declare_parameter("adjust_edges_service", "route_server/DynamicEdgesScorer/adjust_edges")
+        self.declare_parameter("compute_route_action", "compute_route")
 
         self._robot_code = _env_or(self._str_param("robot_code"), "WARO_ROBOT_CODE")
         self._mqtt_host = _env_or(self._str_param("mqtt_host"), "WARO_MQTT_HOST")
@@ -167,6 +176,7 @@ class RobotGatewayNode(Node):
         )
 
         navigator = self._setup_nav2()
+        route_enforcer = self._setup_route_enforcer()
 
         self._teleop_enabled = bool(self.get_parameter("teleop_enabled").get_parameter_value().bool_value)
         human_env = os.environ.get("WARO_HUMAN_CONFIRM_ENABLED", "").strip().lower()
@@ -213,6 +223,7 @@ class RobotGatewayNode(Node):
             terminal_status_hold_sec=terminal_hold,
             ledger_capacity=ledger_size,
             external_goal_active=lambda: self._nav_tracker.has_active_goal,
+            route_enforcer=route_enforcer,
         )
 
         self._teleop: Optional[TeleopController] = None
@@ -319,6 +330,53 @@ class RobotGatewayNode(Node):
         self.create_subscription(GoalStatusArray, f"{action_name}/_action/status", self._on_goal_status, 10)
         self.get_logger().info(f"Nav2 ActionClient on {action_name}")
         return navigator
+
+    def _setup_route_enforcer(self):
+        from warotrans_fleet.route_enforcer import RouteEnforcer, RouteEnforcerConfig
+
+        enforcement = bool(self.get_parameter("route_enforcement").get_parameter_value().bool_value)
+        graph_path = self._str_param("route_graph").strip()
+        if not enforcement and not graph_path:
+            return None
+
+        from warotrans_fleet.nav2_route_client import try_create_nav2_route_client
+
+        port = try_create_nav2_route_client(
+            self,
+            adjust_edges_service=self._str_param("adjust_edges_service"),
+            compute_route_action=self._str_param("compute_route_action"),
+        )
+        if port is None:
+            self.get_logger().warning(
+                "route enforcement requested but nav2_msgs unavailable; NAVIGATE with route will fail"
+            )
+
+        config = RouteEnforcerConfig(
+            enabled=enforcement or bool(graph_path),
+            graph_path=graph_path,
+            graph_hash=self._str_param("route_graph_hash"),
+            corridor_buffer_m=self._float_param("route_corridor_buffer_m"),
+            grant_loss_timeout_sec=self._float_param("grant_loss_timeout_sec"),
+        )
+        enforcer = RouteEnforcer(
+            config=config,
+            graph_port=port,
+            pose_provider=self._route_pose_xy,
+            mqtt_connected=lambda: self.mqtt.is_connected,
+            log=lambda m: self.get_logger().info(m),
+        )
+        self.get_logger().info(
+            f"Route enforcement ON graph={graph_path or '(none)'} "
+            f"hash_param={self._str_param('route_graph_hash') or '(auto/sidecar)'} "
+            f"corridor_buffer={config.corridor_buffer_m}m"
+        )
+        return enforcer
+
+    def _route_pose_xy(self) -> Optional[tuple[float, float]]:
+        pose, status = self._lookup_map_pose()
+        if status != "LOCALIZED" or pose is None:
+            return None
+        return float(pose["x"]), float(pose["y"])
 
     def topic(self, leaf: str) -> str:
         return f"{self._topic_prefix}/robots/{self._robot_code}/{leaf}"

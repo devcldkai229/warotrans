@@ -15,6 +15,7 @@ from typing import Callable, Optional
 from warotrans_fleet.command_router import CommandEventPublisher, CommandRouter, LogSink
 from warotrans_fleet.move_command_handler import CancelCommandHandler, MoveCommandHandler
 from warotrans_fleet.navigator import NavigatorPort
+from warotrans_fleet.route_enforcer import RouteEnforcer
 
 
 @dataclass
@@ -39,6 +40,7 @@ def build_command_stack(
     terminal_status_hold_sec: float = 3.0,
     ledger_capacity: int = 500,
     external_goal_active: Callable[[], bool] = lambda: False,
+    route_enforcer: Optional[RouteEnforcer] = None,
 ) -> CommandStack:
     lock = threading.RLock()
     router = CommandRouter(
@@ -61,6 +63,7 @@ def build_command_stack(
         cancel_confirm_timeout_sec=cancel_confirm_timeout_sec,
         terminal_status_hold_sec=terminal_status_hold_sec,
         external_goal_active=external_goal_active,
+        route_enforcer=route_enforcer,
     )
     router.register(move)
     router.register(CancelCommandHandler(move))
