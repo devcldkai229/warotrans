@@ -22,10 +22,23 @@ ERROR_CORRIDOR_VIOLATION = "CORRIDOR_VIOLATION"
 ERROR_GRANT_LOSS = "GRANT_LOSS"
 
 
+def compute_path_hash(graph_hash: str, edge_ids: Iterable[int]) -> str:
+    """sha256 hex (lowercase) của ``graphHash|id,id,...`` — dùng chung cho RouteGrant và Authority.
+
+    Backend phải dùng cùng công thức; graph_hash được giữ nguyên (không đổi hoa/thường).
+    """
+    text = f"{graph_hash}|{','.join(str(int(e)) for e in edge_ids)}"
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 @dataclass(frozen=True)
 class RouteGrant:
     graph_hash: str
     edge_ids: tuple[int, ...]
+
+    @property
+    def path_hash(self) -> str:
+        return compute_path_hash(self.graph_hash, self.edge_ids)
 
 
 @dataclass(frozen=True)

@@ -120,6 +120,10 @@ def _setup(context, *args, **kwargs):
         LaunchConfiguration("enable_cmd_vel_pipeline").perform(context).strip().lower()
         in ("true", "1", "yes")
     )
+    enable_authority_gate = (
+        LaunchConfiguration("enable_authority_gate").perform(context).strip().lower()
+        in ("true", "1", "yes")
+    )
     motion_remappings = remappings + ([("cmd_vel", "cmd_vel_nav")] if enable_pipeline else [])
     if enable_pipeline:
         lifecycle_nodes += ["velocity_smoother", "collision_monitor"]
@@ -211,6 +215,12 @@ def _setup(context, *args, **kwargs):
         ]
 
     if enable_pipeline:
+        collision_params = list(common_params)
+        if enable_authority_gate:
+            # Gate sits between collision_monitor and /cmd_vel (Active Mode only).
+            collision_params = common_params + [
+                {"collision_monitor.ros__parameters.cmd_vel_out_topic": "cmd_vel_safe"}
+            ]
         actions += [
             Node(
                 package="nav2_velocity_smoother",
@@ -230,10 +240,31 @@ def _setup(context, *args, **kwargs):
                 output="screen",
                 respawn=True,
                 respawn_delay=2.0,
-                parameters=common_params,
+                parameters=collision_params,
                 remappings=remappings,
             ),
         ]
+        if enable_authority_gate:
+            actions.append(
+                Node(
+                    package="warotrans_fleet",
+                    executable="cmd_vel_authority_gate",
+                    name="cmd_vel_authority_gate",
+                    output="screen",
+                    respawn=True,
+                    respawn_delay=2.0,
+                    parameters=[{"use_sim_time": use_sim_time}],
+                    remappings=remappings,
+                )
+            )
+            actions.append(
+                LogInfo(
+                    msg=[
+                        "[warotrans_navigation] authority gate ON: "
+                        "collision_monitor->/cmd_vel_safe->gate->/cmd_vel"
+                    ]
+                )
+            )
 
     actions.append(
         Node(
@@ -359,6 +390,14 @@ def generate_launch_description():
                 "enable_costmap_filters",
                 default_value="false",
                 description="Phase 3 keepout/speed filters (default off for outdoor)",
+            ),
+            DeclareLaunchArgument(
+                "enable_authority_gate",
+                default_value="false",
+                description=(
+                    "Active Mode: insert cmd_vel_authority_gate between collision_monitor "
+                    "(/cmd_vel_safe) and /cmd_vel. Default false (legacy)."
+                ),
             ),
             DeclareLaunchArgument(
                 "enable_cmd_vel_pipeline",

@@ -25,6 +25,7 @@ setup(
     entry_points={
         "console_scripts": [
             "robot_gateway_node = warotrans_fleet.robot_gateway_node:main",
+            "cmd_vel_authority_gate = warotrans_fleet.cmd_vel_authority_gate:main",
         ],
     },
 )

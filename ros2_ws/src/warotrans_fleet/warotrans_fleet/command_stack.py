@@ -17,6 +17,9 @@ from warotrans_fleet.move_command_handler import CancelCommandHandler, MoveComma
 from warotrans_fleet.navigator import NavigatorPort
 from warotrans_fleet.route_enforcer import RouteEnforcer
 
+if False:  # TYPE_CHECKING without importing typing.TYPE_CHECKING for py39-ish
+    from warotrans_fleet.traffic_client import TrafficClient
+
 
 @dataclass
 class CommandStack:
@@ -41,6 +44,9 @@ def build_command_stack(
     ledger_capacity: int = 500,
     external_goal_active: Callable[[], bool] = lambda: False,
     route_enforcer: Optional[RouteEnforcer] = None,
+    traffic_mode: str = "legacy",
+    traffic_client: Optional[object] = None,
+    expected_graph_hash: Optional[str] = None,
 ) -> CommandStack:
     lock = threading.RLock()
     router = CommandRouter(
@@ -64,7 +70,20 @@ def build_command_stack(
         terminal_status_hold_sec=terminal_status_hold_sec,
         external_goal_active=external_goal_active,
         route_enforcer=route_enforcer,
+        traffic_mode=traffic_mode,
+        traffic_client=traffic_client,  # type: ignore[arg-type]
+        expected_graph_hash=expected_graph_hash,
     )
     router.register(move)
     router.register(CancelCommandHandler(move))
+    if traffic_mode == "active" and traffic_client is not None:
+        from warotrans_fleet.authority_command_handler import (
+            ExtendAuthorityHandler,
+            RenewAuthorityHandler,
+            RevokeAuthorityHandler,
+        )
+
+        router.register(ExtendAuthorityHandler(traffic_client, expected_graph_hash=expected_graph_hash))  # type: ignore[arg-type]
+        router.register(RenewAuthorityHandler(traffic_client))  # type: ignore[arg-type]
+        router.register(RevokeAuthorityHandler(traffic_client))  # type: ignore[arg-type]
     return CommandStack(router=router, move=move)
