@@ -1,0 +1,112 @@
+# =============================================================================
+# WaroTrans simulation — ACTIVE layout: DEMO MAP v6 (real demo floor 3.50 x 4.55 m)
+# =============================================================================
+# scripts/generate_warehouse.py reads this file and generates:
+#   worlds/warehouse.sdf          Gazebo world (walls, 4 shelves, charger, floor paint, docking pads)
+#   maps/sim_warehouse.pgm/.yaml  Nav2 / AMCL map rasterised from the SAME boxes
+#   config/sim_endpoints.json     14 endpoints + 14 zones → backend (samples/simulation/seed-sim.ps1)
+#
+# Frame: map, origin at the inner SOUTH-WEST corner, x → east (3.50 m), y → north (4.55 m). Metres / radians.
+# Grid of the design drawing (rows from the north wall, columns from the west wall):
+#
+#   y 4.55 +------+------+------+------+------+   top bays 5 x 0.70: CHG-01 REC-01 MAINT-01 PARK-01 PARK-02
+#          |  CHG |  REC | MAINT| PARK1| PARK2|   (row 0.60)
+#     3.95 +------+------+------+------+------+
+#          |  .    lane   | SPLIT|  <  <  <  .|   (row 0.55)  no-stop split at x 1.35-2.15
+#     3.40 +-----+-------+------+-------+-----+
+#          |  v  |SHELF01|  v   |SHELF02|  ^  |   (row 0.60)  shelves 0.70 x 0.50 centred in the 0.80 columns
+#     2.80 +-----+-------+------+-------+-----+
+#          | X-02| > S01 | X-01 | S02 < | X-03|   (2 x 0.45)  X-01 4-way single occupancy 0.80 x 0.90,
+#     1.90 |  T  | < S03 |      | S04 > |  T  |               X-02 / X-03 T-junctions (no-stop)
+#          +-----+-------+------+-------+-----+
+#          |  v  |SHELF03|  v   |SHELF04|  ^  |   (row 0.60)
+#     1.30 +-----+-------+------+-------+-----+
+#          |  .  |SPEED  | MERGE|  SPEED|  .  |   (row 0.55)  0.15 m/s in front of IN / QC / OUT, no-stop merge
+#     0.75 +------+-------------------+-------+
+#          |  IN  |  QUALITY INSPECTION  | OUT |   (row 0.75)  IN 0.80 | QC 1.90 (2 spots) | OUT 0.80
+#     0    +------+-------------------+-------+
+#         x=0  0.55  1.35        2.15  2.95  3.50
+#
+# Waypoints (lane nodes) are NOT generated: they are set up in the web Map Editor.
+# One-way lane directions in the drawing are not painted here either (planned with waypoints / edges).
+# =============================================================================
+
+name: sim_warehouse
+
+size: { x: 3.50, y: 4.55 }                 # inner floor area (demo floor)
+wall: { thickness: 0.10, height: 0.60, color: "0.80 0.82 0.86 1" }
+map: { resolution: 0.05, margin: 0.20 }    # free border around the outer walls in the PGM
+pad_size: 0.24                             # painted docking square at every endpoint (m)
+
+# Shelves = real obstacles (0.70 x 0.50, solid up to the lidar plane). `endpoint` = working stop in front
+# of the shelf, facing it: S01/S02 face north to SHELF-01/02, S03/S04 face south to SHELF-03/04.
+shelves:
+  - { code: S01, name: "EP-S01", x: 0.95, y: 3.10, sx: 0.70, sy: 0.50, sz: 1.0, levels: 2, endpoint: { x: 0.95, y: 2.575, yaw: 1.570796 } }
+  - { code: S02, name: "EP-S02", x: 2.55, y: 3.10, sx: 0.70, sy: 0.50, sz: 1.0, levels: 2, endpoint: { x: 2.55, y: 2.575, yaw: 1.570796 } }
+  - { code: S03, name: "EP-S03", x: 0.95, y: 1.60, sx: 0.70, sy: 0.50, sz: 1.0, levels: 2, endpoint: { x: 0.95, y: 2.125, yaw: -1.570796 } }
+  - { code: S04, name: "EP-S04", x: 2.55, y: 1.60, sx: 0.70, sy: 0.50, sz: 1.0, levels: 2, endpoint: { x: 2.55, y: 2.125, yaw: -1.570796 } }
+
+# Charging dock against the north wall inside bay CHG-01 (front faces south, into the room).
+obstacles:
+  - { name: charger, style: charger, x: 0.35, y: 4.50, sx: 0.30, sy: 0.10, sz: 0.20, front_yaw: -1.570796 }
+
+# Floor paint (visual only, 2 mm: below the lidar, never in the map). An entry with `zone:` also becomes a
+# backend Navigation Zone with the same rectangle (seed-sim.ps1 creates it on the map version).
+# Zone types: OPERATIONAL_AREA (bays, IN / QC / OUT), INTERSECTION (X-01..03, split, merge),
+# NARROW_AREA (needs capacity 1 + max_speed: the 0.15 m/s lanes).
+floor_zones:
+  # lanes: blue floor under everything
+  - { name: lanes, x0: 0.0, y0: 0.0, x1: 3.50, y1: 4.55, fill: "0.27 0.45 0.72 1", line: 0.02, line_color: "0.55 0.70 0.95 1" }
+
+  # north bays (row 0.60)
+  - { name: chg_01,   x0: 0.00, y0: 3.95, x1: 0.70, y1: 4.55, fill: "0.42 0.45 0.50 1", line: 0.025, line_color: "0.20 0.85 0.45 1", lift: 0.001,
+      zone: { name: "CHG-01 Charger", type: OPERATIONAL_AREA, capacity: 1 } }
+  - { name: rec_01,   x0: 0.70, y0: 3.95, x1: 1.40, y1: 4.55, fill: "0.42 0.45 0.50 1", line: 0.025, line_color: "0.98 0.70 0.15 1", lift: 0.001,
+      zone: { name: "REC-01 Recovery / Queue", type: OPERATIONAL_AREA, capacity: 1 } }
+  - { name: maint_01, x0: 1.40, y0: 3.95, x1: 2.10, y1: 4.55, fill: "0.42 0.45 0.50 1", line: 0.025, line_color: "0.25 0.55 0.95 1", lift: 0.001,
+      zone: { name: "MAINT-01 Maintenance", type: OPERATIONAL_AREA, capacity: 1 } }
+  - { name: park_01,  x0: 2.10, y0: 3.95, x1: 2.80, y1: 4.55, fill: "0.42 0.45 0.50 1", line: 0.025, line_color: "0.85 0.30 0.85 1", lift: 0.001,
+      zone: { name: "PARK-01 Parking", type: OPERATIONAL_AREA, capacity: 1 } }
+  - { name: park_02,  x0: 2.80, y0: 3.95, x1: 3.50, y1: 4.55, fill: "0.42 0.45 0.50 1", line: 0.025, line_color: "0.85 0.30 0.85 1", lift: 0.001,
+      zone: { name: "PARK-02 Parking", type: OPERATIONAL_AREA, capacity: 1 } }
+
+  # intersections
+  - { name: split,  x0: 1.35, y0: 3.40, x1: 2.15, y1: 3.95, fill: "0.60 0.45 0.32 1", line: 0.025, line_color: "0.98 0.65 0.20 1", lift: 0.001,
+      zone: { name: "Lane split (no-stop)", type: INTERSECTION, capacity: 1 } }
+  - { name: x_01,   x0: 1.35, y0: 1.90, x1: 2.15, y1: 2.80, fill: "0.66 0.62 0.25 1", line: 0.025, line_color: "0.98 0.92 0.30 1", lift: 0.001,
+      zone: { name: "X-01 4-way intersection", type: INTERSECTION, capacity: 1 } }
+  - { name: x_02,   x0: 0.00, y0: 1.90, x1: 0.55, y1: 2.80, fill: "0.60 0.45 0.32 1", line: 0.025, line_color: "0.98 0.65 0.20 1", lift: 0.001,
+      zone: { name: "X-02 T-junction (no-stop)", type: INTERSECTION, capacity: 1 } }
+  - { name: x_03,   x0: 2.95, y0: 1.90, x1: 3.50, y1: 2.80, fill: "0.60 0.45 0.32 1", line: 0.025, line_color: "0.98 0.65 0.20 1", lift: 0.001,
+      zone: { name: "X-03 T-junction (no-stop)", type: INTERSECTION, capacity: 1 } }
+  - { name: merge,  x0: 1.35, y0: 0.75, x1: 2.15, y1: 1.30, fill: "0.60 0.45 0.32 1", line: 0.025, line_color: "0.98 0.65 0.20 1", lift: 0.001,
+      zone: { name: "Lane merge (no-stop)", type: INTERSECTION, capacity: 1 } }
+
+  # 0.15 m/s lanes in front of IN / QC / OUT
+  - { name: speed_w, x0: 0.55, y0: 0.75, x1: 1.35, y1: 1.30, fill: "0.42 0.40 0.75 1", line: 0.025, line_color: "0.70 0.55 0.95 1", lift: 0.001,
+      zone: { name: "Speed lane West 0.15", type: NARROW_AREA, capacity: 1, max_speed: 0.15 } }
+  - { name: speed_e, x0: 2.15, y0: 0.75, x1: 2.95, y1: 1.30, fill: "0.42 0.40 0.75 1", line: 0.025, line_color: "0.70 0.55 0.95 1", lift: 0.001,
+      zone: { name: "Speed lane East 0.15", type: NARROW_AREA, capacity: 1, max_speed: 0.15 } }
+
+  # south work areas (row 0.75)
+  - { name: inbound,  x0: 0.00, y0: 0.00, x1: 0.80, y1: 0.75, fill: "0.60 0.45 0.32 1", line: 0.025, line_color: "0.98 0.60 0.15 1", lift: 0.001,
+      zone: { name: "Inbound", type: OPERATIONAL_AREA, capacity: 1 } }
+  - { name: quality,  x0: 0.80, y0: 0.00, x1: 2.70, y1: 0.75, fill: "0.25 0.55 0.42 1", line: 0.025, line_color: "0.25 0.85 0.50 1", lift: 0.001,
+      zone: { name: "Quality Inspection", type: OPERATIONAL_AREA, capacity: 2 } }
+  - { name: outbound, x0: 2.70, y0: 0.00, x1: 3.50, y1: 0.75, fill: "0.35 0.45 0.62 1", line: 0.025, line_color: "0.35 0.60 0.98 1", lift: 0.001,
+      zone: { name: "Outbound", type: OPERATIONAL_AREA, capacity: 1 } }
+
+# Working stops (the squares of the drawing). Bays are entered nose-first: north bays yaw +90°, south -90°.
+extra_endpoints:
+  - { code: CHG-01,   name: "EP-CHG-01",   type: CHARGING,    x: 0.35, y: 4.22, yaw: 1.570796 }
+  - { code: REC-01,   name: "EP-REC-01",   type: RECOVERY,    x: 1.05, y: 4.22, yaw: 1.570796 }
+  - { code: MAINT-01, name: "EP-MAINT-01", type: MAINTENANCE, x: 1.75, y: 4.22, yaw: 1.570796 }
+  - { code: PARK-01,  name: "EP-PARK-01",  type: PARKING,     x: 2.45, y: 4.22, yaw: 1.570796 }
+  - { code: PARK-02,  name: "EP-PARK-02",  type: PARKING,     x: 3.15, y: 4.22, yaw: 1.570796 }
+  - { code: IN,       name: "EP-IN",       type: INBOUND,     x: 0.40, y: 0.405, yaw: -1.570796 }
+  - { code: QC-01,    name: "EP-QC-01",    type: INSPECTION,  x: 1.30, y: 0.405, yaw: -1.570796 }
+  - { code: QC-02,    name: "EP-QC-02",    type: INSPECTION,  x: 2.20, y: 0.405, yaw: -1.570796 }
+  - { code: OUT,      name: "EP-OUT",      type: OUTBOUND,    x: 3.10, y: 0.405, yaw: -1.570796 }
+
+# Robot spawn pose (also the AMCL initial pose) = EP-PARK-01.
+spawn: { x: 2.45, y: 4.22, yaw: 1.570796 }

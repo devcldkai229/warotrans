@@ -1,0 +1,79 @@
+# =============================================================================
+# WaroTrans simulation — ACTIVE warehouse layout (single source of truth)
+# =============================================================================
+# scripts/generate_warehouse.py reads this file and generates:
+#   worlds/warehouse.sdf          Gazebo world (walls, racks, charger as boxes)
+#   maps/sim_warehouse.pgm/.yaml  Nav2 / AMCL map rasterised from the SAME boxes
+#   config/sim_endpoints.json     docking poses → backend Navigation Endpoints
+#
+# Demo warehouse 11 x 7.5 m for a 0.32 x 0.26 m robot. Goods flow west → east:
+#
+#  y=7.5 +------------------------------------------------------------------+
+#        |                              [CHG]                                |  charging station on the north wall
+#        |  INBOUND                       ^                        OUTBOUND  |
+#        |  < IN1          +--+     +--+     +--+                 OUT1 >    |
+#        |                 |A |     |B |     |C |                           |  3 free-standing racks (0.6 x 2.4 m)
+#        |                 |  |     |  |     |  |                           |  in the middle, >= 2.5 m from walls
+#        |  < IN2       >  +--+  >  +--+  >  +--+                 OUT2 >    |  each docked from its west face
+#        |                              v                                    |
+#        |                            PARK                                   |  parking / robot spawn
+#  y=0   +------------------------------------------------------------------+
+#       x=0                                                               x=11
+#
+# Free areas left for zones in the web Map Editor:
+#   INBOUND  x 0 – 2.5 (west wall)      OUTBOUND  x 8.5 – 11 (east wall)
+#   racks    x 3.2 – 7.8, y 2.55 – 4.95  charging  around (5.5, 6.8)
+#
+# Frame: world == map, origin at the inner south-west corner. Metres / radians, REP-103.
+# Aisles between racks 1.15 m, every other passage >= 1.5 m (robot half diagonal 0.21 m).
+# =============================================================================
+
+name: sim_warehouse
+
+size: { x: 11.0, y: 7.5 }                # inner floor area
+wall: { thickness: 0.10, height: 2.5, color: "0.86 0.85 0.80 1" }
+map: { resolution: 0.05, margin: 0.25 }  # free border around the outer walls in the PGM
+
+# Each rack: footprint (sx, sy) is what the map and the lidar see (solid kick plate up to 0.45 m);
+# above it Gazebo draws uprights, beams, `levels` decks and goods. The endpoint is where the robot
+# docks (facing the rack's west face).
+shelves:
+  - { code: A, name: "Rack A", x: 4.00, y: 3.75, sx: 0.6, sy: 2.4, sz: 2.0, levels: 3, endpoint: { x: 3.20,  y: 3.75, yaw: 0.0 } }
+  - { code: B, name: "Rack B", x: 5.75, y: 3.75, sx: 0.6, sy: 2.4, sz: 2.0, levels: 3, endpoint: { x: 4.875, y: 3.75, yaw: 0.0 } }
+  - { code: C, name: "Rack C", x: 7.50, y: 3.75, sx: 0.6, sy: 2.4, sz: 2.0, levels: 3, endpoint: { x: 6.625, y: 3.75, yaw: 0.0 } }
+
+# Charging dock against the north wall; front_yaw = direction the dock faces (into the room).
+obstacles:
+  - { name: charger, style: charger, x: 5.75, y: 7.375, sx: 0.5, sy: 0.25, sz: 0.3, front_yaw: -1.570796 }
+
+# Floor paint (visual only, 2 mm: below the lidar, never in the map). An entry with `zone:` also becomes
+# a backend Navigation Zone with the same rectangle (seed-sim.ps1 creates it on the map version).
+floor_zones:
+  - { name: inbound,  x0: 0.15, y0: 0.6,  x1: 2.3,   y1: 6.9,  fill: "0.70 0.80 0.70 1",
+      zone: { name: "Inbound Area",  type: OPERATIONAL_AREA, capacity: 2 } }
+  - { name: outbound, x0: 8.7,  y0: 0.6,  x1: 10.85, y1: 6.9,  fill: "0.86 0.76 0.64 1",
+      zone: { name: "Outbound Area", type: OPERATIONAL_AREA, capacity: 2 } }
+  - { name: racks,    x0: 2.75, y0: 2.2,  x1: 8.05,  y1: 5.3,
+      zone: { name: "Rack Area",     type: NARROW_AREA, capacity: 1, max_speed: 0.3 } }
+  - { name: charging, x0: 5.2,  y0: 6.25, x1: 6.3,   y1: 7.45, fill: "0.88 0.84 0.55 1",
+      zone: { name: "Charging Area", type: OPERATIONAL_AREA, capacity: 1 } }
+  - { name: parking,  x0: 5.3,  y0: 0.35, x1: 6.2,   y1: 1.45, line_color: "0.30 0.30 0.32 1",
+      zone: { name: "Parking Area",  type: OPERATIONAL_AREA, capacity: 1 } }
+
+# Roll-up dock doors on the inner wall faces (visual only): goods arrive west, leave east.
+doors:
+  - { name: in_1,  wall: west, at: 5.5, width: 1.6 }
+  - { name: in_2,  wall: west, at: 2.0, width: 1.6 }
+  - { name: out_1, wall: east, at: 5.5, width: 1.6 }
+  - { name: out_2, wall: east, at: 2.0, width: 1.6 }
+
+extra_endpoints:
+  - { code: IN1,  name: "Inbound 1",  type: INBOUND,  x: 0.9,  y: 5.5,  yaw: 3.14159 }
+  - { code: IN2,  name: "Inbound 2",  type: INBOUND,  x: 0.9,  y: 2.0,  yaw: 3.14159 }
+  - { code: OUT1, name: "Outbound 1", type: OUTBOUND, x: 10.1, y: 5.5,  yaw: 0.0 }
+  - { code: OUT2, name: "Outbound 2", type: OUTBOUND, x: 10.1, y: 2.0,  yaw: 0.0 }
+  - { code: CHG,  name: "Charger",    type: CHARGING, x: 5.75, y: 6.75, yaw: 1.570796 }
+  - { code: PARK, name: "Parking",    type: PARKING,  x: 5.75, y: 0.9,  yaw: 1.570796 }
+
+# Robot spawn pose (also the AMCL initial pose) = PARK.
+spawn: { x: 5.75, y: 0.9, yaw: 1.570796 }

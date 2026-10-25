@@ -7,6 +7,9 @@ result, duration, recoveries, final error vs goal (map -> base_footprint TF).
     ros2 run warotrans_simulation nav_regression.py                 # all scenarios
     ros2 run warotrans_simulation nav_regression.py --only straight left_t
     ros2 run warotrans_simulation nav_regression.py --no-obstacle   # e.g. on the real robot
+    ros2 run warotrans_simulation nav_regression.py --endpoints S01 OUT PARK-01   # any layout, by endpoint code
+
+SCENARIOS are written for the 11 x 7.5 m demo warehouse (config/layouts/demo_warehouse_11x7_5.yaml).
 
 The obstacle scenario spawns a box in Gazebo (gz service) — simulation only.
 """
@@ -14,6 +17,7 @@ The obstacle scenario spawns a box in Gazebo (gz service) — simulation only.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import subprocess
 import sys
@@ -108,7 +112,21 @@ def main() -> int:
     parser.add_argument("--no-obstacle", action="store_true")
     parser.add_argument("--timeout", type=float, default=300.0, help="wall seconds per goal before 'hang'")
     parser.add_argument("--world", default="sim_warehouse")
+    parser.add_argument(
+        "--endpoints", nargs="*", default=None,
+        help="visit these endpoint codes of config/sim_endpoints.json in order (any layout) instead of SCENARIOS",
+    )
     args = parser.parse_args()
+    if args.endpoints:
+        from ament_index_python.packages import get_package_share_directory  # noqa: PLC0415
+
+        path = f"{get_package_share_directory('warotrans_simulation')}/config/sim_endpoints.json"
+        with open(path, encoding="utf-8") as handle:
+            by_code = {e["code"]: e for e in json.load(handle)["endpoints"]}
+        SCENARIOS[:] = [
+            (c, by_code[c]["x"], by_code[c]["y"], by_code[c]["yaw"], True, by_code[c]["name"]) for c in args.endpoints
+        ]
+        args.no_obstacle = True
 
     rclpy.init()
     node = Regression()

@@ -2,224 +2,99 @@
   "mapName": "sim_warehouse",
   "frame": "map",
   "spawn": {
-    "x": 5.75,
-    "y": 0.9,
-    "yaw": 1.570796
+    "x": 0.0,
+    "y": 0.0,
+    "yaw": 0.0
   },
   "endpoints": [
     {
-      "code": "A",
-      "name": "Rack A",
-      "endpointType": "STORAGE",
-      "x": 3.2,
-      "y": 3.75,
-      "yaw": 0.0
+      "code": "EP-CHARGER-1",
+      "name": "CHARGER 1",
+      "endpointType": "CHARGER",
+      "x": 2.013,
+      "y": 0.37,
+      "yaw": -1.5707963267948966
     },
     {
-      "code": "B",
-      "name": "Rack B",
-      "endpointType": "STORAGE",
-      "x": 4.875,
-      "y": 3.75,
-      "yaw": 0.0
+      "code": "EP-INBOUND",
+      "name": "INBOUND",
+      "endpointType": "WAYPOINT",
+      "x": -0.045,
+      "y": -0.133,
+      "yaw": 0
     },
     {
-      "code": "C",
-      "name": "Rack C",
-      "endpointType": "STORAGE",
-      "x": 6.625,
-      "y": 3.75,
-      "yaw": 0.0
+      "code": "EP-INSPECTION",
+      "name": "INSPECTION",
+      "endpointType": "WAYPOINT",
+      "x": 1.22,
+      "y": 0.344,
+      "yaw": -1.5707963267948966
     },
     {
-      "code": "IN1",
-      "name": "Inbound 1",
-      "endpointType": "INBOUND",
-      "x": 0.9,
-      "y": 5.5,
-      "yaw": 3.14159
+      "code": "EP-OUTBOUND",
+      "name": "OUTBOUND",
+      "endpointType": "WAYPOINT",
+      "x": -0.058,
+      "y": -1.782,
+      "yaw": 0
     },
     {
-      "code": "IN2",
-      "name": "Inbound 2",
-      "endpointType": "INBOUND",
-      "x": 0.9,
-      "y": 2.0,
-      "yaw": 3.14159
+      "code": "EP-PARK-1",
+      "name": "PARK 1",
+      "endpointType": "PARK",
+      "x": 2.959,
+      "y": 0.357,
+      "yaw": -1.5707963267948966
     },
     {
-      "code": "OUT1",
-      "name": "Outbound 1",
-      "endpointType": "OUTBOUND",
-      "x": 10.1,
-      "y": 5.5,
-      "yaw": 0.0
+      "code": "EP-PARK-2",
+      "name": "PARK 2",
+      "endpointType": "PARK",
+      "x": 3.415,
+      "y": 0.357,
+      "yaw": -1.5707963267948966
     },
     {
-      "code": "OUT2",
-      "name": "Outbound 2",
-      "endpointType": "OUTBOUND",
-      "x": 10.1,
-      "y": 2.0,
-      "yaw": 0.0
+      "code": "EP-SORAGE_SELF_1",
+      "name": "SORAGE_SELF_1",
+      "endpointType": "WAYPOINT",
+      "x": 0.492,
+      "y": -0.849,
+      "yaw": 1.5707963267948966
     },
     {
-      "code": "CHG",
-      "name": "Charger",
-      "endpointType": "CHARGING",
-      "x": 5.75,
-      "y": 6.75,
-      "yaw": 1.570796
+      "code": "EP-SORAGE_SELF_2",
+      "name": "SORAGE_SELF_2",
+      "endpointType": "WAYPOINT",
+      "x": 1.612,
+      "y": -0.883,
+      "yaw": -1.5707963267948966
     },
     {
-      "code": "PARK",
-      "name": "Parking",
-      "endpointType": "PARKING",
-      "x": 5.75,
-      "y": 0.9,
-      "yaw": 1.570796
+      "code": "EP-SORAGE_SELF_3",
+      "name": "SORAGE_SELF_3",
+      "endpointType": "WAYPOINT",
+      "x": 2.775,
+      "y": -0.866,
+      "yaw": 1.5707963267948966
+    },
+    {
+      "code": "EP-SORAGE_SELF_4",
+      "name": "SORAGE_SELF_4",
+      "endpointType": "WAYPOINT",
+      "x": 3.461,
+      "y": -1.944,
+      "yaw": 3.141592653589793
+    },
+    {
+      "code": "EP-SORAGE_SELF_5",
+      "name": "SORAGE_SELF_5",
+      "endpointType": "WAYPOINT",
+      "x": 0.965,
+      "y": -1.939,
+      "yaw": 3.141592653589793
     }
   ],
-  "zones": [
-    {
-      "name": "Inbound Area",
-      "zoneType": "OPERATIONAL_AREA",
-      "capacity": 2,
-      "maxSpeed": null,
-      "polygon": [
-        [
-          0.15,
-          0.6
-        ],
-        [
-          2.3,
-          0.6
-        ],
-        [
-          2.3,
-          6.9
-        ],
-        [
-          0.15,
-          6.9
-        ],
-        [
-          0.15,
-          0.6
-        ]
-      ]
-    },
-    {
-      "name": "Outbound Area",
-      "zoneType": "OPERATIONAL_AREA",
-      "capacity": 2,
-      "maxSpeed": null,
-      "polygon": [
-        [
-          8.7,
-          0.6
-        ],
-        [
-          10.85,
-          0.6
-        ],
-        [
-          10.85,
-          6.9
-        ],
-        [
-          8.7,
-          6.9
-        ],
-        [
-          8.7,
-          0.6
-        ]
-      ]
-    },
-    {
-      "name": "Rack Area",
-      "zoneType": "NARROW_AREA",
-      "capacity": 1,
-      "maxSpeed": 0.3,
-      "polygon": [
-        [
-          2.75,
-          2.2
-        ],
-        [
-          8.05,
-          2.2
-        ],
-        [
-          8.05,
-          5.3
-        ],
-        [
-          2.75,
-          5.3
-        ],
-        [
-          2.75,
-          2.2
-        ]
-      ]
-    },
-    {
-      "name": "Charging Area",
-      "zoneType": "OPERATIONAL_AREA",
-      "capacity": 1,
-      "maxSpeed": null,
-      "polygon": [
-        [
-          5.2,
-          6.25
-        ],
-        [
-          6.3,
-          6.25
-        ],
-        [
-          6.3,
-          7.45
-        ],
-        [
-          5.2,
-          7.45
-        ],
-        [
-          5.2,
-          6.25
-        ]
-      ]
-    },
-    {
-      "name": "Parking Area",
-      "zoneType": "OPERATIONAL_AREA",
-      "capacity": 1,
-      "maxSpeed": null,
-      "polygon": [
-        [
-          5.3,
-          0.35
-        ],
-        [
-          6.2,
-          0.35
-        ],
-        [
-          6.2,
-          1.45
-        ],
-        [
-          5.3,
-          1.45
-        ],
-        [
-          5.3,
-          0.35
-        ]
-      ]
-    }
-  ]
+  "zones": []
 }
