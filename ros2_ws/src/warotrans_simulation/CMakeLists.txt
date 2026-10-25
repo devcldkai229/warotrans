@@ -10,6 +10,7 @@ install(
 
 install(
   PROGRAMS scripts/generate_warehouse.py scripts/motor_deadband_emulator.py scripts/nav_regression.py scripts/fetch_route_graph.sh
+          scripts/sync_web_map.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

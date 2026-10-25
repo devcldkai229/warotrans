@@ -1,0 +1,778 @@
+{
+  "mapVersionId": "7cb001f7-cbf3-4f3e-8400-fddc00d63b19",
+  "mapVersionCode": "MAP-WHSIM-V018",
+  "status": "PUBLISHED",
+  "endpoints": [
+    {
+      "code": "EP-CHARGER-1",
+      "name": "CHARGER 1",
+      "endpointType": "CHARGER",
+      "x": 2.013,
+      "y": 0.37,
+      "yaw": -1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-INBOUND",
+      "name": "INBOUND",
+      "endpointType": "WAYPOINT",
+      "x": -0.045,
+      "y": -0.133,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-INSPECTION",
+      "name": "INSPECTION",
+      "endpointType": "WAYPOINT",
+      "x": 1.22,
+      "y": 0.344,
+      "yaw": -1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-OUTBOUND",
+      "name": "OUTBOUND",
+      "endpointType": "WAYPOINT",
+      "x": -0.058,
+      "y": -1.782,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-PARK-1",
+      "name": "PARK 1",
+      "endpointType": "PARK",
+      "x": 2.959,
+      "y": 0.357,
+      "yaw": -1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-PARK-2",
+      "name": "PARK 2",
+      "endpointType": "PARK",
+      "x": 3.415,
+      "y": 0.357,
+      "yaw": -1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SORAGE_SELF_1",
+      "name": "SORAGE_SELF_1",
+      "endpointType": "WAYPOINT",
+      "x": 0.492,
+      "y": -0.849,
+      "yaw": 1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SORAGE_SELF_2",
+      "name": "SORAGE_SELF_2",
+      "endpointType": "WAYPOINT",
+      "x": 1.612,
+      "y": -0.883,
+      "yaw": -1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SORAGE_SELF_3",
+      "name": "SORAGE_SELF_3",
+      "endpointType": "WAYPOINT",
+      "x": 2.775,
+      "y": -0.866,
+      "yaw": 1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SORAGE_SELF_4",
+      "name": "SORAGE_SELF_4",
+      "endpointType": "WAYPOINT",
+      "x": 3.461,
+      "y": -1.944,
+      "yaw": 3.141592653589793,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SORAGE_SELF_5",
+      "name": "SORAGE_SELF_5",
+      "endpointType": "WAYPOINT",
+      "x": 0.965,
+      "y": -1.939,
+      "yaw": 3.141592653589793,
+      "isEnabled": true
+    }
+  ],
+  "edges": [
+    {
+      "code": "EDGE-087",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            2.775,
+            -1.368
+          ],
+          [
+            2.775,
+            -0.359
+          ]
+        ]
+      },
+      "widthMeters": 0.8,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-088",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.6,
+            -0.376
+          ],
+          [
+            1.6,
+            -1.334
+          ]
+        ]
+      },
+      "widthMeters": 0.75,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-089",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            4.092,
+            -0.367
+          ],
+          [
+            4.092,
+            -1.27
+          ]
+        ]
+      },
+      "widthMeters": 0.9,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-090",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            0.442,
+            -0.402
+          ],
+          [
+            0.442,
+            -1.305
+          ]
+        ]
+      },
+      "widthMeters": 0.55,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-091",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.942,
+            -1.472
+          ],
+          [
+            2.44,
+            -1.472
+          ]
+        ]
+      },
+      "widthMeters": 0.45,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-092",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            3.175,
+            -1.487
+          ],
+          [
+            3.713,
+            -1.488
+          ]
+        ]
+      },
+      "widthMeters": 0.45,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-093",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            0.718,
+            -0.192
+          ],
+          [
+            1.237,
+            -0.192
+          ]
+        ]
+      },
+      "widthMeters": 0.55,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-094",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.921,
+            -0.185
+          ],
+          [
+            2.44,
+            -0.185
+          ]
+        ]
+      },
+      "widthMeters": 0.55,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-095",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            3.145,
+            -0.14
+          ],
+          [
+            3.664,
+            -0.14
+          ]
+        ]
+      },
+      "widthMeters": 0.55,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-096",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            3.717,
+            -1.935
+          ],
+          [
+            3.163,
+            -1.935
+          ]
+        ]
+      },
+      "widthMeters": 0.45,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-097",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            2.5,
+            -1.919
+          ],
+          [
+            1.946,
+            -1.919
+          ]
+        ]
+      },
+      "widthMeters": 0.45,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-098",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            0.716,
+            -1.461
+          ],
+          [
+            1.214,
+            -1.461
+          ]
+        ]
+      },
+      "widthMeters": 0.45,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-099",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.245,
+            -1.929
+          ],
+          [
+            0.691,
+            -1.929
+          ]
+        ]
+      },
+      "widthMeters": 0.45,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    }
+  ],
+  "zones": [
+    {
+      "code": "ZONE-JUNCTION",
+      "name": "Junction",
+      "zoneType": "JUNCTION",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              0.155,
+              -1.232
+            ],
+            [
+              0.751,
+              -1.218
+            ],
+            [
+              0.751,
+              -2.157
+            ],
+            [
+              0.155,
+              -2.14
+            ],
+            [
+              0.155,
+              -1.232
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-JUNCTION---1",
+      "name": "Junction - 1",
+      "zoneType": "JUNCTION",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              2.379,
+              -1.241
+            ],
+            [
+              3.202,
+              -1.241
+            ],
+            [
+              3.202,
+              -2.148
+            ],
+            [
+              2.371,
+              -2.148
+            ],
+            [
+              2.379,
+              -1.241
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-JUNCTION---1-COPY",
+      "name": "Junction - 1 copy",
+      "zoneType": "JUNCTION",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              1.183,
+              -1.255
+            ],
+            [
+              2.006,
+              -1.255
+            ],
+            [
+              2.006,
+              -2.162
+            ],
+            [
+              1.175,
+              -2.162
+            ],
+            [
+              1.183,
+              -1.255
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-JUNCTION---1-COPY-2",
+      "name": "Junction - 1 copy 2",
+      "zoneType": "JUNCTION",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              3.671,
+              -1.238
+            ],
+            [
+              4.494,
+              -1.238
+            ],
+            [
+              4.494,
+              -2.145
+            ],
+            [
+              3.663,
+              -2.145
+            ],
+            [
+              3.671,
+              -1.238
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-JUNCTION---1-COPY-2-COPY",
+      "name": "Junction - 1 copy 2 copy",
+      "zoneType": "JUNCTION",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              3.656,
+              0.136
+            ],
+            [
+              4.475,
+              0.136
+            ],
+            [
+              4.487,
+              -0.425
+            ],
+            [
+              3.656,
+              -0.425
+            ],
+            [
+              3.656,
+              0.136
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-JUNCTION-COPY",
+      "name": "Junction copy",
+      "zoneType": "JUNCTION",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              0.134,
+              0.106
+            ],
+            [
+              0.743,
+              0.106
+            ],
+            [
+              0.74,
+              -0.493
+            ],
+            [
+              0.144,
+              -0.476
+            ],
+            [
+              0.134,
+              0.106
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-JUNCTION-COPY-COPY",
+      "name": "Junction copy copy",
+      "zoneType": "JUNCTION",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              1.23,
+              0.083
+            ],
+            [
+              1.966,
+              0.085
+            ],
+            [
+              1.966,
+              -0.516
+            ],
+            [
+              1.24,
+              -0.499
+            ],
+            [
+              1.23,
+              0.083
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-JUNCTION-COPY-COPY-COPY",
+      "name": "Junction copy copy copy",
+      "zoneType": "JUNCTION",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              2.403,
+              0.09
+            ],
+            [
+              3.143,
+              0.09
+            ],
+            [
+              3.139,
+              -0.509
+            ],
+            [
+              2.413,
+              -0.492
+            ],
+            [
+              2.403,
+              0.09
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-NO-STOP---9",
+      "name": "No-stop - 9",
+      "zoneType": "NO_STOP",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              2.388,
+              -1.253
+            ],
+            [
+              3.202,
+              -1.266
+            ],
+            [
+              3.189,
+              -2.131
+            ],
+            [
+              2.388,
+              -2.131
+            ],
+            [
+              2.388,
+              -1.253
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-NO-STOP---9-COPY",
+      "name": "No-stop - 9 copy",
+      "zoneType": "NO_STOP",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              1.188,
+              -1.267
+            ],
+            [
+              2.002,
+              -1.28
+            ],
+            [
+              1.989,
+              -2.145
+            ],
+            [
+              1.188,
+              -2.145
+            ],
+            [
+              1.188,
+              -1.267
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-NO-STOP---9-COPY-COPY",
+      "name": "No-stop - 9 copy copy",
+      "zoneType": "NO_STOP",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              1.225,
+              0.097
+            ],
+            [
+              1.966,
+              0.076
+            ],
+            [
+              1.957,
+              -0.516
+            ],
+            [
+              1.229,
+              -0.495
+            ],
+            [
+              1.225,
+              0.097
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-NO-STOP---9-COPY-COPY-COPY",
+      "name": "No-stop - 9 copy copy copy",
+      "zoneType": "NO_STOP",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              2.411,
+              0.108
+            ],
+            [
+              3.152,
+              0.087
+            ],
+            [
+              3.143,
+              -0.505
+            ],
+            [
+              2.415,
+              -0.484
+            ],
+            [
+              2.411,
+              0.108
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    }
+  ]
+}

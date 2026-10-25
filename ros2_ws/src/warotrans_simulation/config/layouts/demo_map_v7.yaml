@@ -1,0 +1,38 @@
+# =============================================================================
+# WaroTrans simulation — layout: DEMO MAP v7 (real demo floor 3.50 x 4.55 m, hand sketch)
+# =============================================================================
+# ONLY the physical map: outer walls + 3 shelves (real obstacles). No endpoints, zones, lanes or floor paint:
+# the backend map version stays DRAFT and everything else is set up in the web Map Editor
+# (samples/simulation/seed-sim.ps1 -Draft).
+#
+# Frame: map, origin at the inner SOUTH-WEST corner, x → east (3.50 m), y → north (4.55 m). Metres / radians.
+# Rows of the drawing from the north wall: 0.65 | 0.55 | 0.35 | 0.45 | 0.45 | 0.40 | 0.40 | 0.55 | 0.75
+#   → y = 4.55, 3.90, 3.35, 3.00, 2.55, 2.10, 1.70, 1.30, 0.75, 0
+# Bottom columns from the west wall: 0.60 | 0.25 | 1.20 | 0.40 | 0.55 | 0.50 → shelves span x 0.85 – 2.05.
+#
+#   y 4.55 +--------------------------------------+   CHARGING 1.00 | free 1.10 | PARK-01 0.70 | PARK-02 0.70
+#     3.90 |                                      |
+#     3.35 |        [====== SHELF-01 ======]      |   1.20 x 0.35, y 3.00 – 3.35
+#     3.00 |                                      |   (1 ROBOT area east of x 2.10, y 2.10 – 3.00)
+#     2.10 |        [====== SHELF-02 ======]      |   1.20 x 0.35, y 1.75 – 2.10
+#     1.70 |        [====== SHELF-03 ======]      |   1.20 x 0.35, y 1.35 – 1.70
+#     0.75 |                                      |   IN 0.65 | OUT 0.65 | QC 1.75 along the south wall
+#     0    +--------------------------------------+
+#         x=0      0.85              2.05       3.50
+# =============================================================================
+
+name: sim_warehouse
+
+size: { x: 3.50, y: 4.55 }                 # inner floor area (demo floor)
+wall: { thickness: 0.10, height: 0.60, color: "0.80 0.82 0.86 1" }
+map: { resolution: 0.05, margin: 0.20 }    # free border around the outer walls in the PGM
+
+# Shelves = real obstacles (solid up to the lidar plane). No `endpoint`: docking stops come from the web editor.
+shelves:
+  - { code: SHELF-01, name: "SHELF-01", x: 1.45, y: 3.175, sx: 1.20, sy: 0.35, sz: 1.0, levels: 2 }
+  - { code: SHELF-02, name: "SHELF-02", x: 1.45, y: 1.925, sx: 1.20, sy: 0.35, sz: 1.0, levels: 2 }
+  - { code: SHELF-03, name: "SHELF-03", x: 1.45, y: 1.525, sx: 1.20, sy: 0.35, sz: 1.0, levels: 2 }
+
+# Robot spawn pose (also the AMCL initial pose): inside bay PARK-01 (x 2.10 – 2.80, y 3.90 – 4.55), nose south
+# towards its exit ("ra" in the drawing).
+spawn: { x: 2.45, y: 4.22, yaw: -1.570796 }

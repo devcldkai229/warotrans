@@ -2,9 +2,11 @@
 """Generate the simulated warehouse from a layout file (default: config/warehouse_layout.yaml).
 
 Two kinds of layout:
-    source_map   an existing ROS occupancy map (yaml + pgm). The map is used as-is for Nav2 / AMCL and
-                 every occupied cell becomes a solid block in Gazebo, so the simulated lidar sees exactly
-                 what AMCL expects. Endpoints are listed explicitly.
+    source_map   an existing ROS occupancy map (yaml + pgm), e.g. the one uploaded to the web. The map is used
+                 as-is for Nav2 / AMCL and every occupied cell becomes a solid block in Gazebo, so the
+                 simulated lidar sees exactly what AMCL expects. Optional `shelves` rectangles turn the cells
+                 inside them into racks (detail above the lidar plane only). Optional `web.overlay` (written by
+                 scripts/sync_web_map.py) paints the web Map Editor's Zones, lanes and Endpoints on the floor.
     hand-made    walls / shelves / obstacles as boxes (the active config/warehouse_layout.yaml); the map is
                  rasterised from the same boxes.
 
@@ -117,19 +119,21 @@ def box_model(b: dict) -> str:
     </model>"""
 
 
-def map_obstacles_model(boxes_: list[dict], color: str) -> str:
-    """All map blocks in ONE static model / link (thousands of models would slow Gazebo down)."""
+def map_obstacles_model(boxes_: list[dict], color: str, name: str = "map_obstacles") -> str:
+    """All map blocks in ONE static model / link (thousands of models would slow Gazebo down).
+    A block may carry `z0` (bottom height) and its own `color`: walls are stacked skirt + upper part."""
     parts = []
     for i, b in enumerate(boxes_):
+        c = b.get("color", color)
         size = f"{b['sx']:.4f} {b['sy']:.4f} {b['sz']:.3f}"
-        pose = f"{b['x']:.4f} {b['y']:.4f} {b['sz'] / 2:.3f} 0 0 0"
+        pose = f"{b['x']:.4f} {b['y']:.4f} {b.get('z0', 0.0) + b['sz'] / 2:.3f} 0 0 0"
         parts.append(
             f'        <collision name="c{i}"><pose>{pose}</pose><geometry><box><size>{size}</size></box></geometry></collision>\n'
             f'        <visual name="v{i}"><pose>{pose}</pose><geometry><box><size>{size}</size></box></geometry>'
-            f"<material><ambient>{color}</ambient><diffuse>{color}</diffuse></material></visual>")
+            f"<material><ambient>{c}</ambient><diffuse>{c}</diffuse></material></visual>")
     body = "\n".join(parts)
     return f"""
-    <model name="map_obstacles">
+    <model name="{name}">
       <static>true</static>
       <link name="link">
 {body}
@@ -143,7 +147,36 @@ PAD_COLOR = {
     "OUTBOUND": "0.90 0.50 0.10 1",
     "CHARGING": "0.95 0.80 0.10 1",
     "PARKING": "0.45 0.45 0.50 1",
+    "MAINTENANCE": "0.25 0.55 0.95 1",
+    "INSPECTION": "0.20 0.80 0.50 1",
+    "RECOVERY": "0.98 0.70 0.15 1",
 }
+
+
+def hex_rgba(color: str) -> str:
+    """'#3279f9' -> '0.196 0.475 0.976 1' (SDF material)."""
+    r, g, b = (int(color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    return f"{r:.3f} {g:.3f} {b:.3f} 1"
+
+
+def tint(color: str, amount: float, base: str = "#d6d6d2") -> str:
+    """Opaque mix of `color` over the floor colour: SDF paint has no cheap transparency."""
+    c = [int(color[i:i + 2], 16) for i in (1, 3, 5)]
+    f = [int(base[i:i + 2], 16) for i in (1, 3, 5)]
+    r, g, b = (((1 - amount) * fv + amount * cv) / 255 for cv, fv in zip(c, f))
+    return f"{r:.3f} {g:.3f} {b:.3f} 1"
+
+
+# Same colours as the web Map Editor (web/src/shared/map/mapStyle.ts).
+WEB_ZONE_COLOR = {"KEEP_OUT": "#d93025", "SPEED": "#8430ce", "NO_STOP": "#e53935", "SINGLE_OCCUPANCY": "#f9ab00",
+                  "JUNCTION": "#3279f9"}
+WEB_ENDPOINT_COLOR = {"WAYPOINT": "#45474d", "CHARGER": "#0f8a99", "PARK": "#6a6a71"}
+WEB_EDGE_COLOR = {"BIDIRECTIONAL": "#3279f9", "ONE_WAY": "#3279f9"}
+PAD_COLOR.update({t: hex_rgba(c) for t, c in WEB_ENDPOINT_COLOR.items()})
+FLOOR = "#d6d6d2"
+FLOOR_JOINT = "#c4c4bf"
+WALL_SKIRT = "0.30 0.32 0.35 1"
+WALL_UPPER = "0.88 0.87 0.84 1"
 SAFETY_YELLOW = "0.95 0.78 0.05 1"
 RACK_UPRIGHT = "0.10 0.30 0.70 1"
 RACK_BEAM = "0.95 0.45 0.10 1"
@@ -189,7 +222,11 @@ def rack_model(shelf: dict) -> str:
     sx, sy, sz = shelf["sx"], shelf["sy"], shelf["sz"]
     levels = int(shelf.get("levels", 3))
     base_h = 0.45  # above the lidar plane: the map footprint == what the lidar sees
-    e = solid("base", (0, 0, base_h / 2), (sx, sy, base_h), RACK_BASE)
+    # solid_base false (source map): the base is drawn from the map cells instead, so nothing of the rack
+    # itself reaches below base_h and the lidar keeps seeing exactly the uploaded map.
+    solid_base = shelf.get("solid_base", True)
+    e = solid("base", (0, 0, base_h / 2), (sx, sy, base_h), RACK_BASE) if solid_base else ""
+    post_z0 = 0.0 if solid_base else base_h
 
     long_x = sx >= sy
     length, depth = (sx, sy) if long_x else (sy, sx)
@@ -200,7 +237,7 @@ def rack_model(shelf: dict) -> str:
         for side in (-1, 1):
             b = side * (depth / 2 - post / 2)
             x, y = (a, b) if long_x else (b, a)
-            e += solid(f"upright_{i}_{side}", (x, y, sz / 2), (post, post, sz), RACK_UPRIGHT)
+            e += solid(f"upright_{i}_{side}", (x, y, (post_z0 + sz) / 2), (post, post, sz - post_z0), RACK_UPRIGHT)
 
     deck_t = 0.03
     pitch = (sz - base_h) / levels
@@ -253,7 +290,8 @@ def floor_zone_model(zone: dict) -> str:
     z = 0.003 + zone.get("lift", 0.0)  # docking squares sit 2 mm above zone paint (no z-fighting)
     e = ""
     if "fill" in zone:
-        e += visual("fill", (0, 0, 0.001), (w, h, 0.002), zone["fill"])
+        # `lift` stacks overlapping paint (lane floor < zone fill < docking pad) without z-fighting.
+        e += visual("fill", (0, 0, 0.001 + zone.get("lift", 0.0)), (w, h, 0.002), zone["fill"])
     e += visual("n", (0, h / 2 - line / 2, z), (w, line, 0.002), color)
     e += visual("s", (0, -h / 2 + line / 2, z), (w, line, 0.002), color)
     e += visual("w", (-w / 2 + line / 2, 0, z), (line, h - 2 * line, 0.002), color)
@@ -286,11 +324,12 @@ def door_model(door: dict, size: dict) -> str:
     return static_model(f"door_{door['name']}", e, *inner)
 
 
-def marker_model(code: str, x: float, y: float, endpoint_type: str = "STORAGE") -> str:
+def marker_model(code: str, x: float, y: float, endpoint_type: str = "STORAGE", size: float = 0.6) -> str:
     """Painted docking square on the floor at an endpoint (visual only): a coloured outline by type."""
     color = PAD_COLOR.get(endpoint_type, PAD_COLOR["STORAGE"])
-    return floor_zone_model({"name": f"pad_{code}", "x0": x - 0.3, "y0": y - 0.3, "x1": x + 0.3, "y1": y + 0.3,
-                             "line": 0.05, "line_color": color, "lift": 0.002})
+    half = size / 2
+    return floor_zone_model({"name": f"pad_{code}", "x0": x - half, "y0": y - half, "x1": x + half, "y1": y + half,
+                             "line": min(0.05, size / 8), "line_color": color, "lift": 0.004})
 
 
 def world_sdf(name: str, models: str, center: tuple[float, float], span: float) -> str:
@@ -360,6 +399,101 @@ def world_sdf(name: str, models: str, center: tuple[float, float], span: float) 
 
 # --------------------------------------------------------------------------- source-map layout
 
+def paint_segment(name: str, a: tuple, b: tuple, width: float, z: float, color: str, extend: bool = True) -> str:
+    """Floor paint stripe from a to b (visual only, 1 mm thick). `extend`: lengthened by width/2 at both ends so
+    polylines and outlines close at the corners; off for a lane band, whose ends are square at the lane ends."""
+    length = math.hypot(b[0] - a[0], b[1] - a[1])
+    if length < 1e-6:
+        return ""
+    yaw = math.atan2(b[1] - a[1], b[0] - a[0])
+    size_x = length + width if extend else length
+    return (f'        <visual name="{name}"><pose>{(a[0] + b[0]) / 2:.4f} {(a[1] + b[1]) / 2:.4f} {z:.4f} 0 0 {yaw:.4f}</pose>'
+            f"<geometry><box><size>{size_x:.4f} {width:.4f} 0.0010</size></box></geometry>{_material(color)}</visual>\n")
+
+
+def floor_model(x0: float, y0: float, size_x: float, size_y: float, grid: float = 0.5) -> str:
+    """Concrete floor over the map area with a joint every `grid` metres, aligned to map (0, 0): the same
+    0.5 m grid as the map plot, so a coordinate read in Gazebo matches the web."""
+    e = visual("slab", (x0 + size_x / 2, y0 + size_y / 2, 0.0005), (size_x, size_y, 0.001), hex_rgba(FLOOR))
+    joint = hex_rgba(FLOOR_JOINT)
+    for i in range(math.ceil(x0 / grid), math.floor((x0 + size_x) / grid) + 1):
+        e += paint_segment(f"jx{i}", (i * grid, y0), (i * grid, y0 + size_y), 0.01, 0.0015, joint)
+    for j in range(math.ceil(y0 / grid), math.floor((y0 + size_y) / grid) + 1):
+        e += paint_segment(f"jy{j}", (x0, j * grid), (x0 + size_x, j * grid), 0.01, 0.0015, joint)
+    return static_model("floor", e)
+
+
+def web_overlay_models(overlay: dict) -> str:
+    """Zones, lanes (Edges) and Endpoints of the web Map Editor painted on the floor, web colours.
+    Everything is visual only and a few mm high: far below the lidar plane, it never changes the scan."""
+    e = ""
+    order = ["JUNCTION", "SPEED", "NO_STOP", "SINGLE_OCCUPANCY", "KEEP_OUT"]  # web ZONE_ORDER: later paints on top
+    zones = sorted((z for z in overlay.get("zones", []) if z.get("isActive", True)),
+                   key=lambda z: order.index(z["zoneType"]) if z["zoneType"] in order else 0)
+    for i, z in enumerate(zones):
+        ring = [tuple(p[:2]) for p in z["geometry"]["coordinates"][0]]
+        color = WEB_ZONE_COLOR.get(z["zoneType"], "#6a6a71")
+        xs, ys = [p[0] for p in ring], [p[1] for p in ring]
+        corners = {(round(x, 4), round(y, 4)) for x, y in ring}
+        is_rect = len(corners) == 4 and all(
+            (round(x, 4) in (round(min(xs), 4), round(max(xs), 4))) and (round(y, 4) in (round(min(ys), 4), round(max(ys), 4)))
+            for x, y in corners)
+        lift = i * 0.0002
+        if is_rect:  # axis-aligned rectangle: tinted fill like the web (other polygons: outline only)
+            amount = 0.35 if z["zoneType"] == "KEEP_OUT" else 0.18
+            e += visual(f"zone_{i}_fill", ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, 0.0025 + lift),
+                        (max(xs) - min(xs), max(ys) - min(ys), 0.001), tint(color, amount, FLOOR))
+        for k in range(len(ring) - 1):
+            e += paint_segment(f"zone_{i}_e{k}", ring[k], ring[k + 1], 0.025, 0.0040 + lift, hex_rgba(color))
+
+    # Lanes like the web (laneGlyphs.ts): a tinted band as wide as the lane with chevrons; one-way = one row in the
+    # middle, two-way = a dashed centre line and two opposite rows (forward on the right of the drawing direction).
+    for i, edge in enumerate(overlay.get("edges", [])):
+        pts = [tuple(p[:2]) for p in edge["geometry"]["coordinates"]]
+        hex_color = WEB_EDGE_COLOR.get(edge["direction"], "#3279f9") if edge.get("isActive", True) else "#a3adb9"
+        color = hex_rgba(hex_color)
+        width = float(edge.get("widthMeters") or 1.0)
+        one_way = edge["direction"] == "ONE_WAY"
+        for k in range(len(pts) - 1):
+            (ax, ay), (bx, by) = pts[k], pts[k + 1]
+            length = math.hypot(bx - ax, by - ay)
+            if length < 1e-6:
+                continue
+            ux, uy = (bx - ax) / length, (by - ay) / length
+            rx, ry = uy, -ux  # right of the drawing direction (map frame, y up)
+            e += paint_segment(f"lane_{i}_{k}_band", pts[k], pts[k + 1], width, 0.0050, tint(hex_color, 0.30, FLOOR),
+                               extend=False)
+            rows = [(0.0, 1, width * 0.55, width * 1.6)] if one_way else \
+                [(width / 4, 1, width * 0.3, width * 1.1), (-width / 4, -1, width * 0.3, width * 1.1)]
+            if not one_way:
+                for n in range(int(length / 0.12)):
+                    if n % 2 == 0:
+                        s0, s1 = n * 0.12, min(length, n * 0.12 + 0.07)
+                        e += paint_segment(f"lane_{i}_{k}_d{n}", (ax + ux * s0, ay + uy * s0), (ax + ux * s1, ay + uy * s1),
+                                           0.012, 0.0058, color)
+            for r, (off, sign, size, spacing) in enumerate(rows):
+                stations = [length / 2] if length < spacing else \
+                    [spacing / 2 + n * spacing for n in range(int((length - spacing / 2) / spacing) + 1)]
+                for n, s in enumerate(stations):
+                    cx, cy = ax + ux * s + rx * off, ay + uy * s + ry * off
+                    tip = (cx + sign * ux * size * 0.18, cy + sign * uy * size * 0.18)
+                    for side in (-1, 1):
+                        back = (tip[0] - sign * ux * size * 0.5 + rx * side * size * 0.5,
+                                tip[1] - sign * uy * size * 0.5 + ry * side * size * 0.5)
+                        e += paint_segment(f"lane_{i}_{k}_c{r}_{n}{side}", back, tip, max(0.015, size * 0.12), 0.0062, color)
+
+    for i, ep in enumerate(overlay.get("endpoints", [])):
+        color = hex_rgba(WEB_ENDPOINT_COLOR.get(ep["endpointType"], "#45474d") if ep.get("isEnabled", True) else "#a3adb9")
+        x, y, half = ep["x"], ep["y"], 0.12
+        square = [(x - half, y - half), (x + half, y - half), (x + half, y + half), (x - half, y + half), (x - half, y - half)]
+        for k in range(4):
+            e += paint_segment(f"ep_{i}_{k}", square[k], square[k + 1], 0.02, 0.0070, color)
+        # Heading tick: the docking yaw set on the web.
+        tip = (x + 0.12 * math.cos(ep["yaw"]), y + 0.12 * math.sin(ep["yaw"]))
+        e += paint_segment(f"ep_{i}_yaw", (x, y), tip, 0.025, 0.0075, color)
+    return static_model("web_overlay", e) if e else ""
+
+
 def render_from_source_map(layout: dict, layout_dir: Path) -> dict[Path, bytes]:
     map_yaml_path = (PKG_ROOT / layout["source_map"]).resolve()
     meta = yaml.safe_load(map_yaml_path.read_text(encoding="utf-8"))
@@ -371,21 +505,73 @@ def render_from_source_map(layout: dict, layout_dir: Path) -> dict[Path, bytes]:
     occupied_thresh = float(meta.get("occupied_thresh", 0.65))
     if int(meta.get("negate", 0)) != 0:
         raise ValueError("negate: 1 maps are not supported")
+    if len(meta["origin"]) > 2 and abs(float(meta["origin"][2])) > 1e-9:
+        raise ValueError("maps with a rotated origin (yaw != 0) are not supported")
     # map_server (trinary, negate 0): occupancy = (255 - value) / 255 > occupied_thresh
     threshold = math.ceil(255 * (1 - occupied_thresh))
-    height_m = float(layout.get("obstacle_height", 1.0))
+    wall_h = float(layout.get("wall_height", layout.get("obstacle_height", 1.0)))
+    skirt_h = min(0.30, wall_h)  # dark skirting up to just above the lidar plane, light wall above
 
-    blocks = []
-    for x0, y0, x1, y1 in occupied_rectangles(width, height, pixels, threshold):
-        # PGM row 0 is the top (max y)
-        wx0, wx1 = ox + x0 * res, ox + x1 * res
-        wy0, wy1 = oy + (height - y1) * res, oy + (height - y0) * res
-        blocks.append({"x": (wx0 + wx1) / 2, "y": (wy0 + wy1) / 2, "sx": wx1 - wx0, "sy": wy1 - wy0, "sz": height_m})
+    # Split the occupied cells: inside a `shelves` rectangle -> that rack, otherwise -> wall. Only the colour /
+    # the detail above differ: every occupied cell stays a solid block from the floor up.
+    shelves = layout.get("shelves", [])
+    wall_px = bytearray(pixels)
+    shelf_px = [bytearray([FREE]) * len(pixels) for _ in shelves]
+    for row in range(height):
+        cy = oy + (height - row - 0.5) * res
+        for col in range(width):
+            i = row * width + col
+            if pixels[i] >= threshold:
+                continue
+            cx = ox + (col + 0.5) * res
+            for k, s in enumerate(shelves):
+                if s["x0"] <= cx <= s["x1"] and s["y0"] <= cy <= s["y1"]:
+                    wall_px[i], shelf_px[k][i] = FREE, OCCUPIED
+                    break
 
-    endpoints = layout["endpoints"]
-    models = map_obstacles_model(blocks, WALL_COLOR)
-    models += "".join(marker_model(e["code"], e["x"], e["y"]) for e in endpoints)
+    def cell_blocks(px: bytes) -> list[dict]:
+        out = []
+        for x0, y0, x1, y1 in occupied_rectangles(width, height, px, threshold):
+            # PGM row 0 is the top (max y)
+            wx0, wx1 = ox + x0 * res, ox + x1 * res
+            wy0, wy1 = oy + (height - y1) * res, oy + (height - y0) * res
+            out.append({"x": (wx0 + wx1) / 2, "y": (wy0 + wy1) / 2, "sx": wx1 - wx0, "sy": wy1 - wy0})
+        return out
+
+    walls = []
+    for b in cell_blocks(wall_px):
+        walls.append({**b, "sz": skirt_h, "color": WALL_SKIRT})
+        if wall_h > skirt_h:
+            walls.append({**b, "z0": skirt_h, "sz": wall_h - skirt_h, "color": WALL_UPPER})
+    models = map_obstacles_model(walls, WALL_COLOR, "map_walls")
+    n_blocks = len(walls)
+    for k, s in enumerate(shelves):
+        base = [{**b, "sz": 0.45, "color": RACK_BASE} for b in cell_blocks(shelf_px[k])]
+        if not base:
+            print(f"warning: shelf {s['code']} has no occupied cell inside its rectangle", file=sys.stderr)
+        n_blocks += len(base)
+        models += map_obstacles_model(base, RACK_BASE, f"rack_base_{s['code']}")
+        models += rack_model({"code": s["code"], "x": (s["x0"] + s["x1"]) / 2, "y": (s["y0"] + s["y1"]) / 2,
+                              "sx": s["x1"] - s["x0"], "sy": s["y1"] - s["y0"], "sz": s.get("sz", 1.0),
+                              "levels": s.get("levels", 2), "solid_base": False})
+
     size_x, size_y = width * res, height * res
+    models += floor_model(ox, oy, size_x, size_y)
+    endpoints = list(layout.get("endpoints", []))
+    models += "".join(marker_model(e["code"], e["x"], e["y"]) for e in endpoints)
+
+    overlay_rel = layout.get("web", {}).get("overlay")
+    overlay = None
+    if overlay_rel:
+        overlay_path = PKG_ROOT / overlay_rel
+        if overlay_path.is_file():
+            overlay = json.loads(overlay_path.read_text(encoding="utf-8"))
+            models += web_overlay_models(overlay)
+            endpoints += [{"code": e["code"], "name": e["name"], "type": e["endpointType"],
+                           "x": e["x"], "y": e["y"], "yaw": e["yaw"]}
+                          for e in overlay.get("endpoints", []) if e.get("isEnabled", True)]
+        else:
+            print(f"note: {overlay_rel} not found (run scripts/sync_web_map.py): no web paint")
     world = world_sdf(layout["name"], models, (ox + size_x / 2, oy + size_y / 2), max(size_x, size_y))
 
     map_meta = {
@@ -397,7 +583,10 @@ def render_from_source_map(layout: dict, layout_dir: Path) -> dict[Path, bytes]:
         "occupied_thresh": occupied_thresh,
         "free_thresh": float(meta.get("free_thresh", 0.25)),
     }
-    print(f"source map {map_yaml_path.name}: {width}x{height} px @ {res} m -> {len(blocks)} Gazebo blocks")
+    print(f"source map {map_yaml_path.name}: {width}x{height} px @ {res} m -> {n_blocks} Gazebo blocks, "
+          f"{len(shelves)} racks" + (f", web overlay {overlay.get('mapVersionCode')}: {len(overlay.get('zones', []))} zones, "
+                                     f"{len(overlay.get('edges', []))} lanes, {len(overlay.get('endpoints', []))} endpoints"
+                                     if overlay else ""))
     return {
         WORLD_OUT: world.encode(),
         MAP_PGM_OUT: pgm_bytes,
@@ -469,14 +658,17 @@ def render_hand_made(layout: dict) -> dict[Path, bytes]:
             {**obstacle, "color": "0.4 0.3 0.2 1"})
     models += "".join(floor_zone_model(z) for z in layout.get("floor_zones", []))
     models += "".join(door_model(d, layout["size"]) for d in layout.get("doors", []))
-    models += "".join(marker_model(s["code"], s["endpoint"]["x"], s["endpoint"]["y"]) for s in layout["shelves"])
-    models += "".join(marker_model(e["code"], e["x"], e["y"], e["type"]) for e in layout.get("extra_endpoints", []))
+    pad = layout.get("pad_size", 0.6)
+    # A shelf without `endpoint` is only an obstacle: its docking stop is set up later (web Map Editor).
+    docked = [s for s in layout["shelves"] if "endpoint" in s]
+    models += "".join(marker_model(s["code"], s["endpoint"]["x"], s["endpoint"]["y"], size=pad) for s in docked)
+    models += "".join(marker_model(e["code"], e["x"], e["y"], e["type"], pad) for e in layout.get("extra_endpoints", []))
     size_x, size_y = layout["size"]["x"], layout["size"]["y"]
     pgm, meta = occupancy_map(layout)
     endpoints = [
         {"code": s["code"], "name": s["name"], "endpointType": "STORAGE",
          "x": s["endpoint"]["x"], "y": s["endpoint"]["y"], "yaw": s["endpoint"]["yaw"]}
-        for s in layout["shelves"]
+        for s in docked
     ] + [
         {"code": e["code"], "name": e["name"], "endpointType": e["type"], "x": e["x"], "y": e["y"], "yaw": e["yaw"]}
         for e in layout.get("extra_endpoints", [])
