@@ -94,6 +94,9 @@ topic đó vào Nav2 safety. LEFT/RIGHT không wire Nav2 Phase 0.5.
 | `/plan` | `nav_msgs/msg/Path` | planner_server → RViz / clients | **stable (Phase 0)** |
 | `/local_plan` | `nav_msgs/msg/Path` | controller_server → RViz | debug |
 | `/cmd_vel_nav` | `geometry_msgs/msg/Twist` | (unused in Phase 0) | **not used** — controller → `/cmd_vel` |
+| `/cmd_vel_smoothed` | `geometry_msgs/msg/Twist` | velocity_smoother → collision_monitor | **code default pipeline ON** (conflicts with Phase 0 freeze text above — reported, not resolved) |
+| `/cmd_vel_safe` | `geometry_msgs/msg/Twist` | collision_monitor → authority gate | **opt-in** (`enable_authority_gate:=true`) |
+| `/traffic/authority_ok` | `std_msgs/msg/Bool` | SafetySupervisor → gate | **opt-in** Active Mode |
 | `/particle_cloud` | `nav2_msgs/msg/ParticleCloud` | AMCL → RViz | debug |
 | `/amcl_pose` | `geometry_msgs/msg/PoseWithCovarianceStamped` | AMCL → localization clients | **stable (Phase 0)** |
 | `/local_costmap/costmap` | `nav2_msgs/msg/Costmap` | controller_server → RViz | debug |

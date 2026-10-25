@@ -3,9 +3,20 @@
 > Đây là **trạng thái thực tế**, không phải roadmap. Chỉ tick `[x]` sau khi có evidence trên robot thật.
 > Mỗi session vibe coding nên đọc file này trước.
 
-**Last reviewed:** 2026-10-20  
+**Last reviewed:** 2026-10-25  
 **Operator:** waro  
 **Robot hostname:** `warotrans`
+
+## Traffic Active (reservation-gated) — 2026-10-25
+
+- [x] Code + unit tests for Traffic Client / AuthorityStore / SafetySupervisor /
+      cmd_vel_authority_gate (defaults: `traffic_mode:=legacy`, gate off).
+- [x] Backend Active publisher/ingress + MQTT contract extensions (default
+      `Traffic:Mode=Shadow`). Tag `pre-traffic-active`.
+- [ ] Live Pi SSH audit from this agent — **BLOCKED** (no key).
+- [ ] Gazebo six scenarios — **NOT_RUN**.
+- [ ] Operator motion tests — **BLOCKED** until approval.
+- Docs: warotrans-system `docs/traffic/ROBOT-INTEGRATION.md`, ADR 0010.
 
 ## VERIFIED
 

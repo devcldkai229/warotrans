@@ -129,6 +129,13 @@ class RobotGatewayNode(Node):
         self.declare_parameter("grant_loss_timeout_sec", 3.0)
         self.declare_parameter("adjust_edges_service", "route_server/DynamicEdgesScorer/adjust_edges")
         self.declare_parameter("compute_route_action", "compute_route")
+        # Traffic mode: "legacy" (RouteEnforcer + NAVIGATE route grant, mặc định) hoặc "active"
+        # (segment motion authority — TrafficClient). Chỉ là param; legacy giữ nguyên hành vi cũ.
+        self.declare_parameter("traffic_mode", "legacy")
+        self.declare_parameter("authority_loss_timeout_sec", 3.0)
+        self.declare_parameter("follow_path_action", "follow_path")
+        self.declare_parameter("enable_authority_gate", False)  # gate is a separate launch node
+        self.declare_parameter("authority_state_path", "")  # "" = file tạm mặc định của AuthorityStore
 
         self._robot_code = _env_or(self._str_param("robot_code"), "WARO_ROBOT_CODE")
         self._mqtt_host = _env_or(self._str_param("mqtt_host"), "WARO_MQTT_HOST")
@@ -175,6 +182,15 @@ class RobotGatewayNode(Node):
             qos_profile_sensor_data,
         )
 
+        self._traffic_mode = self._str_param("traffic_mode").strip().lower()
+        if self._traffic_mode not in ("legacy", "active"):
+            raise ValueError(f"traffic_mode must be 'legacy' or 'active', got {self._traffic_mode!r}")
+        self._authority_loss_timeout = self._float_param("authority_loss_timeout_sec")
+        if self._authority_loss_timeout <= 0:
+            raise ValueError("authority_loss_timeout_sec must be > 0")
+        self._enable_authority_gate = bool(self.get_parameter("enable_authority_gate").get_parameter_value().bool_value)
+        self._traffic_client = None
+
         navigator = self._setup_nav2()
         route_enforcer = self._setup_route_enforcer()
 
@@ -209,6 +225,9 @@ class RobotGatewayNode(Node):
             on_message=self._on_mqtt_message,
         )
 
+        if self._traffic_mode == "active":
+            self._traffic_client = self._setup_traffic_client()
+
         self._commands = build_command_stack(
             robot_code=self._robot_code,
             publisher=_MqttCommandEvents(self),
@@ -224,6 +243,9 @@ class RobotGatewayNode(Node):
             ledger_capacity=ledger_size,
             external_goal_active=lambda: self._nav_tracker.has_active_goal,
             route_enforcer=route_enforcer,
+            traffic_mode=self._traffic_mode,
+            traffic_client=self._traffic_client,
+            expected_graph_hash=self._str_param("route_graph_hash").strip() or None,
         )
 
         self._teleop: Optional[TeleopController] = None
@@ -371,6 +393,112 @@ class RobotGatewayNode(Node):
             f"corridor_buffer={config.corridor_buffer_m}m"
         )
         return enforcer
+
+    def _setup_traffic_client(self):
+        """Active Mode: TrafficClient + Nav2 FollowPath segment executor + SafetySupervisor."""
+        from warotrans_fleet.authority_store import AuthorityStore
+        from warotrans_fleet.nav2_route_client import try_create_nav2_route_client
+        from warotrans_fleet.route_grant import load_graph_edges
+        from warotrans_fleet.safety_supervisor import SafetySupervisor
+        from warotrans_fleet.segment_executor import UnavailableSegmentExecutor
+        from warotrans_fleet.traffic_client import TrafficClient
+
+        graph_path = self._str_param("route_graph").strip()
+        all_edge_ids: list[int] = []
+        if graph_path:
+            all_edge_ids = [e.edge_id for e in load_graph_edges(graph_path)]
+        port = try_create_nav2_route_client(
+            self,
+            adjust_edges_service=self._str_param("adjust_edges_service"),
+            compute_route_action=self._str_param("compute_route_action"),
+        )
+        try:
+            from warotrans_fleet.nav2_segment_executor import Nav2SegmentExecutor
+
+            executor = Nav2SegmentExecutor(
+                node=self,
+                route_port=port,
+                follow_path_action=self._str_param("follow_path_action") or "follow_path",
+                log=lambda m: self.get_logger().info(m),
+            )
+            self.get_logger().info("Active Mode: Nav2SegmentExecutor ready")
+        except Exception as exc:  # noqa: BLE001
+            self.get_logger().error(f"Nav2SegmentExecutor unavailable ({exc!r}); using fail-safe rejector")
+            executor = UnavailableSegmentExecutor()
+
+        state_path = self._str_param("authority_state_path").strip() or None
+        store = AuthorityStore(state_path)
+        client = TrafficClient(
+            store=store,
+            route_port=port,
+            executor=executor,
+            progress_publisher=self._publish_traffic_progress,
+            pose_provider=self._traffic_pose,
+            all_edge_ids=all_edge_ids,
+            log=lambda m: self.get_logger().info(m),
+            localization_ok=lambda: self._last_localization == "LOCALIZED",
+            frame_id=self._map_frame,
+        )
+        self._authority_store = store
+        from warotrans_fleet.safety_supervisor import SafetyConfig
+
+        self._safety_supervisor = SafetySupervisor(
+            config=SafetyConfig(authority_loss_timeout_sec=float(self._authority_loss_timeout)),
+            authority_provider=lambda: store.active,
+            motion_expected=lambda: client.state == "EXECUTING",
+            pose_provider=lambda: (p[:2] if (p := self._traffic_pose()) else None),
+            localization_ok_provider=lambda: self._last_localization == "LOCALIZED",
+            last_authority_at_provider=lambda: getattr(client, "last_authority_at", None),
+            on_fault=lambda code, detail: client.fault(code, detail),
+            on_authority_ok=self._publish_authority_ok,
+        )
+        self.create_timer(0.05, self._on_safety_supervisor_tick)
+        self.get_logger().info(
+            f"traffic_mode=active: TrafficClient+SafetySupervisor ready "
+            f"authority_loss_timeout={self._authority_loss_timeout}s "
+            f"enable_authority_gate={self._enable_authority_gate}"
+        )
+        return client
+
+    def _publish_authority_ok(self, ok: bool) -> None:
+        from std_msgs.msg import Bool
+
+        pub = getattr(self, "_authority_ok_pub", None)
+        if pub is None:
+            self._authority_ok_pub = self.create_publisher(Bool, "/traffic/authority_ok", 10)
+            pub = self._authority_ok_pub
+        msg = Bool()
+        msg.data = bool(ok)
+        pub.publish(msg)
+
+    def _on_safety_supervisor_tick(self) -> None:
+        supervisor = getattr(self, "_safety_supervisor", None)
+        if supervisor is None:
+            return
+        try:
+            supervisor.tick()
+        except Exception as exc:  # noqa: BLE001
+            self.get_logger().warning(f"SafetySupervisor tick failed: {exc!r}")
+            self._publish_authority_ok(False)
+
+    def _traffic_pose(self) -> Optional[tuple[float, float, float]]:
+        pose, status = self._lookup_map_pose()
+        if status != "LOCALIZED" or pose is None:
+            return None
+        return float(pose["x"]), float(pose["y"]), float(pose["yaw"])
+
+    def _publish_traffic_progress(self, payload: dict[str, Any]) -> None:
+        import uuid
+
+        body = {
+            "schemaVersion": 1,
+            "messageId": str(uuid.uuid4()),
+            "robotCode": self._robot_code,
+            "bootId": self._seq.boot_id,
+            **payload,
+        }
+        if not self.mqtt.publish(self.topic("traffic_progress"), body, qos=1):
+            self.get_logger().warning("traffic_progress queue full; message dropped")
 
     def _route_pose_xy(self) -> Optional[tuple[float, float]]:
         pose, status = self._lookup_map_pose()

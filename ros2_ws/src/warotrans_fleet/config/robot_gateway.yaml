@@ -56,3 +56,13 @@ robot_gateway:
     human_confirm_debounce_ms: 50
     human_confirm_min_interval_ms: 300
     human_confirm_resend_sec: 5.0
+    # --- Traffic mode (Active Mode: segment motion authority, ADR 0009/0010) ---
+    # legacy = RouteEnforcer + NAVIGATE route grant (m?c ??nh, hành vi c?). active = TrafficClient.
+    # CH?A b?t active trên robot th?t: ch?a có SegmentExecutor ROS và ch?a có handler EXTEND/RENEW/REVOKE.
+    traffic_mode: "legacy"
+    # Không nh?n authority m?i trong kho?ng này khi ?ang ch?y ? AUTHORITY_LOST (SafetySupervisor).
+    authority_loss_timeout_sec: 3.0
+    # Ch? khai báo; cmd_vel_authority_gate là node riêng (/cmd_vel_safe + /traffic/authority_ok ? /cmd_vel).
+    enable_authority_gate: false
+    # "" = file t?m m?c ??nh (warotrans_authority_state.json trong th? m?c temp).
+    authority_state_path: ""

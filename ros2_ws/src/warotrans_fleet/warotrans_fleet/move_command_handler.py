@@ -43,6 +43,15 @@ from warotrans_fleet.command_contract import (
 )
 from warotrans_fleet.route_enforcer import RouteEnforcer
 from warotrans_fleet.command_router import AckDecision, CommandSession, LogSink
+
+try:
+    from warotrans_fleet.authority_store import parse_authority
+    from warotrans_fleet.command_contract import REASON_AUTHORITY_REQUIRED
+    from warotrans_fleet.traffic_client import TrafficClient
+except ImportError:  # pragma: no cover
+    parse_authority = None  # type: ignore
+    REASON_AUTHORITY_REQUIRED = "AUTHORITY_REQUIRED"
+    TrafficClient = None  # type: ignore
 from warotrans_fleet.navigator import (
     STATUS_ABORTED,
     STATUS_CANCELED,
@@ -109,6 +118,9 @@ class MoveCommandHandler:
         progress_log_interval_sec: float = 5.0,
         external_goal_active: Callable[[], bool] = lambda: False,
         route_enforcer: Optional[RouteEnforcer] = None,
+        traffic_mode: str = "legacy",
+        traffic_client: Optional["TrafficClient"] = None,
+        expected_graph_hash: Optional[str] = None,
     ) -> None:
         self._navigator = navigator
         self._localization_provider = localization_provider
@@ -123,6 +135,9 @@ class MoveCommandHandler:
         self._progress_log_interval_sec = float(progress_log_interval_sec)
         self._external_goal_active = external_goal_active
         self._route_enforcer = route_enforcer
+        self._traffic_mode = (traffic_mode or "legacy").strip().lower()
+        self._traffic_client = traffic_client
+        self._expected_graph_hash = expected_graph_hash
         self._active: Optional[_ActiveMove] = None
         self._state = nav_state.NavigationStateMachine(
             clock=clock,
@@ -146,6 +161,9 @@ class MoveCommandHandler:
 
     def handle(self, command: CommandEnvelope, session: CommandSession) -> AckDecision:
         with self._lock:
+            if self._traffic_mode == "active" and self._traffic_client is not None and parse_authority is not None:
+                return self._handle_active(command, session)
+
             if self._active is not None:
                 raise CommandRejected(
                     REASON_BUSY, f"command {self._active.command_id} is still active; one MOVE at a time"
@@ -197,6 +215,22 @@ class MoveCommandHandler:
             self._active = move
             self._state.start()
             return AckDecision.accept(after_ack=lambda: self._send_goal(move))
+
+    def _handle_active(self, command: CommandEnvelope, session: CommandSession) -> AckDecision:
+        del session
+        if "authority" not in command.payload or command.payload.get("authority") is None:
+            raise CommandRejected(REASON_AUTHORITY_REQUIRED, "active mode requires payload.authority")
+        authority = parse_authority(command.payload, command_id=command.command_id)
+        assert self._traffic_client is not None
+        decision = self._traffic_client.start_navigate(
+            command,
+            authority,
+            expected_map_version_code=self._robot_map_version_code,
+            expected_graph_hash=self._expected_graph_hash,
+        )
+        if not decision.accepted:
+            raise CommandRejected(decision.reason_code or REASON_AUTHORITY_REQUIRED, decision.message or "rejected")
+        return AckDecision.accept(message=decision.message)
 
     def tick(self) -> None:
         with self._lock:
