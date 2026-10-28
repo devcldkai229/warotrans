@@ -77,12 +77,30 @@ def parse_route_grant(payload: Mapping[str, Any]) -> Optional[RouteGrant]:
     return RouteGrant(graph_hash=graph_hash.strip(), edge_ids=tuple(edge_ids))
 
 
+def read_embedded_graph_hash(graph_path: str) -> Optional[str]:
+    """``properties.graphHash`` written by the backend route-graph export (FeatureCollection level)."""
+    try:
+        data = json.loads(Path(graph_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    props = data.get("properties") if isinstance(data, dict) else None
+    value = props.get("graphHash") if isinstance(props, Mapping) else None
+    return value.strip().lower() if isinstance(value, str) and value.strip() else None
+
+
 def load_graph_hash(*, explicit: Optional[str], graph_path: Optional[str]) -> Optional[str]:
-    """Resolve expected graph hash from param or sidecar ``*.sha256`` / ``*.hash`` next to the geojson."""
+    """Expected graph hash: param, else the hash the backend embedded in the GeoJSON, else a sidecar file.
+
+    Never a hash of the file bytes: the backend hashes its canonical compile input, so a byte hash can never
+    match and would reject every grant (audit G3). ``None`` means "unknown" — Active Mode then refuses grants.
+    """
     if explicit and explicit.strip():
         return explicit.strip().lower()
     if not graph_path:
         return None
+    embedded = read_embedded_graph_hash(graph_path)
+    if embedded:
+        return embedded
     path = Path(graph_path)
     for suffix in (".sha256", ".hash"):
         # Prefer route_graph.geojson.sha256 then route_graph.sha256
@@ -94,9 +112,6 @@ def load_graph_hash(*, explicit: Optional[str], graph_path: Optional[str]) -> Op
             if candidate.is_file():
                 text = candidate.read_text(encoding="utf-8").strip().split()[0]
                 return text.lower()
-    if path.is_file():
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        return digest.lower()
     return None
 
 

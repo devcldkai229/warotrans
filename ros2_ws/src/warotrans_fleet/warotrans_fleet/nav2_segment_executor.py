@@ -112,8 +112,14 @@ class Nav2SegmentExecutor:
             ticket.finished = True
             return ticket
 
-        # Build a sparse path from route_port geometry when available; otherwise empty path
-        # (controller may reject — reported as ABORTED).
+        # Never drive a gap: an edge without geometry would be bridged by a straight line (audit G2).
+        missing = [e for e in edge_ids if not self._edge_points(int(e))]
+        if missing:
+            self._log(f"[Nav2SegmentExecutor] no geometry for edges {missing}; refusing FollowPath")
+            callbacks.on_result(SegmentResult(RESULT_ABORTED, "UNKNOWN_EDGE"))
+            ticket.finished = True
+            return ticket
+
         path_msg = self._build_path_msg(list(edge_ids))
         goal = self._FollowPath.Goal()
         goal.path = path_msg
@@ -184,6 +190,17 @@ class Nav2SegmentExecutor:
         if callbacks is not None:
             callbacks.on_result(SegmentResult(status, detail))
 
+    def _edge_points(self, edge_id: int) -> list[tuple[float, float]]:
+        if edge_id in self._edge_poly:
+            return list(self._edge_poly[edge_id])
+        get_poly = getattr(self._route_port, "edge_polyline", None)
+        if callable(get_poly):
+            try:
+                return list(get_poly(edge_id) or [])
+            except Exception:  # noqa: BLE001
+                return []
+        return []
+
     def _build_path_msg(self, edge_ids: list[int]) -> Any:
         from geometry_msgs.msg import PoseStamped
         from nav_msgs.msg import Path
@@ -191,19 +208,8 @@ class Nav2SegmentExecutor:
         path = Path()
         path.header.frame_id = "map"
         path.header.stamp = self._node.get_clock().now().to_msg()
-        get_poly = getattr(self._route_port, "edge_polyline", None)
 
-        def _points(eid: int) -> list[tuple[float, float]]:
-            if eid in self._edge_poly:
-                return list(self._edge_poly[eid])
-            if callable(get_poly):
-                try:
-                    return list(get_poly(eid) or [])
-                except Exception:  # noqa: BLE001
-                    return []
-            return []
-
-        for x, y, yaw in densify_path([_points(eid) for eid in edge_ids]):
+        for x, y, yaw in densify_path([self._edge_points(eid) for eid in edge_ids]):
             ps = PoseStamped()
             ps.header = path.header
             ps.pose.position.x = x

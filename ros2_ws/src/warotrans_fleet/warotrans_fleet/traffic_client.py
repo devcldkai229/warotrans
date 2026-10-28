@@ -25,6 +25,7 @@ Quy tắc an toàn:
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -86,6 +87,9 @@ STATE_FAULTED = "FAULTED"
 _INTENT_REVOKE = "REVOKE"
 _INTENT_CANCEL = "CANCEL"
 
+# Consecutive graph edges share a node exactly (GeoJSON rounds to 0.1 mm); anything larger is a gap.
+_CONTIGUITY_TOLERANCE_M = 0.005
+
 
 @dataclass(frozen=True)
 class TrafficDecision:
@@ -119,7 +123,13 @@ class TrafficClient:
         segment_goal_resolver: Optional[Callable[[Authority], Optional[Pose2D]]] = None,
         localization_ok: Callable[[], bool] = lambda: True,
         frame_id: str = "map",
+        edge_endpoints: Optional[Mapping[int, tuple[tuple[float, float], tuple[float, float]]]] = None,
+        require_graph_hash: bool = False,
     ) -> None:
+        # edge id → (start, end) of the loaded graph: unknown ids and non-contiguous paths are refused (audit G2).
+        self._edge_endpoints = dict(edge_endpoints or {})
+        # Without a graph hash the robot cannot tell its file matches the backend's ids (audit G1).
+        self._require_graph_hash = require_graph_hash
         self._store = store
         self._route_port = route_port
         self._executor = executor
@@ -259,12 +269,16 @@ class TrafficClient:
                 REASON_MAP_VERSION_MISMATCH,
                 f"authority map {authority.map_version_code!r} != robot map {expected_map_version_code!r}",
             )
-        if expected_graph_hash and authority.graph_hash.lower() != expected_graph_hash.strip().lower():
-            return _reject(REASON_ROUTE_GRAPH_MISMATCH, "authority.graphHash != loaded graph hash")
+        graph_check = self._check_graph_hash(authority.graph_hash, expected_graph_hash)
+        if graph_check is not None:
+            return graph_check
         if authority.expected_path_hash() != authority.path_hash:
             return _reject(REASON_PATH_HASH_MISMATCH, "authority.pathHash != sha256(graphHash|edgeIds)")
         if not authority.segment_edge_ids:
             return _reject(REASON_ROUTE_NOT_AUTHORIZED, "authority.segmentEdgeIds is empty")
+        edges_check = self._check_edges(authority.segment_edge_ids)
+        if edges_check is not None:
+            return edges_check
 
         pose = self._pose_provider()
         if pose is None:
@@ -312,6 +326,30 @@ class TrafficClient:
         self._state = STATE_EXECUTING
         self._emit(PROGRESS_STARTED)
         return _ok("segment started")
+
+    def _check_graph_hash(self, graph_hash: str, expected_graph_hash: Optional[str]) -> Optional[TrafficDecision]:
+        if not expected_graph_hash:
+            if self._require_graph_hash:
+                return _reject(REASON_ROUTE_GRAPH_MISMATCH, "no route graph hash loaded; cannot trust edge ids")
+            return None
+        if graph_hash.lower() != expected_graph_hash.strip().lower():
+            return _reject(REASON_ROUTE_GRAPH_MISMATCH, "authority.graphHash != loaded graph hash")
+        return None
+
+    def _check_edges(self, edge_ids: Sequence[int]) -> Optional[TrafficDecision]:
+        """Every granted edge must exist in the loaded graph and each must start where the previous one ends."""
+        if not self._edge_endpoints:
+            return None
+        previous_end: Optional[tuple[float, float]] = None
+        for edge_id in edge_ids:
+            ends = self._edge_endpoints.get(int(edge_id))
+            if ends is None:
+                return _reject(REASON_ROUTE_NOT_AUTHORIZED, f"edge {edge_id} is not in the loaded route graph")
+            start, end = ends
+            if previous_end is not None and math.dist(previous_end, start) > _CONTIGUITY_TOLERANCE_M:
+                return _reject(REASON_ROUTE_NOT_AUTHORIZED, f"edge {edge_id} does not continue the previous edge")
+            previous_end = end
+        return None
 
     def _open_corridor(self, granted: Sequence[int]) -> Optional[TrafficDecision]:
         if self._route_port is None:
@@ -370,14 +408,18 @@ class TrafficClient:
             reason = getattr(exc, "reason_code", REASON_INVALID_PAYLOAD)
             return _reject(reason, str(getattr(exc, "message", exc)))
 
-        if graph_hash != current.graph_hash or (
-            expected_graph_hash and graph_hash.lower() != expected_graph_hash.strip().lower()
-        ):
+        if graph_hash != current.graph_hash:
             return _reject(REASON_ROUTE_GRAPH_MISMATCH, "extend graphHash != active graph hash")
+        graph_check = self._check_graph_hash(graph_hash, expected_graph_hash)
+        if graph_check is not None:
+            return graph_check
         if compute_path_hash(graph_hash, edge_ids) != path_hash.lower():
             return _reject(REASON_PATH_HASH_MISMATCH, "extend pathHash != sha256(graphHash|edgeIds)")
         if len(edge_ids) <= len(current.segment_edge_ids) or edge_ids[: len(current.segment_edge_ids)] != current.segment_edge_ids:
             return _reject(REASON_ROUTE_NOT_AUTHORIZED, "extended segment must start with the current segment and be longer")
+        edges_check = self._check_edges(edge_ids)
+        if edges_check is not None:
+            return edges_check
 
         new_auth = replace(
             current,

@@ -43,6 +43,7 @@ from warotrans_fleet.localization_hysteresis import LocalizationHysteresis
 from warotrans_fleet.mqtt_publisher import ReconnectingMqttPublisher, default_paho_factory
 from warotrans_fleet.nav2_status_tracker import Nav2StatusTracker
 from warotrans_fleet.navigator import NavigatorPort, UnavailableNavigator
+from warotrans_fleet.route_grant import load_graph_hash
 from warotrans_fleet.payload_builder import build_heartbeat, build_telemetry
 from warotrans_fleet.sequence import SequenceClock
 from warotrans_fleet.teleop import TeleopController
@@ -257,7 +258,11 @@ class RobotGatewayNode(Node):
             route_enforcer=route_enforcer,
             traffic_mode=self._traffic_mode,
             traffic_client=self._traffic_client,
-            expected_graph_hash=self._str_param("route_graph_hash").strip() or None,
+            # Param, else the hash the backend embedded in the route graph file the robot loaded (audit G1).
+            expected_graph_hash=load_graph_hash(
+                explicit=self._str_param("route_graph_hash"),
+                graph_path=self._str_param("route_graph").strip() or None,
+            ),
         )
 
         self._teleop: Optional[TeleopController] = None
@@ -478,6 +483,8 @@ class RobotGatewayNode(Node):
             log=lambda m: self.get_logger().info(m),
             localization_ok=lambda: self._last_localization == "LOCALIZED",
             frame_id=self._map_frame,
+            edge_endpoints={e.edge_id: ((e.x0, e.y0), (e.x1, e.y1)) for e in graph_edges},
+            require_graph_hash=True,
         )
         self._authority_store = store
         from warotrans_fleet.safety_supervisor import SafetyConfig

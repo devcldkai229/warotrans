@@ -269,17 +269,18 @@ def test_extend_without_active_authority_rejected():
     assert h.client.extend_authority(_extend_env((1, 2, 3), seq=2)).reason_code == cc.REASON_AUTHORITY_REQUIRED
 
 
-def test_extend_adjust_failure_keeps_old_edges_but_burns_seq():
+def test_extend_survives_dynamic_edges_mirror_failure_and_burns_seq():
+    # Active Mode drives FollowPath on the granted polylines; DynamicEdges only mirrors the corridor into
+    # route_server, so its failure must not refuse an otherwise valid extension.
     h = Harness()
     h.start()
     h.route_port.adjust_ok = False
-    assert h.client.extend_authority(_extend_env((1, 2, 3), seq=2)).reason_code == cc.REASON_ROUTE_NOT_AUTHORIZED
-    assert h.client.granted_edge_ids() == (1, 2)
-    h.route_port.adjust_ok = True
-    assert h.client.extend_authority(_extend_env((1, 2, 3), seq=2, message_id="again")).reason_code == (
+    assert h.client.extend_authority(_extend_env((1, 2, 3), seq=2)).accepted
+    assert h.client.granted_edge_ids() == (1, 2, 3)
+    assert h.client.extend_authority(_extend_env((1, 2, 3, 4), seq=2, message_id="again")).reason_code == (
         cc.REASON_AUTHORITY_STALE_SEQ
     )
-    assert h.client.extend_authority(_extend_env((1, 2, 3), seq=3)).accepted
+    assert h.client.extend_authority(_extend_env((1, 2, 3, 4), seq=3)).accepted
 
 
 # ----------------------------------------------------------------------------- renew
