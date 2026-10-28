@@ -8,7 +8,7 @@ robot_gateway:
     mqtt_port: 1883
     mqtt_client_id: "warotrans-robot-gateway-sim-02-active"
     topic_prefix: "warotrans/v1"
-    map_version_code: "MAP-WHSIM-V018"
+    map_version_code: "MAP-WHSIM-V019"
     map_frame: "map"
     base_frame: "base_link"
     odom_topic: "/odom"
@@ -28,4 +28,4 @@ robot_gateway:
     adjust_edges_service: "/route_server/DynamicEdgesScorer/adjust_edges"
     compute_route_action: "/compute_route"
     follow_path_action: "/follow_path"
-    route_graph: "/home/ser/maps/route_graph_v018.geojson"
+    route_graph: "/home/ser/maps/route_graph_v019.geojson"

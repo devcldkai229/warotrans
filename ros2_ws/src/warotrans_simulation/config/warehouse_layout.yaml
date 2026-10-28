@@ -1,5 +1,5 @@
 # =============================================================================
-# WaroTrans simulation — ACTIVE layout: warotrans_map3, the map uploaded on the web (MAP-WHSIM-V018)
+# WaroTrans simulation — ACTIVE layout: warotrans_map3, the map uploaded on the web (MAP-WHSIM-V019)
 # =============================================================================
 # The occupancy map is the file uploaded on the web, byte for byte (maps/web/warotrans_map3.pgm, SLAM of the
 # real demo floor, 107 x 68 px @ 0.05 m, origin -0.594, -2.719). Nav2 / AMCL use it as-is and every occupied
@@ -38,8 +38,8 @@ shelves:
 
 web:
   backend: http://localhost:5090
-  map_version_id: 7cb001f7-cbf3-4f3e-8400-fddc00d63b19
-  map_version_code: MAP-WHSIM-V018
+  map_version_id: d676f366-6f08-417d-921f-ac89e0b18626
+  map_version_code: MAP-WHSIM-V019
   overlay: config/web/warotrans_map3.overlay.json
 
 # Robot spawn = published PARK bay (overlay / Navigation API). Also AMCL initial_pose.

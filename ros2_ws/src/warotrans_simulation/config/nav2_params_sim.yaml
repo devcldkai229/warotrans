@@ -36,12 +36,9 @@ controller_server:
 local_costmap:
   local_costmap:
     ros__parameters:
-      # V018 EP-INBOUND sits ~0.21 m from the west wall face; with 0.16 m half-length + 2 cm padding on a
-      # 5 cm grid, lidar noise on the cell boundary marks the goal itself as lethal → "collision ahead".
-      # Sim has no odometry noise to pad for; finer grid keeps the wall cell where the wall is.
-      # Real fix: move EP-INBOUND ≥ 0.10 m off the wall in the map editor.
-      resolution: 0.025
-      footprint_padding: 0.0
+      # MAP-WHSIM-V019 moved EP-INBOUND / EP-OUTBOUND / EP-INSPECTION off the walls, so the 2.5 cm costmap
+      # workaround for V018 is gone: it quadrupled the cell count and starved collision_monitor on WSL
+      # (lifecycle_manager then shut Nav2 down mid-goal).
       inflation_layer:
         inflation_radius: 0.15
         cost_scaling_factor: 3.0
