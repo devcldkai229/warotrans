@@ -44,3 +44,6 @@ demo/**/.pytest_cache/
 
 # Generated maps can be large; promote selected release maps explicitly if desired
 # ros2_ws/src/warotrans_navigation/maps/*.pgm
+
+# Local robot SSH helpers hold plaintext credentials — never commit
+ros2_ws/scripts/_agent_pi_*ssh.py
