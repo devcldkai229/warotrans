@@ -42,5 +42,8 @@ web:
   map_version_code: MAP-WHSIM-V018
   overlay: config/web/warotrans_map3.overlay.json
 
-# Robot spawn pose (also the AMCL initial pose): the SLAM start (0, 0), facing +x.
-spawn: { x: 0.0, y: 0.0, yaw: 0.0 }
+# Robot spawn = published PARK bay (overlay / Navigation API). Also AMCL initial_pose.
+# Do NOT hardcode (0,0): that is the SLAM origin, not a parking endpoint.
+spawn_endpoint_code: EP-PARK-1
+# Optional explicit override for debug only (ignored when spawn_endpoint_code is set):
+# spawn: { x: 0.0, y: 0.0, yaw: 0.0 }

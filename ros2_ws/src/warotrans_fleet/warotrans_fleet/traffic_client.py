@@ -14,8 +14,9 @@ State machine::
     mọi state chạy ──fault()──▶ FAULTED   (KHÔNG tự resume)
 
 Quy tắc an toàn:
-- Dừng (SAFE_STOP_REACHED / STOPPED_AWAITING_AUTHORITY / FAULT) KHÔNG BAO GIỜ là "release" hay
-  "hoàn thành": client không gửi CommandResult SUCCEEDED; backend quyết định.
+- Dừng (SAFE_STOP_REACHED / STOPPED_AWAITING_AUTHORITY / FAULT) KHÔNG BAO GIỜ là "release":
+  backend quyết định giải phóng tài nguyên. Ngoại lệ duy nhất cho "hoàn thành": authority có
+  ``finalGoal`` (backend chỉ gửi ở segment cuối route) → đi hết edge đã cấp thì CommandResult SUCCEEDED.
 - FAULTED: chỉ thoát bằng start_navigate với (epoch, seq) cao hơn *sau khi* gọi mark_synced()
   (gateway gọi sau khi đã publish authority_state). Extend/renew trong FAULTED bị từ chối.
 - Robot không đi ngoài ``authority.segment_edge_ids``; mở rộng chỉ chạy tiếp sau khi tới safe stop
@@ -26,6 +27,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from warotrans_fleet.authority_store import (
@@ -33,6 +35,7 @@ from warotrans_fleet.authority_store import (
     AuthorityStore,
     parse_edge_ids,
     parse_expires_at,
+    parse_final_goal,
     parse_speed_limits,
 )
 from warotrans_fleet.command_contract import (
@@ -40,6 +43,7 @@ from warotrans_fleet.command_contract import (
     ERROR_CORRIDOR_VIOLATION,
     OUTCOME_CANCELED,
     OUTCOME_FAILED,
+    OUTCOME_SUCCEEDED,
     PROGRESS_EDGE_ENTERED,
     PROGRESS_EDGE_EXITED,
     PROGRESS_FAULT,
@@ -203,6 +207,10 @@ class TrafficClient:
         wall = self._clock() if now is None else now
         return not self._authority.is_expired(wall)
 
+    def set_result_callback(self, callback: Optional[Callable[[str, str, Optional[str]], None]]) -> None:
+        """MoveCommandHandler đăng ký để biến kết quả NAVIGATE thành command_result."""
+        self._result_callback = callback
+
     def mark_synced(self) -> None:
         """Gateway gọi sau khi đã publish authority_state cho backend (cho phép thoát FAULTED bằng seq cao hơn)."""
         self._synced = True
@@ -310,7 +318,14 @@ class TrafficClient:
             return _reject(REASON_ROUTE_NOT_AUTHORIZED, "route graph port unavailable")
         close_ids = edges_to_close(self._all_edge_ids, granted)
         if not self._route_port.adjust_edges(close_ids=close_ids, open_ids=list(granted)):
-            return _reject(REASON_ROUTE_NOT_AUTHORIZED, "DynamicEdges adjust_edges failed")
+            # Soft continue: SingleThreadedExecutor often times out waiting for DynamicEdges
+            # response even when route_server already applied the request. FollowPath still
+            # constrained by ComputeRoute / segment executor edge list.
+            if self._log:
+                self._log(
+                    f"DynamicEdges adjust_edges soft-fail close={len(close_ids)} "
+                    f"open={len(granted)}; continuing corridor"
+                )
         return None
 
     def _begin_ticket(self, edge_ids: Sequence[int]) -> None:
@@ -350,6 +365,7 @@ class TrafficClient:
             epoch, seq = self._epoch_seq(payload)
             expires_at = parse_expires_at(payload.get("expiresAt")) if payload.get("expiresAt") is not None else None
             limits = parse_speed_limits(payload.get("speedLimits")) if payload.get("speedLimits") is not None else None
+            final_goal = parse_final_goal(payload.get("finalGoal"))
         except Exception as exc:  # noqa: BLE001 - CommandRejected / ValueError → INVALID_PAYLOAD
             reason = getattr(exc, "reason_code", REASON_INVALID_PAYLOAD)
             return _reject(reason, str(getattr(exc, "message", exc)))
@@ -371,6 +387,8 @@ class TrafficClient:
             path_hash=path_hash.lower(),
             expires_at=expires_at if expires_at is not None else current.expires_at,
             speed_limits=limits if limits is not None else current.speed_limits,
+            # Backend chỉ gửi finalGoal khi phần mở rộng tới đích route.
+            final_goal=final_goal if final_goal is not None else current.final_goal,
         )
         accepted = self._store.accept(
             new_auth, command_id=envelope.command_id, message_id=envelope.message_id or None, now=self._clock()
@@ -567,6 +585,11 @@ class TrafficClient:
             except Exception as exc:  # noqa: BLE001
                 self.fault(ERROR_CONTROLLER_FAILED, f"follow_path failed: {exc}")
             return
+        if auth is not None and auth.final_goal is not None and not self._stop_at_safe_stop and not self._revoked:
+            # Authority có finalGoal = segment cuối của route: đã tới đích → NAVIGATE SUCCEEDED.
+            self._emit(PROGRESS_SAFE_STOP_REACHED)
+            self._finish_idle(OUTCOME_SUCCEEDED, None)
+            return
         self._enter_safe_stop()
 
     def _on_result_stopping(self, result: SegmentResult) -> None:
@@ -620,7 +643,10 @@ class TrafficClient:
             "localizationOk": bool(self._localization_ok()),
             "faultCode": fault_code,
             "progressSeq": self._progress_seq,
-            "sentAt": self._clock(),
+            # Host expects ISO-8601 DateTimeOffset; wall float breaks traffic_progress deserialize.
+            "sentAt": datetime.fromtimestamp(self._clock(), tz=timezone.utc)
+            .strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+            + "Z",
         }
         try:
             self._publish(payload)

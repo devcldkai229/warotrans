@@ -48,6 +48,8 @@ class GraphEdge:
     y0: float
     x1: float
     y1: float
+    #: Full LineString vertices when available (FollowPath); endpoints alone if empty.
+    points: tuple[tuple[float, float], ...] = ()
 
 
 def parse_route_grant(payload: Mapping[str, Any]) -> Optional[RouteGrant]:
@@ -122,7 +124,8 @@ def load_graph_edges(graph_path: str) -> list[GraphEdge]:
         if coords is None or len(coords) < 2:
             continue
         (x0, y0), (x1, y1) = coords[0], coords[-1]
-        edges.append(GraphEdge(int(edge_id), float(x0), float(y0), float(x1), float(y1)))
+        pts = tuple((float(x), float(y)) for x, y in coords)
+        edges.append(GraphEdge(int(edge_id), float(x0), float(y0), float(x1), float(y1), pts))
     return edges
 
 

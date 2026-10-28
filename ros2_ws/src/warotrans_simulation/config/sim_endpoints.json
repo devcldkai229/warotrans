@@ -2,9 +2,9 @@
   "mapName": "sim_warehouse",
   "frame": "map",
   "spawn": {
-    "x": 0.0,
-    "y": 0.0,
-    "yaw": 0.0
+    "x": 2.959,
+    "y": 0.357,
+    "yaw": -1.5707963267948966
   },
   "endpoints": [
     {

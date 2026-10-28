@@ -217,10 +217,10 @@ def _setup(context, *args, **kwargs):
     if enable_pipeline:
         collision_params = list(common_params)
         if enable_authority_gate:
-            # Gate sits between collision_monitor and /cmd_vel (Active Mode only).
-            collision_params = common_params + [
-                {"collision_monitor.ros__parameters.cmd_vel_out_topic": "cmd_vel_safe"}
-            ]
+            # Gate sits between collision_monitor and /cmd_vel (Active Mode only). launch_ros dict overrides
+            # take the plain parameter name; a "node.ros__parameters.x" key is silently ignored and
+            # collision_monitor kept publishing straight to /cmd_vel, bypassing the gate.
+            collision_params = common_params + [{"cmd_vel_out_topic": "cmd_vel_safe"}]
         actions += [
             Node(
                 package="nav2_velocity_smoother",

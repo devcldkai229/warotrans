@@ -69,6 +69,15 @@ _SENDING = "SENDING"  # đã gửi goal, chờ Nav2 accept/reject
 _ACTIVE = "ACTIVE"  # Nav2 đã accept, robot đang chạy
 _CANCELING = "CANCELING"  # đã gửi cancel_goal_async, chờ Nav2 kết thúc goal
 
+# TrafficClient state → navigationStatus cho telemetry (IDLE → dùng state legacy).
+_TRAFFIC_NAV_STATUS = {
+    "VALIDATING": nav_state.NAVIGATING,
+    "EXECUTING": nav_state.NAVIGATING,
+    "STOPPING": nav_state.NAVIGATING,
+    "STOPPED_AWAITING": nav_state.PAUSED,
+    "FAULTED": nav_state.FAILED,
+}
+
 # Lý do cancel
 _CANCEL_BY_BACKEND = "BACKEND"
 _CANCEL_BY_TIMEOUT = "TIMEOUT"
@@ -138,6 +147,11 @@ class MoveCommandHandler:
         self._traffic_mode = (traffic_mode or "legacy").strip().lower()
         self._traffic_client = traffic_client
         self._expected_graph_hash = expected_graph_hash
+        # Active Mode: NAVIGATE session theo commandId — TrafficClient báo kết quả qua callback.
+        self._traffic_sessions: dict[str, CommandSession] = {}
+        self._traffic_cancel_sessions: dict[str, list[CommandSession]] = {}
+        if traffic_client is not None and hasattr(traffic_client, "set_result_callback"):
+            traffic_client.set_result_callback(self._on_traffic_result)
         self._active: Optional[_ActiveMove] = None
         self._state = nav_state.NavigationStateMachine(
             clock=clock,
@@ -150,12 +164,21 @@ class MoveCommandHandler:
     @property
     def active_command_id(self) -> Optional[str]:
         with self._lock:
+            if self._active_traffic_mode():
+                return self._traffic_client.command_id  # type: ignore[union-attr]
             return self._active.command_id if self._active is not None else None
 
     @property
     def navigation_status(self) -> str:
         with self._lock:
+            if self._active_traffic_mode():
+                traffic_status = _TRAFFIC_NAV_STATUS.get(self._traffic_client.state)  # type: ignore[union-attr]
+                if traffic_status is not None:
+                    return traffic_status
             return self._state.status
+
+    def _active_traffic_mode(self) -> bool:
+        return self._traffic_mode == "active" and self._traffic_client is not None
 
     # ------------------------------------------------------------------ CommandHandler
 
@@ -217,7 +240,6 @@ class MoveCommandHandler:
             return AckDecision.accept(after_ack=lambda: self._send_goal(move))
 
     def _handle_active(self, command: CommandEnvelope, session: CommandSession) -> AckDecision:
-        del session
         if "authority" not in command.payload or command.payload.get("authority") is None:
             raise CommandRejected(REASON_AUTHORITY_REQUIRED, "active mode requires payload.authority")
         authority = parse_authority(command.payload, command_id=command.command_id)
@@ -230,7 +252,29 @@ class MoveCommandHandler:
         )
         if not decision.accepted:
             raise CommandRejected(decision.reason_code or REASON_AUTHORITY_REQUIRED, decision.message or "rejected")
+        self._traffic_sessions[command.command_id] = session
         return AckDecision.accept(message=decision.message)
+
+    def _on_traffic_result(self, command_id: str, outcome: str, error_code: Optional[str]) -> None:
+        """TrafficClient kết thúc NAVIGATE (tới đích / fault / cancel) → command_result cho backend."""
+        with self._lock:
+            session = self._traffic_sessions.pop(command_id, None)
+            cancel_sessions = self._traffic_cancel_sessions.pop(command_id, [])
+        if session is None:
+            self._log.warning(f"[TrafficResult] no session for commandId={command_id} outcome={outcome}")
+        elif not session.is_completed:
+            session.complete(outcome, error_code=error_code, result={"navigationResult": outcome})
+        for cancel_session in cancel_sessions:
+            if cancel_session.is_completed:
+                continue
+            if outcome == OUTCOME_CANCELED:
+                cancel_session.complete(OUTCOME_SUCCEEDED, result={"targetCommandId": command_id})
+            else:
+                cancel_session.complete(
+                    OUTCOME_FAILED,
+                    error_code=ERROR_CANCEL_INEFFECTIVE,
+                    error_message=f"target {command_id} ended with {outcome}/{error_code} before cancel took effect",
+                )
 
     def tick(self) -> None:
         with self._lock:
@@ -296,6 +340,8 @@ class MoveCommandHandler:
 
     def request_cancel(self, target_command_id: str, cancel_session: CommandSession) -> AckDecision:
         with self._lock:
+            if self._active_traffic_mode():
+                return self._request_cancel_active(target_command_id, cancel_session)
             move = self._active
             if move is None or move.command_id != target_command_id:
                 active = move.command_id if move is not None else None
@@ -306,6 +352,40 @@ class MoveCommandHandler:
             return AckDecision.accept(
                 after_ack=lambda: self._request_cancel(move, _CANCEL_BY_BACKEND, cancel_session)
             )
+
+    def _request_cancel_active(self, target_command_id: str, cancel_session: CommandSession) -> AckDecision:
+        client = self._traffic_client
+        assert client is not None
+        if client.command_id != target_command_id:
+            raise CommandRejected(
+                REASON_UNKNOWN_TARGET,
+                f"targetCommandId {target_command_id} is not the active command (active={client.command_id})",
+            )
+        self._traffic_cancel_sessions.setdefault(target_command_id, []).append(cancel_session)
+
+        def _cancel() -> None:
+            was_faulted = client.state == "FAULTED"
+            decision = client.cancel_command(target_command_id)
+            if decision.accepted and was_faulted:
+                # FAULTED → reset không phát result (FAILED đã báo); robot đã dừng → cancel coi như xong.
+                with self._lock:
+                    sessions = self._traffic_cancel_sessions.pop(target_command_id, [])
+                for s in sessions:
+                    if not s.is_completed:
+                        s.complete(OUTCOME_SUCCEEDED, result={"targetCommandId": target_command_id})
+                return
+            if not decision.accepted:
+                with self._lock:
+                    sessions = self._traffic_cancel_sessions.get(target_command_id, [])
+                    if cancel_session in sessions:
+                        sessions.remove(cancel_session)
+                cancel_session.complete(
+                    OUTCOME_FAILED,
+                    error_code=ERROR_CANCEL_REJECTED,
+                    error_message=decision.message or "traffic client refused cancel",
+                )
+
+        return AckDecision.accept(after_ack=_cancel)
 
     # ------------------------------------------------------------------ Nav2 lifecycle
 

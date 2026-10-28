@@ -16,7 +16,7 @@
 
     <gui fullscreen="0">
       <camera name="user_camera">
-        <pose>2.08 -4.23 3.75 0 0.85 1.5708</pose>
+        <pose>2.96 -2.85 3.75 0 0.85 1.5708</pose>
       </camera>
     </gui>
 

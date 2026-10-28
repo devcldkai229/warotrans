@@ -29,11 +29,11 @@ USAGE
 from __future__ import annotations
 
 import os
+import sys
 
-import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchContext, LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, TimerAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, OpaqueFunction, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -50,9 +50,18 @@ def _setup(context: LaunchContext, *args, **kwargs):
     nav_pkg = get_package_share_directory("warotrans_navigation")
 
     layout_path = LaunchConfiguration("layout").perform(context)
-    with open(layout_path, encoding="utf-8") as handle:
-        spawn = yaml.safe_load(handle)["spawn"]
     map_yaml = LaunchConfiguration("map").perform(context)
+    endpoint = LaunchConfiguration("spawn_endpoint_code").perform(context).strip()
+    launch_dir = os.path.dirname(os.path.abspath(__file__))
+    if launch_dir not in sys.path:
+        sys.path.insert(0, launch_dir)
+    from _spawn_util import resolve_layout_spawn
+
+    spawn = resolve_layout_spawn(
+        layout_path,
+        endpoint_code=endpoint or None,
+        map_yaml=map_yaml,
+    )
     nav_delay = float(LaunchConfiguration("nav_start_delay").perform(context))
     # Gateway after Nav2 is ACTIVE: otherwise the robot looks online while bt_navigator still rejects goals.
     gateway_delay = nav_delay + float(LaunchConfiguration("gateway_extra_delay").perform(context))
@@ -67,18 +76,27 @@ def _setup(context: LaunchContext, *args, **kwargs):
         amcl_noise = {"alpha1": 0.05, "alpha2": 0.05, "alpha3": 0.05, "alpha4": 0.05}
 
     actions = [
+        LogInfo(
+            msg=(
+                f"[sim_bringup] spawn=({spawn['x']:.4f},{spawn['y']:.4f},{spawn['yaw']:.4f}) "
+                f"source={spawn.get('source')} endpoint={spawn.get('endpoint_code')}"
+            )
+        ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(sim_pkg, "launch", "simulation.launch.py")),
             launch_arguments={
                 "gui": LaunchConfiguration("gui"),
                 "layout": layout_path,
+                "map": map_yaml,
+                "spawn_endpoint_code": endpoint,
+                "robot_name": LaunchConfiguration("robot_name"),
                 "enable_ekf": "true" if enable_ekf else "false",
                 "motor_deadband": LaunchConfiguration("motor_deadband"),
                 "deadband_compensation": LaunchConfiguration("deadband_compensation"),
             }.items(),
         ),
         # Localization: same nodes/params as warotrans_localization, plus sim clock and a
-        # known initial pose (the spawn pose) so no manual "2D Pose Estimate" is needed.
+        # known initial pose (the PARK / resolved spawn) so no manual "2D Pose Estimate" is needed.
         Node(
             package="nav2_map_server",
             executable="map_server",
@@ -134,6 +152,8 @@ def _setup(context: LaunchContext, *args, **kwargs):
                         # Lane graph (fetch_route_graph.sh): Nav2 Route Server + route BT. Empty = free planning.
                         "route_graph": LaunchConfiguration("route_graph").perform(context).strip(),
                         "enable_cmd_vel_pipeline": LaunchConfiguration("enable_cmd_vel_pipeline"),
+                        # Active Mode: collision_monitor -> /cmd_vel_safe -> authority gate -> /cmd_vel
+                        "enable_authority_gate": LaunchConfiguration("enable_authority_gate"),
                     }.items(),
                 ),
             ],
@@ -157,7 +177,10 @@ def _setup(context: LaunchContext, *args, **kwargs):
         )
 
     if _flag(context, "gateway"):
-        gateway_params: list = [os.path.join(sim_pkg, "config", "robot_gateway_sim.yaml")]
+        gateway_yaml = LaunchConfiguration("gateway_params_file").perform(context).strip()
+        if not gateway_yaml:
+            gateway_yaml = os.path.join(sim_pkg, "config", "robot_gateway_sim.yaml")
+        gateway_params: list = [gateway_yaml]
         overrides = {}
         for key in ("robot_code", "mqtt_host", "map_version_code"):
             value = LaunchConfiguration(key).perform(context).strip()
@@ -204,6 +227,16 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("gateway", default_value="true", description="Start the MQTT fleet gateway"),
             DeclareLaunchArgument("layout", default_value=os.path.join(sim_pkg, "config", "warehouse_layout.yaml")),
             DeclareLaunchArgument("map", default_value=os.path.join(sim_pkg, "maps", "sim_warehouse.yaml")),
+            DeclareLaunchArgument(
+                "spawn_endpoint_code",
+                default_value="",
+                description="Override layout spawn_endpoint_code (EP-PARK-1 / EP-PARK-2); empty = layout",
+            ),
+            DeclareLaunchArgument(
+                "robot_name",
+                default_value="warotrans",
+                description="Gazebo model name (warotrans_sim_02 for second PARK bay tests)",
+            ),
             DeclareLaunchArgument("nav_start_delay", default_value="8.0", description="Seconds before Nav2 starts"),
             DeclareLaunchArgument(
                 "gateway_extra_delay",
@@ -239,6 +272,16 @@ def generate_launch_description() -> LaunchDescription:
                 "enable_cmd_vel_pipeline",
                 default_value="true",
                 description="velocity_smoother + collision_monitor between Nav2 and /cmd_vel (as on the robot)",
+            ),
+            DeclareLaunchArgument(
+                "enable_authority_gate",
+                default_value="false",
+                description="Active Mode: insert cmd_vel_authority_gate (requires traffic_mode:=active gateway)",
+            ),
+            DeclareLaunchArgument(
+                "gateway_params_file",
+                default_value="",
+                description="Gateway YAML (default robot_gateway_sim.yaml; use robot_gateway_sim_active_overlay.yaml for Active)",
             ),
             DeclareLaunchArgument("robot_code", default_value="", description="Override gateway robot_code"),
             DeclareLaunchArgument("mqtt_host", default_value="", description="Override MQTT broker host"),
