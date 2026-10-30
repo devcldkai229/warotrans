@@ -6,6 +6,7 @@ nav2_msgs/action/FollowPath for controller tracking without BT recoveries.
 
 from __future__ import annotations
 
+import math
 import threading
 from typing import Any, Callable, Optional, Sequence
 
@@ -19,6 +20,38 @@ from warotrans_fleet.segment_executor import (
     SegmentResult,
     SegmentTicket,
 )
+
+
+PATH_STEP_M = 0.05
+
+
+def densify_path(
+    polylines: Sequence[Sequence[tuple[float, float]]], step: float = PATH_STEP_M
+) -> list[tuple[float, float, float]]:
+    """Chain edge polylines into evenly spaced (x, y, yaw) poses along the lane centre line.
+
+    Shared vertices between consecutive edges are emitted once; each pose faces along its sub-segment so
+    the controller never sees a zero quaternion or a jump between sparse vertices.
+    """
+    vertices: list[tuple[float, float]] = []
+    for line in polylines:
+        for x, y in line:
+            point = (float(x), float(y))
+            if not vertices or math.dist(vertices[-1], point) > 1e-6:
+                vertices.append(point)
+    if len(vertices) < 2:
+        return [(x, y, 0.0) for x, y in vertices]
+
+    poses: list[tuple[float, float, float]] = []
+    for (x0, y0), (x1, y1) in zip(vertices, vertices[1:]):
+        length = math.hypot(x1 - x0, y1 - y0)
+        yaw = math.atan2(y1 - y0, x1 - x0)
+        steps = max(1, math.ceil(length / step))
+        for i in range(steps):
+            t = i / steps
+            poses.append((x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, yaw))
+    poses.append((vertices[-1][0], vertices[-1][1], poses[-1][2]))
+    return poses
 
 
 class Nav2SegmentExecutor:
@@ -53,6 +86,11 @@ class Nav2SegmentExecutor:
         self._FollowPath = FollowPath
         self._Duration = Duration
         self._client = ActionClient(node, FollowPath, follow_path_action)
+        self._edge_poly: dict[int, list[tuple[float, float]]] = {}
+        # Optional: inject polylines via route_port.edge_polyline or set_edge_polylines().
+
+    def set_edge_polylines(self, polylines: dict[int, Sequence[tuple[float, float]]]) -> None:
+        self._edge_poly = {int(k): [(float(x), float(y)) for x, y in v] for k, v in polylines.items()}
 
     def compute_route_edge_ids(self, start: Pose2D, goal: Pose2D) -> list[int]:
         if self._route_port is None:
@@ -74,13 +112,20 @@ class Nav2SegmentExecutor:
             ticket.finished = True
             return ticket
 
-        # Build a sparse path from route_port geometry when available; otherwise empty path
-        # (controller may reject — reported as ABORTED).
+        # Never drive a gap: an edge without geometry would be bridged by a straight line (audit G2).
+        missing = [e for e in edge_ids if not self._edge_points(int(e))]
+        if missing:
+            self._log(f"[Nav2SegmentExecutor] no geometry for edges {missing}; refusing FollowPath")
+            callbacks.on_result(SegmentResult(RESULT_ABORTED, "UNKNOWN_EDGE"))
+            ticket.finished = True
+            return ticket
+
         path_msg = self._build_path_msg(list(edge_ids))
         goal = self._FollowPath.Goal()
         goal.path = path_msg
-        goal.controller_id = ""
-        goal.goal_checker_id = ""
+        # Must match controller_server plugin name (nav2_params); empty string aborts on Jazzy.
+        goal.controller_id = "FollowPath"
+        goal.goal_checker_id = "general_goal_checker"
 
         self._send_goal_future = self._client.send_goal_async(goal)
         self._send_goal_future.add_done_callback(self._on_goal_response)
@@ -145,6 +190,17 @@ class Nav2SegmentExecutor:
         if callbacks is not None:
             callbacks.on_result(SegmentResult(status, detail))
 
+    def _edge_points(self, edge_id: int) -> list[tuple[float, float]]:
+        if edge_id in self._edge_poly:
+            return list(self._edge_poly[edge_id])
+        get_poly = getattr(self._route_port, "edge_polyline", None)
+        if callable(get_poly):
+            try:
+                return list(get_poly(edge_id) or [])
+            except Exception:  # noqa: BLE001
+                return []
+        return []
+
     def _build_path_msg(self, edge_ids: list[int]) -> Any:
         from geometry_msgs.msg import PoseStamped
         from nav_msgs.msg import Path
@@ -152,18 +208,15 @@ class Nav2SegmentExecutor:
         path = Path()
         path.header.frame_id = "map"
         path.header.stamp = self._node.get_clock().now().to_msg()
-        # Prefer geometry from route port if it exposes edge polylines.
-        get_poly = getattr(self._route_port, "edge_polyline", None)
-        if callable(get_poly):
-            for eid in edge_ids:
-                try:
-                    pts = get_poly(eid) or []
-                except Exception:  # noqa: BLE001
-                    pts = []
-                for x, y in pts:
-                    ps = PoseStamped()
-                    ps.header = path.header
-                    ps.pose.position.x = float(x)
-                    ps.pose.position.y = float(y)
-                    path.poses.append(ps)
+
+        for x, y, yaw in densify_path([self._edge_points(eid) for eid in edge_ids]):
+            ps = PoseStamped()
+            ps.header = path.header
+            ps.pose.position.x = x
+            ps.pose.position.y = y
+            ps.pose.orientation.z = math.sin(yaw / 2.0)
+            ps.pose.orientation.w = math.cos(yaw / 2.0)
+            path.poses.append(ps)
+        if not path.poses:
+            self._log(f"[Nav2SegmentExecutor] empty FollowPath for edges={edge_ids}")
         return path

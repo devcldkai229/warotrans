@@ -19,6 +19,7 @@ class Nav2RouteGraphClient:
         adjust_edges_service: str = "route_server/DynamicEdgesScorer/adjust_edges",
         compute_route_action: str = "compute_route",
         timeout_sec: float = 5.0,
+        blocking_adjust: bool = True,
     ) -> None:
         from nav2_msgs.action import ComputeRoute
         from nav2_msgs.srv import DynamicEdges
@@ -26,23 +27,65 @@ class Nav2RouteGraphClient:
 
         self._node = node
         self._timeout = float(timeout_sec)
+        # Active Mode (FollowPath) only uses DynamicEdges as an advisory mirror of the corridor; waiting for the
+        # reply from inside an executor callback can never succeed and freezes the gateway for timeout_sec.
+        self._blocking_adjust = bool(blocking_adjust)
         self._dyn = node.create_client(DynamicEdges, adjust_edges_service)
         self._compute = ActionClient(node, ComputeRoute, compute_route_action)
         self._DynamicEdges = DynamicEdges
         self._ComputeRoute = ComputeRoute
 
     def adjust_edges(self, *, close_ids: Sequence[int], open_ids: Sequence[int]) -> bool:
+        if not self._blocking_adjust:
+            return self._adjust_edges_async(close_ids, open_ids)
         if not self._dyn.wait_for_service(timeout_sec=self._timeout):
-            self._node.get_logger().error("DynamicEdges service not available")
+            self._node.get_logger().warning(
+                f"DynamicEdges service not available ({self._dyn.srv_name}); "
+                "caller may soft-continue"
+            )
             return False
         req = self._DynamicEdges.Request()
         req.closed_edges = [int(i) & 0xFFFF for i in close_ids]
         req.opened_edges = [int(i) & 0xFFFF for i in open_ids]
         future = self._dyn.call_async(req)
         if not self._spin_until(future):
-            return False
+            # Request often already applied on route_server while this client is blocked on the
+            # same SingleThreadedExecutor (MQTT/command callback). Treat timeout as soft-OK.
+            self._node.get_logger().warning(
+                f"DynamicEdges response wait timed out ({self._dyn.srv_name}) "
+                f"close={len(close_ids)} open={len(open_ids)}; assuming applied"
+            )
+            return True
         result = future.result()
-        return bool(result and result.success)
+        ok = bool(result and result.success)
+        if not ok:
+            self._node.get_logger().error(
+                f"DynamicEdges returned success=False close={len(close_ids)} open={len(open_ids)}"
+            )
+        return ok
+
+    def _adjust_edges_async(self, close_ids: Sequence[int], open_ids: Sequence[int]) -> bool:
+        if not self._dyn.service_is_ready():
+            self._node.get_logger().warning(
+                f"DynamicEdges service not ready ({self._dyn.srv_name}); corridor mirror skipped"
+            )
+            return False
+        req = self._DynamicEdges.Request()
+        req.closed_edges = [int(i) & 0xFFFF for i in close_ids]
+        req.opened_edges = [int(i) & 0xFFFF for i in open_ids]
+        logger = self._node.get_logger()
+
+        def _done(future) -> None:
+            try:
+                result = future.result()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"DynamicEdges call failed: {exc!r}")
+                return
+            if not (result and result.success):
+                logger.error(f"DynamicEdges returned success=False close={len(close_ids)} open={len(open_ids)}")
+
+        self._dyn.call_async(req).add_done_callback(_done)
+        return True
 
     def compute_route_edge_ids(
         self,

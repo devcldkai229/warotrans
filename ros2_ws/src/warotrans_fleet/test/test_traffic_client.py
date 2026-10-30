@@ -111,10 +111,12 @@ def test_start_rejects_without_pose():
     assert h.store.last_seq == -1  # chưa đốt seq
 
 
-def test_start_rejects_when_adjust_edges_fails_and_releases_store():
+def test_start_soft_continues_when_adjust_edges_fails():
+    # DynamicEdges often times out under SingleThreadedExecutor; corridor still opens via FollowPath.
     h = Harness(route_ok=False)
-    assert h.start().reason_code == cc.REASON_ROUTE_NOT_AUTHORIZED
-    assert h.client.state == STATE_IDLE and h.store.active is None and h.executor.follow_calls == []
+    assert h.start().accepted
+    assert h.client.state == STATE_EXECUTING and h.store.active is not None
+    assert len(h.executor.follow_calls) == 1
 
 
 def test_start_rejects_when_compute_route_differs_from_segment():
@@ -267,17 +269,18 @@ def test_extend_without_active_authority_rejected():
     assert h.client.extend_authority(_extend_env((1, 2, 3), seq=2)).reason_code == cc.REASON_AUTHORITY_REQUIRED
 
 
-def test_extend_adjust_failure_keeps_old_edges_but_burns_seq():
+def test_extend_survives_dynamic_edges_mirror_failure_and_burns_seq():
+    # Active Mode drives FollowPath on the granted polylines; DynamicEdges only mirrors the corridor into
+    # route_server, so its failure must not refuse an otherwise valid extension.
     h = Harness()
     h.start()
     h.route_port.adjust_ok = False
-    assert h.client.extend_authority(_extend_env((1, 2, 3), seq=2)).reason_code == cc.REASON_ROUTE_NOT_AUTHORIZED
-    assert h.client.granted_edge_ids() == (1, 2)
-    h.route_port.adjust_ok = True
-    assert h.client.extend_authority(_extend_env((1, 2, 3), seq=2, message_id="again")).reason_code == (
+    assert h.client.extend_authority(_extend_env((1, 2, 3), seq=2)).accepted
+    assert h.client.granted_edge_ids() == (1, 2, 3)
+    assert h.client.extend_authority(_extend_env((1, 2, 3, 4), seq=2, message_id="again")).reason_code == (
         cc.REASON_AUTHORITY_STALE_SEQ
     )
-    assert h.client.extend_authority(_extend_env((1, 2, 3), seq=3)).accepted
+    assert h.client.extend_authority(_extend_env((1, 2, 3, 4), seq=3)).accepted
 
 
 # ----------------------------------------------------------------------------- renew
@@ -451,3 +454,54 @@ def test_authority_expiry_makes_authority_invalid():
 
 def test_constants_sanity():
     assert MAP_CODE and ALL_EDGES
+
+
+# ----------------------------------------------------------------------------- route completion (finalGoal)
+
+
+def test_final_segment_with_final_goal_succeeds_command():
+    from dataclasses import replace
+
+    h = Harness()
+    h.start(replace(make_authority(), final_goal=(1.0, 2.0, 0.5)))
+    h.executor.finish(RESULT_SUCCEEDED)
+    assert h.client.state == STATE_IDLE
+    assert h.event_names()[-1] == "SAFE_STOP_REACHED"
+    assert "STOPPED_AWAITING_AUTHORITY" not in h.event_names()
+    assert h.results == [("cmd-1", cc.OUTCOME_SUCCEEDED, None)]
+    assert h.store.active is None
+
+
+def test_extend_carrying_final_goal_completes_after_last_edges():
+    h = Harness()
+    h.start()  # segment đầu không có finalGoal
+    h.executor.finish(RESULT_SUCCEEDED)
+    assert h.client.state == STATE_STOPPED_AWAITING and h.results == []
+
+    env = _extend_env((1, 2, 3), seq=2)
+    env.payload["finalGoal"] = {"x": 3.0, "y": 0.0, "yaw": 1.57}
+    assert h.client.extend_authority(env).accepted
+    assert h.client.authority.final_goal == (3.0, 0.0, 1.57)
+    h.executor.finish(RESULT_SUCCEEDED)
+    assert h.results == [("cmd-1", cc.OUTCOME_SUCCEEDED, None)]
+    assert h.client.state == STATE_IDLE
+
+
+def test_stop_at_safe_stop_overrides_final_goal():
+    from dataclasses import replace
+
+    h = Harness()
+    h.start(replace(make_authority(), final_goal=(1.0, 2.0, 0.5)))
+    assert h.client.revoke_authority(_revoke_env(seq=2, mode="STOP_AT_SAFE_STOP")).accepted
+    h.executor.finish(RESULT_SUCCEEDED)
+    assert h.client.state == STATE_STOPPED_AWAITING and h.results == []
+
+
+def test_fault_then_sync_allows_higher_seq_start():
+    h = Harness()
+    h.start()
+    h.executor.finish(RESULT_ABORTED)
+    assert h.client.state == STATE_FAULTED and not h.client.synced
+    assert h.start(make_authority(seq=2), command_id="cmd-2", message_id="m2").reason_code == cc.REASON_AUTHORITY_REQUIRED
+    h.client.mark_synced()
+    assert h.start(make_authority(seq=2), command_id="cmd-3", message_id="m3").accepted

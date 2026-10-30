@@ -1,0 +1,17 @@
+[
+    {
+        "run":  1,
+        "status":  "REASSIGNING",
+        "failure":  "traffic_graph_in_use"
+    },
+    {
+        "run":  2,
+        "status":  "REASSIGNING",
+        "failure":  "traffic_graph_in_use"
+    },
+    {
+        "run":  3,
+        "status":  "REASSIGNING",
+        "failure":  "traffic_graph_in_use"
+    }
+]

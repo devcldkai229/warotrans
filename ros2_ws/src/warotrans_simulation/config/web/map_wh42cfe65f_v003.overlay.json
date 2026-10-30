@@ -1,0 +1,478 @@
+{
+  "mapVersionId": "1143c8a3-ae62-4660-b684-bc462450f30f",
+  "mapVersionCode": "MAP-WH42CFE65F-V003",
+  "status": "PUBLISHED",
+  "endpoints": [
+    {
+      "code": "EP-CHARGER-A---5",
+      "name": "CHARGER A",
+      "endpointType": "CHARGER",
+      "x": -1.029,
+      "y": -0.95,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-INBOUND-AREA---5",
+      "name": "Inbound Area",
+      "endpointType": "WAYPOINT",
+      "x": 1.7,
+      "y": 1.55,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-INSPECTION-QUALITY-AREA---5",
+      "name": "Inspection Quality Area",
+      "endpointType": "WAYPOINT",
+      "x": 1.8,
+      "y": 0,
+      "yaw": -1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-OUTBOUND-AREA---5",
+      "name": "Outbound Area",
+      "endpointType": "WAYPOINT",
+      "x": 1.8,
+      "y": -0.2,
+      "yaw": -1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-PARKING-A---5",
+      "name": "Parking A",
+      "endpointType": "PARK",
+      "x": -1.929,
+      "y": -0.95,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-PARKING-B---5",
+      "name": "Parking B",
+      "endpointType": "PARK",
+      "x": -1.479,
+      "y": -0.95,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SHELF-A-01---5",
+      "name": "Shelf-A-01",
+      "endpointType": "WAYPOINT",
+      "x": -0.3,
+      "y": 0.6,
+      "yaw": 1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SHELF-A-02---5",
+      "name": "Shelf-A-02",
+      "endpointType": "WAYPOINT",
+      "x": -0.3,
+      "y": 0.95,
+      "yaw": 1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SHELF-A-03---5",
+      "name": "Shelf-A-03",
+      "endpointType": "WAYPOINT",
+      "x": -0.3,
+      "y": 1.3,
+      "yaw": 1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SHELF-A-04---5",
+      "name": "Shelf-A-04",
+      "endpointType": "WAYPOINT",
+      "x": -0.3,
+      "y": 1.45,
+      "yaw": 1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SHELF-B-01---5",
+      "name": "Shelf-B-01",
+      "endpointType": "WAYPOINT",
+      "x": 1.7,
+      "y": 1.45,
+      "yaw": 1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SHELF-B-02---5",
+      "name": "Shelf-B-02",
+      "endpointType": "WAYPOINT",
+      "x": 1.7,
+      "y": 1.25,
+      "yaw": 1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SHELF-B-03---5",
+      "name": "Shelf-B-03",
+      "endpointType": "WAYPOINT",
+      "x": 1.7,
+      "y": 1.05,
+      "yaw": 1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SHELF-B-04---5",
+      "name": "Shelf-B-04",
+      "endpointType": "WAYPOINT",
+      "x": 1.7,
+      "y": 0.85,
+      "yaw": 1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SHELF-C-01---5",
+      "name": "Shelf-C-01",
+      "endpointType": "WAYPOINT",
+      "x": -0.6,
+      "y": -0.95,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SHELF-C-02---5",
+      "name": "Shelf-C-02",
+      "endpointType": "WAYPOINT",
+      "x": -0.8,
+      "y": -0.95,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-WAIT-POINT---5",
+      "name": "Wait Point",
+      "endpointType": "WAYPOINT",
+      "x": 1.8,
+      "y": 0.5,
+      "yaw": -1.5707963267948966,
+      "isEnabled": true
+    }
+  ],
+  "edges": [
+    {
+      "code": "EDGE-463",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -2.3,
+            -0.95
+          ],
+          [
+            -0.3,
+            -0.95
+          ]
+        ]
+      },
+      "widthMeters": 0.5,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-464",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -0.3,
+            -0.95
+          ],
+          [
+            -0.3,
+            0.1
+          ]
+        ]
+      },
+      "widthMeters": 0.5,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-465",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -0.3,
+            0.1
+          ],
+          [
+            1.7,
+            0.1
+          ]
+        ]
+      },
+      "widthMeters": 0.5,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-466",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.7,
+            0.1
+          ],
+          [
+            1.7,
+            1.55
+          ]
+        ]
+      },
+      "widthMeters": 0.5,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-467",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.7,
+            1.55
+          ],
+          [
+            1.8,
+            1.55
+          ]
+        ]
+      },
+      "widthMeters": 0.45,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-468",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.8,
+            1.55
+          ],
+          [
+            1.8,
+            -0.3
+          ]
+        ]
+      },
+      "widthMeters": 0.5,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-469",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.8,
+            -0.3
+          ],
+          [
+            -0.1,
+            -0.3
+          ]
+        ]
+      },
+      "widthMeters": 0.5,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-470",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -0.1,
+            -0.3
+          ],
+          [
+            -0.1,
+            -1
+          ]
+        ]
+      },
+      "widthMeters": 0.5,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-471",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -0.1,
+            -1
+          ],
+          [
+            -2.3,
+            -1
+          ]
+        ]
+      },
+      "widthMeters": 0.5,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-472",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -2.3,
+            -1
+          ],
+          [
+            -2.3,
+            -0.95
+          ]
+        ]
+      },
+      "widthMeters": 0.45,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-473",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -0.3,
+            0.1
+          ],
+          [
+            -0.3,
+            1.5
+          ]
+        ]
+      },
+      "widthMeters": 0.5,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-480",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -0.3,
+            1.5
+          ],
+          [
+            -0.1,
+            1.5
+          ]
+        ]
+      },
+      "widthMeters": 0.45,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-481",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -0.1,
+            1.5
+          ],
+          [
+            -0.1,
+            0.1
+          ]
+        ]
+      },
+      "widthMeters": 0.5,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-482",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -0.1,
+            0.1
+          ],
+          [
+            1.8,
+            0.1
+          ]
+        ]
+      },
+      "widthMeters": 0.5,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    }
+  ],
+  "zones": [
+    {
+      "code": "ZONE-KEEP-OUT---20---6",
+      "name": "Keep-out - 20",
+      "zoneType": "KEEP_OUT",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -2.173,
+              0.819
+            ],
+            [
+              -1.794,
+              0.819
+            ],
+            [
+              -1.783,
+              0.404
+            ],
+            [
+              -2.168,
+              0.409
+            ],
+            [
+              -2.173,
+              0.819
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    }
+  ]
+}

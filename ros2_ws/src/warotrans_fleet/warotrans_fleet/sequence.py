@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import uuid
 from dataclasses import dataclass, field
 
@@ -12,18 +13,22 @@ class SequenceClock:
     _heartbeat: int = 0
     _telemetry: int = 0
     _interaction: int = 0
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def next_heartbeat(self) -> int:
-        self._heartbeat += 1
-        return self._heartbeat
+        with self._lock:
+            self._heartbeat += 1
+            return self._heartbeat
 
     def next_telemetry(self) -> int:
-        self._telemetry += 1
-        return self._telemetry
+        with self._lock:
+            self._telemetry += 1
+            return self._telemetry
 
     def next_interaction(self) -> int:
-        self._interaction += 1
-        return self._interaction
+        with self._lock:
+            self._interaction += 1
+            return self._interaction
 
     @property
     def heartbeat_sequence(self) -> int:

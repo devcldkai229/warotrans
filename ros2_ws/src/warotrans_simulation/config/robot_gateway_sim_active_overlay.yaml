@@ -1,0 +1,33 @@
+# Sim-only Active Mode overlay for Gazebo (never use on the Pi).
+robot_gateway:
+  ros__parameters:
+    use_sim_time: true
+    robot_code: "RBT-SIM-01"
+    mqtt_host: "127.0.0.1"
+    mqtt_port: 1883
+    mqtt_client_id: "warotrans-robot-gateway-sim-01-active"
+    topic_prefix: "warotrans/v1"
+    map_version_code: "MAP-WH42CFE65F-V003"
+    map_frame: "map"
+    base_frame: "base_link"
+    odom_topic: "/odom"
+    amcl_pose_topic: "/amcl_pose"
+    navigate_action: "navigate_to_pose"
+    heartbeat_hz: 1.0
+    telemetry_hz: 5.0
+    max_transform_age_sec: 1.0
+    simulated_battery_percent: 87.0
+    teleop_enabled: true
+    cmd_vel_topic: "/cmd_vel_safe"
+    traffic_mode: "active"
+    enable_authority_gate: true
+    authority_loss_timeout_sec: 3.0
+    # Sim TF/scan can jitter under WSL load; keep Active motion from false SAFETY_STOP.
+    max_transform_age_sec: 2.0
+    assist_max_scan_age_sec: 2.0
+    authority_ok_topic: "/traffic/authority_ok"
+    # Absolute names: gateway node is /robot_gateway; relative would miss route_server.
+    adjust_edges_service: "/route_server/DynamicEdgesScorer/adjust_edges"
+    compute_route_action: "/compute_route"
+    follow_path_action: "/follow_path"
+    route_graph: "/home/ser/maps/route_graph_wh42cfe65f_v003.geojson"

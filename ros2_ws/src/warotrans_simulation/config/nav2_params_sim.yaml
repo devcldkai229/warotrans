@@ -3,20 +3,70 @@
 # =============================================================================
 # Real-robot speeds (0.10 m/s) are PROVISIONAL limits of the physical motors.
 # The simulated diff drive has no such limit, so the demo runs faster here.
-# Costmaps, inflation (0.35 / 4.0), BT and collision_monitor come from the base nav2_params.yaml,
-# so Gazebo exercises the same navigation config as the Pi.
 # This file is only loaded by warotrans_simulation launches — never on the Pi.
+#
+# 2026-10-27: V018 aisles ~0.45 m shelf-to-lane; centreline is only ~0.22 m from
+# shelf face. Base inflation 0.35 (and even 0.25) keeps the lane centre in high
+# cost → RPP "collision ahead" → rotate_to_heading loop (~1 min in-place spin).
+# Sim-only: inflation 0.15 keeps centreline clear; disable rotate_to_heading so a
+# brief collision-ahead does not become an in-place spin until progress abort.
+# Merged LAST (after nav2_params_route.yaml). Raise lookahead with sim speed so v/L ≤ ~1.2.
+# Do not invent wheel calib; do not disable Collision Monitor / Motion Authority.
 # =============================================================================
 
 controller_server:
   ros__parameters:
     FollowPath:
-      desired_linear_vel: 0.35
-      rotate_to_heading_angular_vel: 0.8
+      # Phase B: keep lane lookahead 0.20 (tight aisles); drop v so v/L ≤ ~1.2 (0.24/0.20=1.2).
+      # Raising L to 0.30 with v=0.35 cut corners → RPP collision-ahead → progress abort (E2E JOB-000007).
+      desired_linear_vel: 0.24
+      lookahead_dist: 0.20
+      min_lookahead_dist: 0.15
+      max_lookahead_dist: 0.30
+      curvature_lookahead_dist: 0.20
+      # Pivot in place when the lane turns > rotate_to_heading_min_angle (base 45°) or a new MOVE starts
+      # facing away from the route (e.g. leaving EP-INBOUND nose-to-wall). Arcing instead cut corners
+      # into shelves/walls. The old in-aisle spin loop came from FollowPath poses with zero quaternions
+      # (always "rotate to yaw 0"); Nav2SegmentExecutor now orients every pose along the lane.
+      use_rotate_to_heading: true
+      rotate_to_heading_angular_vel: 0.45
+      # Match local inflation_layer below (RPP uses this for collision scaling).
+      inflation_cost_scaling_factor: 3.0
+      # Slightly more patient before declaring carrot collision in tight aisles.
+      max_allowed_time_to_collision_up_to_carrot: 1.5
+      # Active Mode ends every traffic segment at a safe-stop node. Without this, curvature to a carrot
+      # pinned on the goal blows up in the last ~0.2 m and the robot swirls ~90° off the lane before
+      # stopping, then arcs into the shelf on the next segment (Gazebo trace 2026-10-27, node 26).
+      use_fixed_curvature_lookahead: true
+      interpolate_curvature_after_goal: true
+    general_goal_checker:
+      # Target was 0.05 m; JOB-000008 reached ~9 cm of EP-INBOUND (0.00,-0.05 vs 0.045,-0.133)
+      # then progress-aborted — 0.05 m not feasible with AMCL+lane tracking floor. Use 0.10 m.
+      xy_goal_tolerance: 0.10
+      yaw_goal_tolerance: 0.25
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      # MAP-WHSIM-V019 moved EP-INBOUND / EP-OUTBOUND / EP-INSPECTION off the walls, so the 2.5 cm costmap
+      # workaround for V018 is gone: it quadrupled the cell count and starved collision_monitor on WSL
+      # (lifecycle_manager then shut Nav2 down mid-goal).
+      inflation_layer:
+        inflation_radius: 0.15
+        cost_scaling_factor: 3.0
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      inflation_layer:
+        inflation_radius: 0.15
+        cost_scaling_factor: 3.0
 
 velocity_smoother:
   ros__parameters:
     max_velocity: [0.4, 0.0, 1.0]
     min_velocity: [-0.2, 0.0, -1.0]
-    max_accel: [0.8, 0.0, 1.5]
-    max_decel: [-0.8, 0.0, -1.5]
+    # Slightly softer angular accel to cut stop-go twist chatter (Phase B cause #3); keep scale on.
+    max_accel: [0.8, 0.0, 1.2]
+    max_decel: [-0.8, 0.0, -1.2]
+    scale_velocities: true

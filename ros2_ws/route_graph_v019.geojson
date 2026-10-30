@@ -1,0 +1,3860 @@
+{
+  "type": "FeatureCollection",
+  "name": "MAP-WHSIM-V019",
+  "properties": {
+    "graphHash": "e6009540d606f228c6069ac9cb7082611a8053c93a342c889d4ead4f07ade7fe"
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 1,
+        "frame": "map",
+        "metadata": {
+          "endpoint_codes": [
+            "EP-OUTBOUND"
+          ]
+        }
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.032,
+          -1.782
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 2,
+        "frame": "map",
+        "metadata": {
+          "endpoint_codes": [
+            "EP-INBOUND"
+          ]
+        }
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.045,
+          -0.133
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 3,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.1381,
+          -0.1314
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 4,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.155,
+          -1.782
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 5,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.442,
+          -1.305
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 6,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.442,
+          -1.2253
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 7,
+        "frame": "map",
+        "metadata": {
+          "endpoint_codes": [
+            "EP-SORAGE_SELF_1"
+          ]
+        }
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.442,
+          -0.849
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 8,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.442,
+          -0.4845
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 9,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.442,
+          -0.402
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 10,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.691,
+          -1.929
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 11,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.716,
+          -1.461
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 12,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.718,
+          -0.192
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 13,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.751,
+          -1.929
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 14,
+        "frame": "map",
+        "metadata": {
+          "endpoint_codes": [
+            "EP-SORAGE_SELF_5"
+          ]
+        }
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0.965,
+          -1.929
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 15,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          1.1771,
+          -1.929
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 16,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          1.214,
+          -1.461
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 17,
+        "frame": "map",
+        "metadata": {
+          "endpoint_codes": [
+            "EP-INSPECTION"
+          ]
+        }
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          1.22,
+          0.254
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 18,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          1.23,
+          0.083
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 19,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          1.237,
+          -0.192
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 20,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          1.245,
+          -1.929
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 21,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          1.6,
+          -1.334
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 22,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          1.6,
+          -1.255
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 23,
+        "frame": "map",
+        "metadata": {
+          "endpoint_codes": [
+            "EP-SORAGE_SELF_2"
+          ]
+        }
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          1.6,
+          -0.883
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 24,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          1.6,
+          -0.5074
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 25,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          1.6,
+          -0.376
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 26,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          1.921,
+          -0.185
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 27,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          1.942,
+          -1.472
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 28,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          1.946,
+          -1.919
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 29,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          1.966,
+          0.085
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 30,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.006,
+          -1.919
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 31,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.006,
+          -1.472
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 32,
+        "frame": "map",
+        "metadata": {
+          "endpoint_codes": [
+            "EP-CHARGER-1"
+          ]
+        }
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.013,
+          0.37
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 33,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.373,
+          -1.919
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 34,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.377,
+          -1.472
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 35,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.44,
+          -1.472
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 36,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.44,
+          -0.185
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 37,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5,
+          -1.919
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 38,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.775,
+          -1.368
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 39,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.775,
+          -1.241
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 40,
+        "frame": "map",
+        "metadata": {
+          "endpoint_codes": [
+            "EP-SORAGE_SELF_3"
+          ]
+        }
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.775,
+          -0.866
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 41,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.775,
+          -0.5005
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 42,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.775,
+          -0.359
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 43,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.959,
+          0.09
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 44,
+        "frame": "map",
+        "metadata": {
+          "endpoint_codes": [
+            "EP-PARK-1"
+          ]
+        }
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.959,
+          0.357
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 45,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          3.145,
+          -0.14
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 46,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          3.163,
+          -1.935
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 47,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          3.175,
+          -1.487
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 48,
+        "frame": "map",
+        "metadata": {
+          "endpoint_codes": [
+            "EP-PARK-2"
+          ]
+        }
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          3.415,
+          0.357
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 49,
+        "frame": "map",
+        "metadata": {
+          "endpoint_codes": [
+            "EP-SORAGE_SELF_4"
+          ]
+        }
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          3.461,
+          -1.935
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 50,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          3.656,
+          0.136
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 51,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          3.664,
+          -0.14
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 52,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          3.6649,
+          -1.935
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 53,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          3.713,
+          -1.488
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 54,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          3.717,
+          -1.935
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 55,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          4.092,
+          -1.27
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 56,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          4.092,
+          -0.425
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 57,
+        "frame": "map",
+        "metadata": {}
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          4.092,
+          -0.367
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 58,
+        "startid": 1,
+        "endid": 4,
+        "metadata": {
+          "connector": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.032,
+              -1.782
+            ],
+            [
+              0.155,
+              -1.782
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 59,
+        "startid": 2,
+        "endid": 3,
+        "metadata": {
+          "connector": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.045,
+              -0.133
+            ],
+            [
+              0.1381,
+              -0.1314
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 60,
+        "startid": 3,
+        "endid": 2,
+        "metadata": {
+          "connector": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.1381,
+              -0.1314
+            ],
+            [
+              0.045,
+              -0.133
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 61,
+        "startid": 3,
+        "endid": 9,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.1381,
+              -0.1314
+            ],
+            [
+              0.442,
+              -0.402
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 62,
+        "startid": 3,
+        "endid": 12,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.1381,
+              -0.1314
+            ],
+            [
+              0.718,
+              -0.192
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 63,
+        "startid": 4,
+        "endid": 1,
+        "metadata": {
+          "connector": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.155,
+              -1.782
+            ],
+            [
+              0.032,
+              -1.782
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 64,
+        "startid": 4,
+        "endid": 5,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.155,
+              -1.782
+            ],
+            [
+              0.442,
+              -1.305
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 65,
+        "startid": 4,
+        "endid": 11,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.155,
+              -1.782
+            ],
+            [
+              0.716,
+              -1.461
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 66,
+        "startid": 5,
+        "endid": 4,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.442,
+              -1.305
+            ],
+            [
+              0.155,
+              -1.782
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 67,
+        "startid": 5,
+        "endid": 6,
+        "metadata": {
+          "edge_code": "EDGE-337"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.442,
+              -1.305
+            ],
+            [
+              0.442,
+              -1.2253
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 68,
+        "startid": 5,
+        "endid": 11,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.442,
+              -1.305
+            ],
+            [
+              0.716,
+              -1.461
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 69,
+        "startid": 6,
+        "endid": 5,
+        "metadata": {
+          "edge_code": "EDGE-337"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.442,
+              -1.2253
+            ],
+            [
+              0.442,
+              -1.305
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 70,
+        "startid": 6,
+        "endid": 7,
+        "metadata": {
+          "edge_code": "EDGE-337"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.442,
+              -1.2253
+            ],
+            [
+              0.442,
+              -0.849
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 71,
+        "startid": 7,
+        "endid": 6,
+        "metadata": {
+          "edge_code": "EDGE-337"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.442,
+              -0.849
+            ],
+            [
+              0.442,
+              -1.2253
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 72,
+        "startid": 7,
+        "endid": 8,
+        "metadata": {
+          "edge_code": "EDGE-337"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.442,
+              -0.849
+            ],
+            [
+              0.442,
+              -0.4845
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 73,
+        "startid": 8,
+        "endid": 7,
+        "metadata": {
+          "edge_code": "EDGE-337"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.442,
+              -0.4845
+            ],
+            [
+              0.442,
+              -0.849
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 74,
+        "startid": 8,
+        "endid": 9,
+        "metadata": {
+          "edge_code": "EDGE-337"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.442,
+              -0.4845
+            ],
+            [
+              0.442,
+              -0.402
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 75,
+        "startid": 9,
+        "endid": 3,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.442,
+              -0.402
+            ],
+            [
+              0.1381,
+              -0.1314
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 76,
+        "startid": 9,
+        "endid": 8,
+        "metadata": {
+          "edge_code": "EDGE-337"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.442,
+              -0.402
+            ],
+            [
+              0.442,
+              -0.4845
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 77,
+        "startid": 9,
+        "endid": 12,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.442,
+              -0.402
+            ],
+            [
+              0.718,
+              -0.192
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 78,
+        "startid": 10,
+        "endid": 4,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.691,
+              -1.929
+            ],
+            [
+              0.155,
+              -1.782
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 79,
+        "startid": 10,
+        "endid": 5,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.691,
+              -1.929
+            ],
+            [
+              0.442,
+              -1.305
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 80,
+        "startid": 10,
+        "endid": 11,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.691,
+              -1.929
+            ],
+            [
+              0.716,
+              -1.461
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 81,
+        "startid": 11,
+        "endid": 16,
+        "metadata": {
+          "edge_code": "EDGE-345"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.716,
+              -1.461
+            ],
+            [
+              1.214,
+              -1.461
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 82,
+        "startid": 12,
+        "endid": 3,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.718,
+              -0.192
+            ],
+            [
+              0.1381,
+              -0.1314
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 83,
+        "startid": 12,
+        "endid": 9,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.718,
+              -0.192
+            ],
+            [
+              0.442,
+              -0.402
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 84,
+        "startid": 12,
+        "endid": 19,
+        "metadata": {
+          "edge_code": "EDGE-340"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.718,
+              -0.192
+            ],
+            [
+              1.237,
+              -0.192
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 85,
+        "startid": 13,
+        "endid": 10,
+        "metadata": {
+          "edge_code": "EDGE-346"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.751,
+              -1.929
+            ],
+            [
+              0.691,
+              -1.929
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 86,
+        "startid": 14,
+        "endid": 13,
+        "metadata": {
+          "edge_code": "EDGE-346"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              0.965,
+              -1.929
+            ],
+            [
+              0.751,
+              -1.929
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 87,
+        "startid": 15,
+        "endid": 14,
+        "metadata": {
+          "edge_code": "EDGE-346"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.1771,
+              -1.929
+            ],
+            [
+              0.965,
+              -1.929
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 88,
+        "startid": 16,
+        "endid": 20,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.214,
+              -1.461
+            ],
+            [
+              1.245,
+              -1.929
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 89,
+        "startid": 16,
+        "endid": 27,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1-COPY,ZONE-NO-STOP---9-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.214,
+              -1.461
+            ],
+            [
+              1.942,
+              -1.472
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 90,
+        "startid": 17,
+        "endid": 18,
+        "metadata": {
+          "connector": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.22,
+              0.254
+            ],
+            [
+              1.23,
+              0.083
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 91,
+        "startid": 18,
+        "endid": 17,
+        "metadata": {
+          "connector": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.23,
+              0.083
+            ],
+            [
+              1.22,
+              0.254
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 92,
+        "startid": 18,
+        "endid": 19,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.23,
+              0.083
+            ],
+            [
+              1.237,
+              -0.192
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 93,
+        "startid": 18,
+        "endid": 25,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.23,
+              0.083
+            ],
+            [
+              1.6,
+              -0.376
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 94,
+        "startid": 18,
+        "endid": 26,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.23,
+              0.083
+            ],
+            [
+              1.921,
+              -0.185
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 95,
+        "startid": 19,
+        "endid": 12,
+        "metadata": {
+          "edge_code": "EDGE-340"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.237,
+              -0.192
+            ],
+            [
+              0.718,
+              -0.192
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 96,
+        "startid": 19,
+        "endid": 18,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.237,
+              -0.192
+            ],
+            [
+              1.23,
+              0.083
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 97,
+        "startid": 19,
+        "endid": 25,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.237,
+              -0.192
+            ],
+            [
+              1.6,
+              -0.376
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 98,
+        "startid": 19,
+        "endid": 26,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.237,
+              -0.192
+            ],
+            [
+              1.921,
+              -0.185
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 99,
+        "startid": 19,
+        "endid": 29,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.237,
+              -0.192
+            ],
+            [
+              1.966,
+              0.085
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 100,
+        "startid": 20,
+        "endid": 15,
+        "metadata": {
+          "edge_code": "EDGE-346"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.245,
+              -1.929
+            ],
+            [
+              1.1771,
+              -1.929
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 101,
+        "startid": 21,
+        "endid": 20,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1-COPY,ZONE-NO-STOP---9-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.6,
+              -1.334
+            ],
+            [
+              1.245,
+              -1.929
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 102,
+        "startid": 21,
+        "endid": 27,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1-COPY,ZONE-NO-STOP---9-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.6,
+              -1.334
+            ],
+            [
+              1.942,
+              -1.472
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 103,
+        "startid": 22,
+        "endid": 21,
+        "metadata": {
+          "edge_code": "EDGE-335"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.6,
+              -1.255
+            ],
+            [
+              1.6,
+              -1.334
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 104,
+        "startid": 23,
+        "endid": 22,
+        "metadata": {
+          "edge_code": "EDGE-335"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.6,
+              -0.883
+            ],
+            [
+              1.6,
+              -1.255
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 105,
+        "startid": 24,
+        "endid": 23,
+        "metadata": {
+          "edge_code": "EDGE-335"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.6,
+              -0.5074
+            ],
+            [
+              1.6,
+              -0.883
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 106,
+        "startid": 25,
+        "endid": 24,
+        "metadata": {
+          "edge_code": "EDGE-335",
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY",
+          "no_stop": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.6,
+              -0.376
+            ],
+            [
+              1.6,
+              -0.5074
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 107,
+        "startid": 26,
+        "endid": 18,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.921,
+              -0.185
+            ],
+            [
+              1.23,
+              0.083
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 108,
+        "startid": 26,
+        "endid": 19,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.921,
+              -0.185
+            ],
+            [
+              1.237,
+              -0.192
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 109,
+        "startid": 26,
+        "endid": 25,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.921,
+              -0.185
+            ],
+            [
+              1.6,
+              -0.376
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 110,
+        "startid": 26,
+        "endid": 29,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.921,
+              -0.185
+            ],
+            [
+              1.966,
+              0.085
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 111,
+        "startid": 26,
+        "endid": 36,
+        "metadata": {
+          "edge_code": "EDGE-341"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.921,
+              -0.185
+            ],
+            [
+              2.44,
+              -0.185
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 112,
+        "startid": 27,
+        "endid": 31,
+        "metadata": {
+          "edge_code": "EDGE-338"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.942,
+              -1.472
+            ],
+            [
+              2.006,
+              -1.472
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 113,
+        "startid": 28,
+        "endid": 20,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1-COPY,ZONE-NO-STOP---9-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.946,
+              -1.919
+            ],
+            [
+              1.245,
+              -1.929
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 114,
+        "startid": 28,
+        "endid": 27,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1-COPY,ZONE-NO-STOP---9-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.946,
+              -1.919
+            ],
+            [
+              1.942,
+              -1.472
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 115,
+        "startid": 29,
+        "endid": 19,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.966,
+              0.085
+            ],
+            [
+              1.237,
+              -0.192
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 116,
+        "startid": 29,
+        "endid": 25,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.966,
+              0.085
+            ],
+            [
+              1.6,
+              -0.376
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 117,
+        "startid": 29,
+        "endid": 26,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.966,
+              0.085
+            ],
+            [
+              1.921,
+              -0.185
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 118,
+        "startid": 29,
+        "endid": 32,
+        "metadata": {
+          "connector": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              1.966,
+              0.085
+            ],
+            [
+              2.013,
+              0.37
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 119,
+        "startid": 30,
+        "endid": 28,
+        "metadata": {
+          "edge_code": "EDGE-344"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.006,
+              -1.919
+            ],
+            [
+              1.946,
+              -1.919
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 120,
+        "startid": 31,
+        "endid": 34,
+        "metadata": {
+          "edge_code": "EDGE-338"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.006,
+              -1.472
+            ],
+            [
+              2.377,
+              -1.472
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 121,
+        "startid": 32,
+        "endid": 29,
+        "metadata": {
+          "connector": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.013,
+              0.37
+            ],
+            [
+              1.966,
+              0.085
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 122,
+        "startid": 33,
+        "endid": 30,
+        "metadata": {
+          "edge_code": "EDGE-344"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.373,
+              -1.919
+            ],
+            [
+              2.006,
+              -1.919
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 123,
+        "startid": 34,
+        "endid": 35,
+        "metadata": {
+          "edge_code": "EDGE-338"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.377,
+              -1.472
+            ],
+            [
+              2.44,
+              -1.472
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 124,
+        "startid": 35,
+        "endid": 37,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1,ZONE-NO-STOP---9",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.44,
+              -1.472
+            ],
+            [
+              2.5,
+              -1.919
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 125,
+        "startid": 35,
+        "endid": 38,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1,ZONE-NO-STOP---9",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.44,
+              -1.472
+            ],
+            [
+              2.775,
+              -1.368
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 126,
+        "startid": 35,
+        "endid": 47,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1,ZONE-NO-STOP---9",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.44,
+              -1.472
+            ],
+            [
+              3.175,
+              -1.487
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 127,
+        "startid": 36,
+        "endid": 26,
+        "metadata": {
+          "edge_code": "EDGE-341"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.44,
+              -0.185
+            ],
+            [
+              1.921,
+              -0.185
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 128,
+        "startid": 36,
+        "endid": 43,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.44,
+              -0.185
+            ],
+            [
+              2.959,
+              0.09
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 129,
+        "startid": 36,
+        "endid": 45,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.44,
+              -0.185
+            ],
+            [
+              3.145,
+              -0.14
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 130,
+        "startid": 37,
+        "endid": 33,
+        "metadata": {
+          "edge_code": "EDGE-344",
+          "zone_codes": "ZONE-JUNCTION---1"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.5,
+              -1.919
+            ],
+            [
+              2.373,
+              -1.919
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 131,
+        "startid": 38,
+        "endid": 39,
+        "metadata": {
+          "edge_code": "EDGE-334",
+          "zone_codes": "ZONE-JUNCTION---1"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.775,
+              -1.368
+            ],
+            [
+              2.775,
+              -1.241
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 132,
+        "startid": 39,
+        "endid": 40,
+        "metadata": {
+          "edge_code": "EDGE-334"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.775,
+              -1.241
+            ],
+            [
+              2.775,
+              -0.866
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 133,
+        "startid": 40,
+        "endid": 41,
+        "metadata": {
+          "edge_code": "EDGE-334"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.775,
+              -0.866
+            ],
+            [
+              2.775,
+              -0.5005
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 134,
+        "startid": 41,
+        "endid": 42,
+        "metadata": {
+          "edge_code": "EDGE-334",
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY-COPY",
+          "no_stop": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.775,
+              -0.5005
+            ],
+            [
+              2.775,
+              -0.359
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 135,
+        "startid": 42,
+        "endid": 36,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.775,
+              -0.359
+            ],
+            [
+              2.44,
+              -0.185
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 136,
+        "startid": 42,
+        "endid": 43,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.775,
+              -0.359
+            ],
+            [
+              2.959,
+              0.09
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 137,
+        "startid": 42,
+        "endid": 45,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.775,
+              -0.359
+            ],
+            [
+              3.145,
+              -0.14
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 138,
+        "startid": 43,
+        "endid": 36,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.959,
+              0.09
+            ],
+            [
+              2.44,
+              -0.185
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 139,
+        "startid": 43,
+        "endid": 44,
+        "metadata": {
+          "connector": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.959,
+              0.09
+            ],
+            [
+              2.959,
+              0.357
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 140,
+        "startid": 43,
+        "endid": 45,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.959,
+              0.09
+            ],
+            [
+              3.145,
+              -0.14
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 141,
+        "startid": 44,
+        "endid": 43,
+        "metadata": {
+          "connector": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              2.959,
+              0.357
+            ],
+            [
+              2.959,
+              0.09
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 142,
+        "startid": 45,
+        "endid": 36,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.145,
+              -0.14
+            ],
+            [
+              2.44,
+              -0.185
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 143,
+        "startid": 45,
+        "endid": 43,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION-COPY-COPY-COPY,ZONE-NO-STOP---9-COPY-COPY-COPY",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.145,
+              -0.14
+            ],
+            [
+              2.959,
+              0.09
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 144,
+        "startid": 45,
+        "endid": 51,
+        "metadata": {
+          "edge_code": "EDGE-342"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.145,
+              -0.14
+            ],
+            [
+              3.664,
+              -0.14
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 145,
+        "startid": 46,
+        "endid": 37,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1,ZONE-NO-STOP---9",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.163,
+              -1.935
+            ],
+            [
+              2.5,
+              -1.919
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 146,
+        "startid": 46,
+        "endid": 38,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1,ZONE-NO-STOP---9",
+          "no_stop": true,
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.163,
+              -1.935
+            ],
+            [
+              2.775,
+              -1.368
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 147,
+        "startid": 46,
+        "endid": 47,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.163,
+              -1.935
+            ],
+            [
+              3.175,
+              -1.487
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 148,
+        "startid": 47,
+        "endid": 53,
+        "metadata": {
+          "edge_code": "EDGE-339"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.175,
+              -1.487
+            ],
+            [
+              3.713,
+              -1.488
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 149,
+        "startid": 48,
+        "endid": 50,
+        "metadata": {
+          "connector": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.415,
+              0.357
+            ],
+            [
+              3.656,
+              0.136
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 150,
+        "startid": 49,
+        "endid": 46,
+        "metadata": {
+          "edge_code": "EDGE-343"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.461,
+              -1.935
+            ],
+            [
+              3.163,
+              -1.935
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 151,
+        "startid": 50,
+        "endid": 48,
+        "metadata": {
+          "connector": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.656,
+              0.136
+            ],
+            [
+              3.415,
+              0.357
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 152,
+        "startid": 50,
+        "endid": 51,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1-COPY-2-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.656,
+              0.136
+            ],
+            [
+              3.664,
+              -0.14
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 153,
+        "startid": 50,
+        "endid": 57,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1-COPY-2-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.656,
+              0.136
+            ],
+            [
+              4.092,
+              -0.367
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 154,
+        "startid": 51,
+        "endid": 45,
+        "metadata": {
+          "edge_code": "EDGE-342"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.664,
+              -0.14
+            ],
+            [
+              3.145,
+              -0.14
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 155,
+        "startid": 51,
+        "endid": 50,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1-COPY-2-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.664,
+              -0.14
+            ],
+            [
+              3.656,
+              0.136
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 156,
+        "startid": 51,
+        "endid": 57,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1-COPY-2-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.664,
+              -0.14
+            ],
+            [
+              4.092,
+              -0.367
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 157,
+        "startid": 52,
+        "endid": 49,
+        "metadata": {
+          "edge_code": "EDGE-343"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.6649,
+              -1.935
+            ],
+            [
+              3.461,
+              -1.935
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 158,
+        "startid": 53,
+        "endid": 54,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1-COPY-2",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.713,
+              -1.488
+            ],
+            [
+              3.717,
+              -1.935
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 159,
+        "startid": 53,
+        "endid": 55,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1-COPY-2",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.713,
+              -1.488
+            ],
+            [
+              4.092,
+              -1.27
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 160,
+        "startid": 54,
+        "endid": 52,
+        "metadata": {
+          "edge_code": "EDGE-343"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              3.717,
+              -1.935
+            ],
+            [
+              3.6649,
+              -1.935
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 161,
+        "startid": 55,
+        "endid": 54,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1-COPY-2",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              4.092,
+              -1.27
+            ],
+            [
+              3.717,
+              -1.935
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 162,
+        "startid": 55,
+        "endid": 56,
+        "metadata": {
+          "edge_code": "EDGE-336"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              4.092,
+              -1.27
+            ],
+            [
+              4.092,
+              -0.425
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 163,
+        "startid": 56,
+        "endid": 55,
+        "metadata": {
+          "edge_code": "EDGE-336"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              4.092,
+              -0.425
+            ],
+            [
+              4.092,
+              -1.27
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 164,
+        "startid": 56,
+        "endid": 57,
+        "metadata": {
+          "edge_code": "EDGE-336"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              4.092,
+              -0.425
+            ],
+            [
+              4.092,
+              -0.367
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 165,
+        "startid": 57,
+        "endid": 50,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1-COPY-2-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              4.092,
+              -0.367
+            ],
+            [
+              3.656,
+              0.136
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 166,
+        "startid": 57,
+        "endid": 51,
+        "metadata": {
+          "zone_codes": "ZONE-JUNCTION---1-COPY-2-COPY",
+          "junction": true
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              4.092,
+              -0.367
+            ],
+            [
+              3.664,
+              -0.14
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 167,
+        "startid": 57,
+        "endid": 56,
+        "metadata": {
+          "edge_code": "EDGE-336"
+        }
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              4.092,
+              -0.367
+            ],
+            [
+              4.092,
+              -0.425
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

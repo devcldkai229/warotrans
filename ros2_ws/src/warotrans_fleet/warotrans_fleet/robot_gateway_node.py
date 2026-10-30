@@ -3,16 +3,19 @@
 Threading:
 - MQTT network thread (paho) chỉ parse JSON rồi đẩy vào inbox + trigger guard condition.
   Không gọi rclpy / Nav2 từ thread đó, không block.
-- ROS executor thread: CommandRouter, MoveCommandHandler, Nav2 action futures, timers
-  (heartbeat / telemetry / command tick). Không callback nào chờ Nav2 đồng bộ, nên
-  heartbeat + telemetry vẫn chạy đều trong lúc robot đang MOVE.
+- ROS executor thread: CommandRouter, MoveCommandHandler, Nav2 action futures, command tick.
+- Wall-clock daemon threads: heartbeat + telemetry (fleet liveness). SingleThreadedExecutor
+  can stall while waiting on ComputeRoute/DynamicEdges; ROS timers (even SYSTEM_TIME) then
+  miss Host HeartbeatTimeoutSeconds. Wall threads keep MQTT uplink alive independently.
 """
 
 from __future__ import annotations
 
 import os
 import queue
+import threading
 import time
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import rclpy
@@ -36,9 +39,11 @@ from warotrans_fleet.interaction_contract import (
     parse_interaction_result,
 )
 from warotrans_fleet.interaction_controller import InteractionController
+from warotrans_fleet.localization_hysteresis import LocalizationHysteresis
 from warotrans_fleet.mqtt_publisher import ReconnectingMqttPublisher, default_paho_factory
 from warotrans_fleet.nav2_status_tracker import Nav2StatusTracker
 from warotrans_fleet.navigator import NavigatorPort, UnavailableNavigator
+from warotrans_fleet.route_grant import load_graph_hash
 from warotrans_fleet.payload_builder import build_heartbeat, build_telemetry
 from warotrans_fleet.sequence import SequenceClock
 from warotrans_fleet.teleop import TeleopController
@@ -87,6 +92,8 @@ class RobotGatewayNode(Node):
         self.declare_parameter("heartbeat_hz", 1.0)
         self.declare_parameter("telemetry_hz", 5.0)
         self.declare_parameter("max_transform_age_sec", 0.5)
+        # Consecutive stale TF samples before publishing LOST (telemetry_hz=5 → ~0.6s).
+        self.declare_parameter("localization_stale_limit", 3)
         # MOVE command
         self.declare_parameter("default_navigate_timeout_sec", 0.0)  # 0 = không timeout nếu command không gửi
         self.declare_parameter("goal_response_timeout_sec", 10.0)
@@ -164,8 +171,12 @@ class RobotGatewayNode(Node):
 
         self._seq = SequenceClock()
         self._nav_tracker = Nav2StatusTracker()
-        self._ever_localized = False
+        stale_limit = int(self.get_parameter("localization_stale_limit").get_parameter_value().integer_value)
+        if stale_limit < 1:
+            raise ValueError("localization_stale_limit must be >= 1")
+        self._loc_hysteresis = LocalizationHysteresis(stale_limit=stale_limit)
         self._last_localization = "UNKNOWN"
+        self._last_pose_age_sec: Optional[float] = None
         self._lin_vel = 0.0
         self._ang_vel = 0.0
 
@@ -227,6 +238,8 @@ class RobotGatewayNode(Node):
 
         if self._traffic_mode == "active":
             self._traffic_client = self._setup_traffic_client()
+            # Boot sync: backend reconciles occupancy from what this robot still holds (queued until connected).
+            self._publish_authority_state()
 
         self._commands = build_command_stack(
             robot_code=self._robot_code,
@@ -245,7 +258,11 @@ class RobotGatewayNode(Node):
             route_enforcer=route_enforcer,
             traffic_mode=self._traffic_mode,
             traffic_client=self._traffic_client,
-            expected_graph_hash=self._str_param("route_graph_hash").strip() or None,
+            # Param, else the hash the backend embedded in the route graph file the robot loaded (audit G1).
+            expected_graph_hash=load_graph_hash(
+                explicit=self._str_param("route_graph_hash"),
+                graph_path=self._str_param("route_graph").strip() or None,
+            ),
         )
 
         self._teleop: Optional[TeleopController] = None
@@ -319,8 +336,22 @@ class RobotGatewayNode(Node):
 
         hb_hz = max(0.1, self._float_param("heartbeat_hz"))
         tel_hz = max(0.1, self._float_param("telemetry_hz"))
-        self.create_timer(1.0 / hb_hz, self._on_heartbeat_timer)
-        self.create_timer(1.0 / tel_hz, self._on_telemetry_timer)
+        # Wall-clock threads: independent of ROS executor stalls and /clock under use_sim_time.
+        self._fleet_uplink_stop = threading.Event()
+        self._heartbeat_thread = threading.Thread(
+            target=self._fleet_uplink_loop,
+            name="fleet-heartbeat",
+            args=(1.0 / hb_hz, self._on_heartbeat_timer, "heartbeat"),
+            daemon=True,
+        )
+        self._telemetry_thread = threading.Thread(
+            target=self._fleet_uplink_loop,
+            name="fleet-telemetry",
+            args=(1.0 / tel_hz, self._on_telemetry_timer, "telemetry"),
+            daemon=True,
+        )
+        self._heartbeat_thread.start()
+        self._telemetry_thread.start()
 
         self.get_logger().info(
             f"Robot gateway started robot_code={self._robot_code} "
@@ -405,12 +436,15 @@ class RobotGatewayNode(Node):
 
         graph_path = self._str_param("route_graph").strip()
         all_edge_ids: list[int] = []
+        graph_edges = []
         if graph_path:
-            all_edge_ids = [e.edge_id for e in load_graph_edges(graph_path)]
+            graph_edges = load_graph_edges(graph_path)
+            all_edge_ids = [e.edge_id for e in graph_edges]
         port = try_create_nav2_route_client(
             self,
             adjust_edges_service=self._str_param("adjust_edges_service"),
             compute_route_action=self._str_param("compute_route_action"),
+            blocking_adjust=False,
         )
         try:
             from warotrans_fleet.nav2_segment_executor import Nav2SegmentExecutor
@@ -421,7 +455,18 @@ class RobotGatewayNode(Node):
                 follow_path_action=self._str_param("follow_path_action") or "follow_path",
                 log=lambda m: self.get_logger().info(m),
             )
-            self.get_logger().info("Active Mode: Nav2SegmentExecutor ready")
+            if graph_edges:
+                executor.set_edge_polylines(
+                    {
+                        e.edge_id: list(e.points)
+                        if e.points
+                        else [(e.x0, e.y0), (e.x1, e.y1)]
+                        for e in graph_edges
+                    }
+                )
+            self.get_logger().info(
+                f"Active Mode: Nav2SegmentExecutor ready edges={len(graph_edges)} graph={graph_path or '(none)'}"
+            )
         except Exception as exc:  # noqa: BLE001
             self.get_logger().error(f"Nav2SegmentExecutor unavailable ({exc!r}); using fail-safe rejector")
             executor = UnavailableSegmentExecutor()
@@ -438,15 +483,27 @@ class RobotGatewayNode(Node):
             log=lambda m: self.get_logger().info(m),
             localization_ok=lambda: self._last_localization == "LOCALIZED",
             frame_id=self._map_frame,
+            edge_endpoints={e.edge_id: ((e.x0, e.y0), (e.x1, e.y1)) for e in graph_edges},
+            require_graph_hash=True,
         )
         self._authority_store = store
         from warotrans_fleet.safety_supervisor import SafetyConfig
 
+        pose_max_age = float(self._max_transform_age)
+        scan_max_age = float(getattr(self, "_scan_max_age", pose_max_age) or pose_max_age)
         self._safety_supervisor = SafetySupervisor(
-            config=SafetyConfig(authority_loss_timeout_sec=float(self._authority_loss_timeout)),
+            config=SafetyConfig(
+                authority_loss_timeout_sec=float(self._authority_loss_timeout),
+                pose_max_age_sec=max(0.5, pose_max_age),
+                scan_max_age_sec=max(0.5, scan_max_age),
+                # Sim WSL often pauses briefly on TF/scan jitter; don't escalate to FAULT.
+                pause_fault_timeout_sec=30.0,
+            ),
             authority_provider=lambda: store.active,
             motion_expected=lambda: client.state == "EXECUTING",
             pose_provider=lambda: (p[:2] if (p := self._traffic_pose()) else None),
+            pose_age_provider=self._safety_pose_age,
+            scan_age_provider=self._safety_scan_age,
             localization_ok_provider=lambda: self._last_localization == "LOCALIZED",
             last_authority_at_provider=lambda: getattr(client, "last_authority_at", None),
             on_fault=lambda code, detail: client.fault(code, detail),
@@ -480,6 +537,31 @@ class RobotGatewayNode(Node):
         except Exception as exc:  # noqa: BLE001
             self.get_logger().warning(f"SafetySupervisor tick failed: {exc!r}")
             self._publish_authority_ok(False)
+        client = self._traffic_client
+        if client is not None and client.state == "FAULTED" and not client.synced:
+            # Sau FAULT: báo authority_state để backend reconcile, rồi cho phép authority seq cao hơn.
+            if self._publish_authority_state():
+                client.mark_synced()
+
+    def _publish_authority_state(self) -> bool:
+        import uuid
+
+        client = self._traffic_client
+        if client is None:
+            return False
+        body = {
+            "schemaVersion": 1,
+            "messageId": str(uuid.uuid4()),
+            "robotCode": self._robot_code,
+            "bootId": self._seq.boot_id,
+            **client.authority_state_report(),
+            "sentAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+        }
+        if not self.mqtt.publish(self.topic("authority_state"), body, qos=1):
+            self.get_logger().warning("authority_state queue full; message dropped")
+            return False
+        self.get_logger().info(f"authority_state published state={body.get('state')} lastSeq={body.get('lastSeq')}")
+        return True
 
     def _traffic_pose(self) -> Optional[tuple[float, float, float]]:
         pose, status = self._lookup_map_pose()
@@ -510,12 +592,27 @@ class RobotGatewayNode(Node):
         return f"{self._topic_prefix}/robots/{self._robot_code}/{leaf}"
 
     def destroy_node(self) -> bool:
+        stop = getattr(self, "_fleet_uplink_stop", None)
+        if stop is not None:
+            stop.set()
         if self._teleop is not None:
             self._teleop.stop()
         if self._button_input is not None:
             self._button_input.close()
         self.mqtt.stop()
         return super().destroy_node()
+
+    def _fleet_uplink_loop(self, period_sec: float, tick, label: str) -> None:
+        """Wall-clock uplink; survives SingleThreadedExecutor stalls during Nav2 waits."""
+        period = max(0.05, float(period_sec))
+        while not self._fleet_uplink_stop.wait(period):
+            try:
+                tick()
+            except Exception as exc:  # noqa: BLE001 — keep loop alive
+                try:
+                    self.get_logger().warning(f"fleet {label} tick failed: {exc!r}")
+                except Exception:  # noqa: BLE001
+                    pass
 
     # ------------------------------------------------------------------ command / teleop / interaction downlink
 
@@ -632,6 +729,18 @@ class RobotGatewayNode(Node):
         )
         self.mqtt.publish(self.topic("heartbeat"), payload)
 
+    def _safety_pose_age(self) -> Optional[float]:
+        """Refresh map→base TF then return age (seconds); None if transform missing."""
+        self._traffic_pose()
+        return self._last_pose_age_sec
+
+    def _safety_scan_age(self) -> Optional[float]:
+        """Age of last LaserScan used by drive-assist; 0 when scan not subscribed (Active FollowPath)."""
+        gaps_at = getattr(self, "_gaps_at", None)
+        if gaps_at is None or gaps_at <= 0.0:
+            return 0.0
+        return max(0.0, time.monotonic() - float(gaps_at))
+
     def _lookup_map_pose(self) -> tuple[Optional[dict[str, float]], str]:
         try:
             when = Time()
@@ -643,18 +752,19 @@ class RobotGatewayNode(Node):
             )
             stamp = transform.header.stamp
             age = (self.get_clock().now() - Time.from_msg(stamp)).nanoseconds / 1e9
-            if age > self._max_transform_age:
-                status = "LOST" if self._ever_localized else "UNKNOWN"
-                return None, status
+            self._last_pose_age_sec = float(age)
+            # Negative age = clock jump back; treat as stale (not LOCALIZED).
+            if age < 0.0 or age > self._max_transform_age:
+                return self._loc_hysteresis.on_stale()
 
             t = transform.transform.translation
             q = transform.transform.rotation
             yaw = quaternion_to_yaw(q.x, q.y, q.z, q.w)
-            self._ever_localized = True
-            return {"x": float(t.x), "y": float(t.y), "yaw": float(yaw)}, "LOCALIZED"
+            pose = {"x": float(t.x), "y": float(t.y), "yaw": float(yaw)}
+            return self._loc_hysteresis.on_good(pose)
         except TransformException:
-            status = "LOST" if self._ever_localized else "UNKNOWN"
-            return None, status
+            self._last_pose_age_sec = None
+            return self._loc_hysteresis.on_stale()
 
     def _navigation_status(self) -> str:
         status = self._commands.move.navigation_status

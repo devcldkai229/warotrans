@@ -28,6 +28,17 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
+def _resolve_spawn(layout_path: str, endpoint_code: str, map_yaml: str | None):
+    import sys
+
+    launch_dir = os.path.dirname(os.path.abspath(__file__))
+    if launch_dir not in sys.path:
+        sys.path.insert(0, launch_dir)
+    from _spawn_util import resolve_layout_spawn
+
+    return resolve_layout_spawn(layout_path, endpoint_code=endpoint_code or None, map_yaml=map_yaml)
+
+
 def load_yaml(path: str) -> dict:
     with open(path, encoding="utf-8") as handle:
         return yaml.safe_load(handle)
@@ -62,8 +73,11 @@ def _setup(context: LaunchContext, *args, **kwargs):
     sim_pkg = get_package_share_directory("warotrans_simulation")
     world = LaunchConfiguration("world").perform(context)
     gui = LaunchConfiguration("gui").perform(context).lower() in ("true", "1", "yes")
-    layout = load_yaml(LaunchConfiguration("layout").perform(context))
-    spawn = layout["spawn"]
+    layout_path = LaunchConfiguration("layout").perform(context)
+    endpoint = LaunchConfiguration("spawn_endpoint_code").perform(context).strip()
+    map_yaml = LaunchConfiguration("map").perform(context).strip() or None
+    robot_name = LaunchConfiguration("robot_name").perform(context).strip() or "warotrans"
+    spawn = _resolve_spawn(layout_path, endpoint, map_yaml)
 
     gz_args = f"-r {'' if gui else '-s '}{world}"
     robot_description = robot_description_xml()
@@ -96,8 +110,12 @@ def _setup(context: LaunchContext, *args, **kwargs):
 
     return extra_nodes + [
         LogInfo(
-            msg=f"[warotrans_simulation] world={world} gui={gui} spawn={spawn} ekf={enable_ekf} "
-            f"motor_deadband={deadband}"
+            msg=(
+                f"[warotrans_simulation] world={world} gui={gui} "
+                f"spawn=({spawn['x']:.4f},{spawn['y']:.4f},{spawn['yaw']:.4f}) "
+                f"source={spawn.get('source')} endpoint={spawn.get('endpoint_code')} "
+                f"robot={robot_name} ekf={enable_ekf} motor_deadband={deadband}"
+            )
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -119,7 +137,7 @@ def _setup(context: LaunchContext, *args, **kwargs):
             output="screen",
             arguments=[
                 "-topic", "robot_description",
-                "-name", "warotrans",
+                "-name", robot_name,
                 "-x", str(spawn["x"]),
                 "-y", str(spawn["y"]),
                 "-z", "0.02",
@@ -146,6 +164,21 @@ def generate_launch_description() -> LaunchDescription:
         [
             DeclareLaunchArgument("world", default_value=os.path.join(sim_pkg, "worlds", "warehouse.sdf")),
             DeclareLaunchArgument("layout", default_value=os.path.join(sim_pkg, "config", "warehouse_layout.yaml")),
+            DeclareLaunchArgument(
+                "map",
+                default_value=os.path.join(sim_pkg, "maps", "sim_warehouse.yaml"),
+                description="Occupancy YAML for PARK footprint clearance (same as Nav2 map)",
+            ),
+            DeclareLaunchArgument(
+                "spawn_endpoint_code",
+                default_value="",
+                description="Override layout spawn_endpoint_code (e.g. EP-PARK-2); empty = layout default",
+            ),
+            DeclareLaunchArgument(
+                "robot_name",
+                default_value="warotrans",
+                description="Gazebo model name (use warotrans_sim_02 for a second robot in the same world)",
+            ),
             DeclareLaunchArgument("gui", default_value="true", description="Show the Gazebo window"),
             DeclareLaunchArgument(
                 "enable_ekf",

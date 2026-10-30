@@ -161,7 +161,7 @@ def parse_speed_limits(raw: Any) -> dict[str, float]:
     return limits
 
 
-def _parse_final_goal(raw: Any) -> Optional[tuple[float, float, float]]:
+def parse_final_goal(raw: Any) -> Optional[tuple[float, float, float]]:
     if raw is None:
         return None
     if not isinstance(raw, Mapping):
@@ -216,7 +216,7 @@ def parse_authority(
         route_id=_str_field(src, "routeId", required=False),
         route_version=_int_field(src, "routeVersion", required=False, default=0),
         goal_safe_stop_node_id=goal_node,
-        final_goal=_parse_final_goal(src.get("finalGoal")),
+        final_goal=parse_final_goal(src.get("finalGoal")),
         command_id=command_id,
     )
     if verify_path_hash and authority.expected_path_hash() != authority.path_hash:
