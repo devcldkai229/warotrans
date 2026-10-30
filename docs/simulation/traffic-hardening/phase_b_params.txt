@@ -1,0 +1,26 @@
+timestamp=2026-10-28T16:37+07
+source=controller_server process argv (live GetParameters hung under WSL/sim_time DDS; argv is authoritative for merge)
+
+merge_order_confirmed=
+  1) nav2_params.yaml
+  2) nav2_params_outdoor.yaml
+  3) nav2_params_route.yaml
+  4) nav2_params_sim.yaml   <-- LAST (Phase B fix)
+  5) launch use_sim_time overlay
+
+intended_live_values_from_sim_overlay=
+  FollowPath.desired_linear_vel=0.24
+  FollowPath.lookahead_dist=0.20
+  FollowPath.min_lookahead_dist=0.15
+  FollowPath.max_lookahead_dist=0.30
+  FollowPath.curvature_lookahead_dist=0.20
+  FollowPath.use_fixed_curvature_lookahead=true
+  v_over_L=0.24/0.20=1.20 s^-1  (target <= ~1.2; L=0.30+v=0.35 cut corners → CONTROLLER_FAILED JOB-000007)
+  general_goal_checker.xy_goal_tolerance=0.10  (0.05 not feasible: JOB-000008 residual ~9cm)
+  general_goal_checker.yaw_goal_tolerance=0.25
+  velocity_smoother.max_accel_angular=1.2 (was 1.5)
+  velocity_smoother.scale_velocities=true
+
+robot_online_check=
+  RBT-SIM-01 isOnline=true localization=LOCALIZED pose~(2.959,0.357) map=MAP-WHSIM-V019
+  Nav2 lifecycle: localization + navigation Managed nodes are active

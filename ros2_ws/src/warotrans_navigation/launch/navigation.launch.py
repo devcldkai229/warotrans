@@ -82,6 +82,12 @@ def _setup(context, *args, **kwargs):
             raise RuntimeError(f"EKF overlay missing: {ekf_overlay}")
         param_files.append(ekf_overlay)
 
+    # Lane graph mode: centre-line tracking defaults (lookahead). Applied before extra_params so the
+    # simulation overlay can raise lookahead to match desired_linear_vel (v/L ≤ ~1.2) without being
+    # clobbered by route's 0.20 m default (traffic-hardening Phase B, 2026-10-28).
+    if route_graph:
+        param_files.append(os.path.join(pkg, "config", "nav2_params_route.yaml"))
+
     # Optional last overlay (e.g. warotrans_simulation nav2_params_sim.yaml). Empty = none.
     extra_params = os.path.expanduser(
         LaunchConfiguration("extra_params_file").perform(context).strip()
@@ -90,10 +96,6 @@ def _setup(context, *args, **kwargs):
         if not os.path.isfile(extra_params):
             raise RuntimeError(f"extra_params_file not found: {extra_params}")
         param_files.append(extra_params)
-
-    # Lane graph mode: track the lane centre line closely (tight lanes); merged after every other overlay.
-    if route_graph:
-        param_files.append(os.path.join(pkg, "config", "nav2_params_route.yaml"))
 
     common_params = param_files + [{"use_sim_time": use_sim_time}]
     bt_navigator_params = common_params + [{"default_nav_to_pose_bt_xml": bt_xml}]
@@ -384,7 +386,7 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "extra_params_file",
                 default_value="",
-                description="Optional Nav2 params overlay merged last (simulation)",
+                description="Optional Nav2 params overlay merged last (after route overlay when set)",
             ),
             DeclareLaunchArgument(
                 "enable_costmap_filters",

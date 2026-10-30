@@ -1,0 +1,38 @@
+{
+  "id": "867d0871-9f92-4a89-ac43-2502f30e7004",
+  "requestCode": "REQ-20261029-000009",
+  "status": "IN_PROGRESS",
+  "warehouseId": "42cfe65f-7727-4dd2-a66b-b9b93dc2d549",
+  "mapVersionId": "1143c8a3-ae62-4660-b684-bc462450f30f",
+  "workflowId": "2e284570-a1e4-41d2-9cd0-19cbbf811b0b",
+  "planSchemaVersion": 1,
+  "requestedBy": "a0000000-0000-4000-8000-000000000002",
+  "note": "WH42 V003 single inbound E2E",
+  "workflowInputs": {},
+  "submittedAt": "2026-10-29T18:49:12.95863+00:00",
+  "queuedAt": "2026-10-29T18:49:13.037239+00:00",
+  "completedAt": null,
+  "failureCode": null,
+  "failureMessage": null,
+  "details": [
+    {
+      "id": "1469837b-45f1-463a-9e8e-eaa142cf8c38",
+      "sequenceNo": 1,
+      "containerId": "e4000000-0000-4000-8000-000000000004",
+      "containerBarcode": "CTN-IN-000001",
+      "sourceStorageLocationId": null,
+      "sourceStorageLocationCode": null,
+      "sourceEndpointId": "f483b965-7942-4003-88b8-f4c52796f9b2",
+      "sourceEndpointCode": "EP-INBOUND-AREA---5",
+      "sourceEndpointName": "Inbound Area",
+      "sourceLevelNo": null,
+      "destinationStorageLocationId": "f2000000-0000-4000-8000-000000000001",
+      "destinationStorageLocationCode": "LOC-WH42-S01",
+      "destinationEndpointId": "9d0ff20a-56c4-4234-ac8a-514ecf493f5d",
+      "destinationEndpointCode": "EP-SHELF-A-01---5",
+      "destinationEndpointName": "Shelf-A-01",
+      "destinationLevelNo": null,
+      "status": "IN_PROGRESS"
+    }
+  ]
+}

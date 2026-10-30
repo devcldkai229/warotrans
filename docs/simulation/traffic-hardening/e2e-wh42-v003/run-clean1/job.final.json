@@ -1,0 +1,283 @@
+{
+  "id": "7b27db69-67ee-4d66-899e-09e0cbbaa1c3",
+  "jobNo": "JOB-20261029-000011",
+  "status": "REASSIGNING",
+  "workflowId": "2e284570-a1e4-41d2-9cd0-19cbbf811b0b",
+  "mapVersionId": "1143c8a3-ae62-4660-b684-bc462450f30f",
+  "assignedRobotId": "1a9cfd7b-0417-4f65-8271-3ef780bc0cac",
+  "transportRequestIds": [
+    "7123f259-964e-474f-9e7e-aa1588a3cb9a"
+  ],
+  "completedSteps": 4,
+  "totalSteps": 9,
+  "currentStepId": "a9dd24bf-34b8-44a7-9e36-281c4c236df3",
+  "createdAt": "2026-10-29T18:52:25.19617+00:00",
+  "startedAt": "2026-10-29T18:52:50.576216+00:00",
+  "completedAt": null,
+  "failureCode": "ROUTE_GRAPH_MISMATCH",
+  "failureMessage": "MOVE_TO_DOCK: Robot command ACK_REJECTED",
+  "containers": [
+    {
+      "id": "4285074c-961c-4708-9ce9-328befd105fe",
+      "transportRequestId": "7123f259-964e-474f-9e7e-aa1588a3cb9a",
+      "containerId": "e4000000-0000-4000-8000-000000000004",
+      "sequenceNo": 1,
+      "status": "ASSIGNED",
+      "loadedAt": null,
+      "deliveredAt": null
+    }
+  ],
+  "tasks": [
+    {
+      "id": "acf7c348-2f45-48ee-9534-bc96a0898d04",
+      "sequenceNo": 1,
+      "taskKey": "RECEIVE",
+      "status": "COMPLETED",
+      "executionScope": "ONCE_PER_JOB",
+      "stopAction": null,
+      "stopEndpointId": null,
+      "containerId": null,
+      "steps": [
+        {
+          "id": "eb87dd80-9625-442d-916b-e61a39e33970",
+          "sequenceNo": 1,
+          "stepKey": "CHECK_ROBOT_READY",
+          "name": "Check robot is ready",
+          "stepType": "CHECK",
+          "operationCode": "ROBOT_READY",
+          "status": "COMPLETED",
+          "targetEndpointId": null,
+          "resolvedInputs": {
+            "robotId": "1a9cfd7b-0417-4f65-8271-3ef780bc0cac"
+          },
+          "outputValues": {
+            "passed": true,
+            "reason": "ready",
+            "checkedAt": "2026-10-29T18:52:50.6352016+00:00",
+            "robotStatus": "AVAILABLE"
+          },
+          "errorCode": null,
+          "errorMessage": null,
+          "startedAt": "2026-10-29T18:52:50.629582+00:00",
+          "completedAt": "2026-10-29T18:52:50.629582+00:00"
+        },
+        {
+          "id": "6781e004-498d-4c1f-b2bb-48dd3127d89a",
+          "sequenceNo": 2,
+          "stepKey": "CHECK_BATTERY",
+          "name": "Check minimum battery",
+          "stepType": "CHECK",
+          "operationCode": "BATTERY_MIN",
+          "status": "COMPLETED",
+          "targetEndpointId": null,
+          "resolvedInputs": {
+            "robotId": "1a9cfd7b-0417-4f65-8271-3ef780bc0cac",
+            "minimumBatteryPercent": 25
+          },
+          "outputValues": {
+            "passed": true,
+            "reason": "battery_ok",
+            "checkedAt": "2026-10-29T18:52:50.6457515+00:00",
+            "actualBatteryPercent": 87.00,
+            "requiredBatteryPercent": 25
+          },
+          "errorCode": null,
+          "errorMessage": null,
+          "startedAt": "2026-10-29T18:52:50.645655+00:00",
+          "completedAt": "2026-10-29T18:52:50.645655+00:00"
+        },
+        {
+          "id": "0f1b5078-ac8d-4f8d-9256-1b47bdb412ee",
+          "sequenceNo": 3,
+          "stepKey": "CHECK_REQUEST_ACTIVE",
+          "name": "Check request is still active",
+          "stepType": "CHECK",
+          "operationCode": "REQUEST_ACTIVE",
+          "status": "COMPLETED",
+          "targetEndpointId": null,
+          "resolvedInputs": {
+            "transportRequestId": "7123f259-964e-474f-9e7e-aa1588a3cb9a"
+          },
+          "outputValues": {
+            "passed": true,
+            "reason": "active",
+            "checkedAt": "2026-10-29T18:52:50.6521548+00:00",
+            "requestStatus": "IN_PROGRESS"
+          },
+          "errorCode": null,
+          "errorMessage": null,
+          "startedAt": "2026-10-29T18:52:50.652056+00:00",
+          "completedAt": "2026-10-29T18:52:50.652056+00:00"
+        }
+      ]
+    },
+    {
+      "id": "609e265c-60ed-445c-9098-324195f32ed7",
+      "sequenceNo": 2,
+      "taskKey": "RECEIVE",
+      "status": "FAILED",
+      "executionScope": "ONCE_PER_STOP",
+      "stopAction": "PICKUP",
+      "stopEndpointId": "f483b965-7942-4003-88b8-f4c52796f9b2",
+      "containerId": null,
+      "steps": [
+        {
+          "id": "e20deab3-7dea-4912-ab94-4ade1a4c0d3f",
+          "sequenceNo": 1,
+          "stepKey": "CHECK_DOCK_AVAILABLE",
+          "name": "Check inbound dock is available",
+          "stepType": "CHECK",
+          "operationCode": "ENDPOINT_AVAILABLE",
+          "status": "COMPLETED",
+          "targetEndpointId": null,
+          "resolvedInputs": {
+            "endpointId": "f483b965-7942-4003-88b8-f4c52796f9b2"
+          },
+          "outputValues": {
+            "passed": true,
+            "reason": "available",
+            "checkedAt": "2026-10-29T18:52:50.670526+00:00",
+            "endpointStatus": "AVAILABLE"
+          },
+          "errorCode": null,
+          "errorMessage": null,
+          "startedAt": "2026-10-29T18:52:50.6685+00:00",
+          "completedAt": "2026-10-29T18:52:50.6685+00:00"
+        },
+        {
+          "id": "a9dd24bf-34b8-44a7-9e36-281c4c236df3",
+          "sequenceNo": 2,
+          "stepKey": "MOVE_TO_DOCK",
+          "name": "Move to inbound dock",
+          "stepType": "MOVE",
+          "operationCode": "PICKUP",
+          "status": "FAILED",
+          "targetEndpointId": "f483b965-7942-4003-88b8-f4c52796f9b2",
+          "resolvedInputs": {
+            "purpose": "PICKUP",
+            "robotId": "1a9cfd7b-0417-4f65-8271-3ef780bc0cac",
+            "targetEndpointId": "f483b965-7942-4003-88b8-f4c52796f9b2"
+          },
+          "outputValues": {
+            "startedAt": "2026-10-29T18:52:50.6848211+00:00",
+            "completedAt": "2026-10-29T18:52:50.9265291+00:00",
+            "trafficMode": "Active",
+            "failureReason": "ROUTE_GRAPH_MISMATCH",
+            "stationPolicy": "Inbound",
+            "trafficEdgeIds": [
+              33
+            ],
+            "navigationResult": "FAILED",
+            "trafficGraphHash": "ac440472c2f77d04d0234f2687828f8ef7749f45ad61c0788216833c4fb5a875",
+            "stationResourceIds": [],
+            "trafficAuthorityId": "116d169a-4fc8-4317-96dc-a8e6b866be9d"
+          },
+          "errorCode": "ROUTE_GRAPH_MISMATCH",
+          "errorMessage": "Robot command ACK_REJECTED",
+          "startedAt": "2026-10-29T18:52:50.679844+00:00",
+          "completedAt": "2026-10-29T18:52:50.926529+00:00"
+        }
+      ]
+    },
+    {
+      "id": "2c9a2dd4-3907-41a7-b404-048f054c52c2",
+      "sequenceNo": 3,
+      "taskKey": "RECEIVE",
+      "status": "PENDING",
+      "executionScope": "PER_CONTAINER_AT_STOP",
+      "stopAction": "PICKUP",
+      "stopEndpointId": "f483b965-7942-4003-88b8-f4c52796f9b2",
+      "containerId": "e4000000-0000-4000-8000-000000000004",
+      "steps": [
+        {
+          "id": "b5995e4e-0b3d-4892-8aff-a3f8e708a2bf",
+          "sequenceNo": 1,
+          "stepKey": "RECEIVE_CONFIRM",
+          "name": "Staff confirm received container loaded onto robot",
+          "stepType": "HUMAN_INTERACTION",
+          "operationCode": "PICKUP_CONFIRM",
+          "status": "PENDING",
+          "targetEndpointId": null,
+          "resolvedInputs": {},
+          "outputValues": {},
+          "errorCode": null,
+          "errorMessage": null,
+          "startedAt": null,
+          "completedAt": null
+        }
+      ]
+    },
+    {
+      "id": "ec3ab338-2ec5-4964-ac59-276dbfeae909",
+      "sequenceNo": 4,
+      "taskKey": "PUTAWAY",
+      "status": "PENDING",
+      "executionScope": "ONCE_PER_STOP",
+      "stopAction": "DROPOFF",
+      "stopEndpointId": "9d0ff20a-56c4-4234-ac8a-514ecf493f5d",
+      "containerId": null,
+      "steps": [
+        {
+          "id": "a73fc91b-93cf-461d-ae26-b2b36cf7d9d2",
+          "sequenceNo": 1,
+          "stepKey": "CHECK_RACK_AVAILABLE",
+          "name": "Check storage rack is available",
+          "stepType": "CHECK",
+          "operationCode": "ENDPOINT_AVAILABLE",
+          "status": "PENDING",
+          "targetEndpointId": null,
+          "resolvedInputs": {},
+          "outputValues": {},
+          "errorCode": null,
+          "errorMessage": null,
+          "startedAt": null,
+          "completedAt": null
+        },
+        {
+          "id": "071f12f6-db5e-4272-b07b-f115facb920f",
+          "sequenceNo": 2,
+          "stepKey": "MOVE_TO_RACK",
+          "name": "Move to storage rack",
+          "stepType": "MOVE",
+          "operationCode": "DROPOFF",
+          "status": "PENDING",
+          "targetEndpointId": null,
+          "resolvedInputs": {},
+          "outputValues": {},
+          "errorCode": null,
+          "errorMessage": null,
+          "startedAt": null,
+          "completedAt": null
+        }
+      ]
+    },
+    {
+      "id": "308b4280-9591-4e4d-91dc-a4345fd2e564",
+      "sequenceNo": 5,
+      "taskKey": "PUTAWAY",
+      "status": "PENDING",
+      "executionScope": "PER_CONTAINER_AT_STOP",
+      "stopAction": "DROPOFF",
+      "stopEndpointId": "9d0ff20a-56c4-4234-ac8a-514ecf493f5d",
+      "containerId": "e4000000-0000-4000-8000-000000000004",
+      "steps": [
+        {
+          "id": "9eb12361-4ed0-4098-be33-3651e79b7c1f",
+          "sequenceNo": 1,
+          "stepKey": "PUTAWAY_CONFIRM",
+          "name": "Staff confirm container stored on rack",
+          "stepType": "HUMAN_INTERACTION",
+          "operationCode": "DROPOFF_CONFIRM",
+          "status": "PENDING",
+          "targetEndpointId": null,
+          "resolvedInputs": {},
+          "outputValues": {},
+          "errorCode": null,
+          "errorMessage": null,
+          "startedAt": null,
+          "completedAt": null
+        }
+      ]
+    }
+  ]
+}

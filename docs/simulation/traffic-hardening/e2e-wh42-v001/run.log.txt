@@ -1,0 +1,6 @@
+[   2s] job=RUNNING    4/9 | MOVE_TO_DOCK EXECUTING IN                | robot (-1.94,-0.96) NAVIGATING
+[   4s] job=RUNNING    4/9 | MOVE_TO_DOCK EXECUTING IN                | robot (-2.06,-1.00) NAVIGATING
+[   6s] job=RUNNING    4/9 | MOVE_TO_DOCK EXECUTING IN                | robot (-2.10,-1.00) NAVIGATING
+[   8s] job=RUNNING    4/9 | MOVE_TO_DOCK EXECUTING IN                | robot (-2.11,-0.99) NAVIGATING
+[  10s] job=REASSIGNING  4/9 | MOVE_TO_DOCK FAILED IN                   | robot (-2.11,-0.99) FAILED
+Job JOB-20261029-000007: REASSIGNING (4/9) in 11s Â· TR REQ-20261029-000007: IN_PROGRESS

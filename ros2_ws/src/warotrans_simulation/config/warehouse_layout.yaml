@@ -1,49 +1,33 @@
 # =============================================================================
-# WaroTrans simulation — ACTIVE layout: warotrans_map3, the map uploaded on the web (MAP-WHSIM-V019)
+# WaroTrans simulation — ACTIVE layout: MAP-WH42CFE65F-V003 (ONE_WAY free ring)
 # =============================================================================
-# The occupancy map is the file uploaded on the web, byte for byte (maps/web/warotrans_map3.pgm, SLAM of the
-# real demo floor, 107 x 68 px @ 0.05 m, origin -0.594, -2.719). Nav2 / AMCL use it as-is and every occupied
-# cell becomes a solid block in Gazebo: the simulated lidar sees exactly the map, so web, Nav2 and Gazebo share
-# one frame (world == map, (0, 0) = where the real robot started the SLAM).
+# Occupancy from published web map (origin -2.929, -1.415, resolution 0.05).
+# V001 kept ARCHIVED for rollback. Shelf props are visual only.
 #
-# Only the looks are added on top:
-#   shelves   rectangles (map metres) drawn on the map: the occupied cells inside become the rack base (0.45 m,
-#             above the lidar plane ~0.2 m) with uprights, decks and goods above it; other cells are walls.
-#   web       scripts/sync_web_map.py downloads the map + the Map Editor data (Zones, lanes, Endpoints) of this
-#             map version and paints them on the floor in the web colours.
-#
-#   python3 scripts/sync_web_map.py --user admin --password '...'    # after every change on the web
-#   python3 scripts/generate_warehouse.py                             # rebuild from the files already here
-#
-# Other layouts: config/layouts/ (demo_map_v7.yaml, demo_map_v6.yaml, demo_warehouse_11x7_5.yaml).
+#   python3 scripts/sync_web_map.py --user admin --password 'Admin@123'
+#   python3 scripts/generate_warehouse.py
 # =============================================================================
 
 name: sim_warehouse
-source_map: maps/web/warotrans_map3.yaml
+source_map: maps/web/map_wh42cfe65f_v003.yaml
 wall_height: 0.8
 
-#   y   0.5 +----------------------------------------------+
-#           |  (0,0) start                                  |
-#      -0.5 |      [01]          [02]           [03]        |   racks 0.45 x 0.75 m (hollow outline in the map)
-#      -1.2 |                                               |
-#      -2.2 |         [==04==]          [==05==]            |   racks in the south wall recesses
-#     -2.7  +----------------------------------------------+
-#         x -0.6        1          2          3          4.7
+# Visual rack props (approximate). Occupancy cells remain the authority.
+# Service Endpoints for Shelf-A sit on the free center lane (x≈-0.30), not aisle x=-1.25.
 shelves:
-  - { code: SHELF-01, x0: 0.756, x1: 1.206, y0: -1.219, y1: -0.469, sz: 1.0, levels: 2 }
-  - { code: SHELF-02, x0: 1.956, x1: 2.406, y0: -1.219, y1: -0.469, sz: 1.0, levels: 2 }
-  - { code: SHELF-03, x0: 3.206, x1: 3.656, y0: -1.219, y1: -0.419, sz: 1.0, levels: 2 }
-  - { code: SHELF-04, x0: 0.806, x1: 1.956, y0: -2.619, y1: -2.219, sz: 1.0, levels: 2 }
-  - { code: SHELF-05, x0: 2.556, x1: 3.656, y0: -2.619, y1: -2.169, sz: 1.0, levels: 2 }
+  - { code: SHELF-A-01, x0: -1.55, x1: -1.15, y0: 0.45, y1: 0.75, sz: 1.0, levels: 2 }
+  - { code: SHELF-A-02, x0: -1.55, x1: -1.15, y0: 0.80, y1: 1.10, sz: 1.0, levels: 2 }
+  - { code: SHELF-A-03, x0: -1.55, x1: -1.15, y0: 1.20, y1: 1.50, sz: 1.0, levels: 2 }
+  - { code: SHELF-A-04, x0: -1.55, x1: -1.15, y0: 1.50, y1: 1.80, sz: 1.0, levels: 2 }
+  - { code: SHELF-B-01, x0: 1.50, x1: 1.90, y0: 1.30, y1: 1.55, sz: 1.0, levels: 2 }
+  - { code: SHELF-B-02, x0: 1.50, x1: 1.90, y0: 1.10, y1: 1.30, sz: 1.0, levels: 2 }
+  - { code: SHELF-C-01, x0: -0.85, x1: -0.45, y0: -1.10, y1: -0.80, sz: 1.0, levels: 2 }
 
 web:
   backend: http://localhost:5090
-  map_version_id: d676f366-6f08-417d-921f-ac89e0b18626
-  map_version_code: MAP-WHSIM-V019
-  overlay: config/web/warotrans_map3.overlay.json
+  map_version_id: 1143c8a3-ae62-4660-b684-bc462450f30f
+  map_version_code: MAP-WH42CFE65F-V003
+  overlay: config/web/map_wh42cfe65f_v003.overlay.json
 
-# Robot spawn = published PARK bay (overlay / Navigation API). Also AMCL initial_pose.
-# Do NOT hardcode (0,0): that is the SLAM origin, not a parking endpoint.
-spawn_endpoint_code: EP-PARK-1
-# Optional explicit override for debug only (ignored when spawn_endpoint_code is set):
-# spawn: { x: 0.0, y: 0.0, yaw: 0.0 }
+# Robot spawn = Parking A on published V003 (clone codes EP-PARKING-A---5).
+spawn_endpoint_code: EP-PARKING-A---5

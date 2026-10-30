@@ -1,0 +1,4184 @@
+{
+    "epoch":  1793181404,
+    "stateVersion":  156,
+    "phase":  "Ready",
+    "robots":  [
+                   {
+                       "robotId":  "26a87e79-7e4f-46fb-b815-8c6bcb0f7805",
+                       "phase":  "Quarantined",
+                       "nodeId":  41,
+                       "x":  2.752208394721737,
+                       "y":  -0.5119666979037216,
+                       "localizationOk":  true,
+                       "occupiedResourceIds":  [
+                                                   "junction:ZONE-JUNCTION",
+                                                   "junction:ZONE-JUNCTION---1",
+                                                   "junction:ZONE-JUNCTION---1-COPY",
+                                                   "junction:ZONE-JUNCTION-COPY-COPY-COPY",
+                                                   "junction:ZONE-NO-STOP---9",
+                                                   "junction:ZONE-NO-STOP---9-COPY",
+                                                   "junction:ZONE-NO-STOP---9-COPY-COPY-COPY",
+                                                   "lane:EDGE-334",
+                                                   "lane:EDGE-337",
+                                                   "lane:EDGE-338",
+                                                   "lane:EDGE-345",
+                                                   "narrow:EDGE-337",
+                                                   "node:11",
+                                                   "node:16",
+                                                   "node:27",
+                                                   "node:31",
+                                                   "node:34",
+                                                   "node:35",
+                                                   "node:36",
+                                                   "node:38",
+                                                   "node:39",
+                                                   "node:40",
+                                                   "node:41",
+                                                   "node:42",
+                                                   "node:43",
+                                                   "node:45",
+                                                   "node:5",
+                                                   "node:6",
+                                                   "node:7",
+                                                   "overlap:101:112",
+                                                   "overlap:101:120",
+                                                   "overlap:102:120",
+                                                   "overlap:102:123",
+                                                   "overlap:103:112",
+                                                   "overlap:103:120",
+                                                   "overlap:104:112",
+                                                   "overlap:112:113",
+                                                   "overlap:112:119",
+                                                   "overlap:112:122",
+                                                   "overlap:112:124",
+                                                   "overlap:112:125",
+                                                   "overlap:113:120",
+                                                   "overlap:114:120",
+                                                   "overlap:114:123",
+                                                   "overlap:119:120",
+                                                   "overlap:120:122",
+                                                   "overlap:120:124",
+                                                   "overlap:120:125",
+                                                   "overlap:120:126",
+                                                   "overlap:120:130",
+                                                   "overlap:120:131",
+                                                   "overlap:122:123",
+                                                   "overlap:122:125",
+                                                   "overlap:123:130",
+                                                   "overlap:123:131",
+                                                   "overlap:123:132",
+                                                   "overlap:123:145",
+                                                   "overlap:123:146",
+                                                   "overlap:124:132",
+                                                   "overlap:125:132",
+                                                   "overlap:125:148",
+                                                   "overlap:126:132",
+                                                   "overlap:127:134",
+                                                   "overlap:127:136",
+                                                   "overlap:127:137",
+                                                   "overlap:129:133",
+                                                   "overlap:131:148",
+                                                   "overlap:132:146",
+                                                   "overlap:133:135",
+                                                   "overlap:133:137",
+                                                   "overlap:134:144",
+                                                   "overlap:135:144",
+                                                   "overlap:136:144",
+                                                   "overlap:137:139",
+                                                   "overlap:61:71",
+                                                   "overlap:64:81",
+                                                   "overlap:65:69",
+                                                   "overlap:66:71",
+                                                   "overlap:66:81",
+                                                   "overlap:67:81",
+                                                   "overlap:68:70",
+                                                   "overlap:68:71",
+                                                   "overlap:69:80",
+                                                   "overlap:69:81",
+                                                   "overlap:70:81",
+                                                   "overlap:71:75",
+                                                   "overlap:71:77",
+                                                   "overlap:71:80",
+                                                   "overlap:71:81",
+                                                   "overlap:71:83",
+                                                   "overlap:79:81",
+                                                   "overlap:89:103",
+                                                   "overlap:89:104",
+                                                   "overlap:89:119",
+                                                   "overlap:89:120",
+                                                   "overlap:89:122",
+                                                   "overlap:89:123",
+                                                   "zone:ZONE-JUNCTION",
+                                                   "zone:ZONE-JUNCTION---1",
+                                                   "zone:ZONE-JUNCTION---1-COPY",
+                                                   "zone:ZONE-JUNCTION-COPY-COPY-COPY",
+                                                   "zone:ZONE-NO-STOP---9",
+                                                   "zone:ZONE-NO-STOP---9-COPY",
+                                                   "zone:ZONE-NO-STOP---9-COPY-COPY-COPY"
+                                               ],
+                       "authority":  null,
+                       "lastSeq":  115,
+                       "waitingReason":  "QuarantinedPeer",
+                       "blockingOwner":  null,
+                       "quarantineReason":  "BLOCKED:ROBOT_FAULTED",
+                       "jobStepId":  "ffb56219-3f35-4fd2-95b6-5624dee11d55"
+                   }
+               ],
+    "resources":  [
+                      {
+                          "resourceId":  "bay:EP-CHARGER-1",
+                          "kind":  "StationBay",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "bay:EP-INBOUND",
+                          "kind":  "StationBay",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "bay:EP-INSPECTION",
+                          "kind":  "StationBay",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "bay:EP-OUTBOUND",
+                          "kind":  "StationBay",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "bay:EP-PARK-1",
+                          "kind":  "HoldingBay",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "bay:EP-PARK-2",
+                          "kind":  "HoldingBay",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "junction:ZONE-JUNCTION",
+                          "kind":  "JunctionConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "junction:ZONE-JUNCTION---1",
+                          "kind":  "JunctionConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "junction:ZONE-JUNCTION---1-COPY",
+                          "kind":  "JunctionConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "junction:ZONE-JUNCTION---1-COPY-2",
+                          "kind":  "JunctionConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "junction:ZONE-JUNCTION---1-COPY-2-COPY",
+                          "kind":  "JunctionConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "junction:ZONE-JUNCTION-COPY",
+                          "kind":  "JunctionConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "junction:ZONE-JUNCTION-COPY-COPY",
+                          "kind":  "JunctionConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "junction:ZONE-JUNCTION-COPY-COPY-COPY",
+                          "kind":  "JunctionConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "junction:ZONE-NO-STOP---9",
+                          "kind":  "JunctionConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "junction:ZONE-NO-STOP---9-COPY",
+                          "kind":  "JunctionConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "junction:ZONE-NO-STOP---9-COPY-COPY",
+                          "kind":  "JunctionConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "junction:ZONE-NO-STOP---9-COPY-COPY-COPY",
+                          "kind":  "JunctionConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "lane:EDGE-334",
+                          "kind":  "Lane",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "lane:EDGE-335",
+                          "kind":  "Lane",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "lane:EDGE-336",
+                          "kind":  "Lane",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "lane:EDGE-337",
+                          "kind":  "Lane",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "lane:EDGE-338",
+                          "kind":  "Lane",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "lane:EDGE-339",
+                          "kind":  "Lane",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "lane:EDGE-340",
+                          "kind":  "Lane",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "lane:EDGE-341",
+                          "kind":  "Lane",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "lane:EDGE-342",
+                          "kind":  "Lane",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "lane:EDGE-343",
+                          "kind":  "Lane",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "lane:EDGE-344",
+                          "kind":  "Lane",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "lane:EDGE-345",
+                          "kind":  "Lane",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "lane:EDGE-346",
+                          "kind":  "Lane",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "narrow:EDGE-336",
+                          "kind":  "NarrowBidirectional",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "narrow:EDGE-337",
+                          "kind":  "NarrowBidirectional",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "narrow:EDGE-340",
+                          "kind":  "NarrowBidirectional",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "narrow:EDGE-341",
+                          "kind":  "NarrowBidirectional",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "narrow:EDGE-342",
+                          "kind":  "NarrowBidirectional",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:1",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:10",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:11",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:12",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:13",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:14",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:15",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:16",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:17",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:18",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:19",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:2",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:20",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:21",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:22",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:23",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:24",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:25",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:26",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:27",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:28",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:29",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:3",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:30",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:31",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:32",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:33",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:34",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:35",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:36",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:37",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:38",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:39",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:4",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:40",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:41",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:42",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:43",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:44",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:45",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:46",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:47",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:48",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:49",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:5",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:50",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:51",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:52",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:53",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:54",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:55",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:56",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:57",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:6",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:7",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:8",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "node:9",
+                          "kind":  "NodeConflict",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:101:104",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:101:112",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:101:120",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:102:104",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:102:119",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:102:120",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:102:122",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:102:123",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:103:112",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:103:114",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:103:120",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:104:112",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:104:114",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:105:107",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:105:108",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:105:109",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:105:115",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:105:116",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:106:111",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:106:127",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:107:118",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:107:121",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:108:118",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:108:121",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:109:118",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:109:121",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:111:115",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:111:116",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:111:118",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:111:121",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:112:113",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:112:119",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:112:122",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:112:124",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:112:125",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:113:120",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:113:122",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:114:120",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:114:122",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:114:123",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:114:130",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:116:127",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:118:127",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:119:120",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:120:122",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:120:124",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:120:125",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:120:126",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:120:130",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:120:131",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:122:123",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:122:124",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:122:125",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:122:126",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:122:145",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:123:130",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:123:131",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:123:132",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:123:145",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:123:146",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:124:132",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:125:132",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:125:148",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:126:132",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:126:150",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:127:134",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:127:136",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:127:137",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:128:144",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:129:133",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:129:139",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:131:148",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:132:146",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:133:135",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:133:137",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:134:144",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:135:144",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:136:144",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:137:139",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:138:144",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:139:142",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:139:144",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:139:154",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:141:142",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:141:144",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:144:151",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:144:153",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:145:148",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:146:148",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:146:157",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:147:157",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:148:150",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:148:157",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:148:160",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:148:162",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:148:163",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:149:154",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:149:166",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:150:158",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:150:161",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:151:154",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:151:156",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:151:166",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:153:154",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:153:163",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:154:165",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:156:163",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:157:158",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:157:159",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:157:161",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:158:162",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:159:160",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:163:165",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:163:166",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:58:79",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:59:76",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:59:83",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:60:74",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:60:76",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:60:77",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:60:83",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:61:71",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:61:73",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:61:84",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:62:73",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:62:74",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:62:76",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:63:79",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:64:70",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:64:81",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:65:67",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:65:69",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:65:70",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:65:85",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:65:86",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:66:70",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:66:71",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:66:81",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:67:80",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:67:81",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:68:70",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:68:71",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:69:80",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:69:81",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:70:79",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:70:80",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:70:81",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:71:75",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:71:77",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:71:80",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:71:81",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:71:83",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:72:75",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:72:77",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:72:84",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:73:75",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:73:77",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:73:82",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:73:83",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:73:84",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:73:95",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:74:82",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:74:84",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:75:84",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:76:82",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:76:84",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:76:95",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:78:86",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:78:87",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:79:81",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:79:86",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:79:87",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:80:86",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:80:87",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:84:106",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:84:107",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:84:91",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:86:101",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:86:113",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:86:88",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:87:101",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:87:113",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:87:88",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:88:103",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:89:103",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:89:104",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:89:119",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:89:120",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:89:122",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:89:123",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:90:108",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:90:115",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:90:95",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:90:97",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:90:98",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:90:99",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:91:108",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:91:115",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:91:95",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:91:97",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:91:98",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:91:99",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:93:105",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:93:111",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:93:95",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:94:105",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:94:118",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:94:121",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:94:95",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:95:106",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:95:107",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:95:109",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:95:116",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:97:105",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:97:111",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:97:127",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:98:105",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:98:118",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:99:105",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "overlap:99:111",
+                          "kind":  "PhysicalOverlap",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "zone:ZONE-JUNCTION",
+                          "kind":  "Zone",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "zone:ZONE-JUNCTION---1",
+                          "kind":  "Zone",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "zone:ZONE-JUNCTION---1-COPY",
+                          "kind":  "Zone",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "zone:ZONE-JUNCTION---1-COPY-2",
+                          "kind":  "Zone",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "zone:ZONE-JUNCTION---1-COPY-2-COPY",
+                          "kind":  "Zone",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "zone:ZONE-JUNCTION-COPY",
+                          "kind":  "Zone",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "zone:ZONE-JUNCTION-COPY-COPY",
+                          "kind":  "Zone",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "zone:ZONE-JUNCTION-COPY-COPY-COPY",
+                          "kind":  "Zone",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "zone:ZONE-NO-STOP---9",
+                          "kind":  "Zone",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "zone:ZONE-NO-STOP---9-COPY",
+                          "kind":  "Zone",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "zone:ZONE-NO-STOP---9-COPY-COPY",
+                          "kind":  "Zone",
+                          "capacity":  1,
+                          "holders":  [
+
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      },
+                      {
+                          "resourceId":  "zone:ZONE-NO-STOP---9-COPY-COPY-COPY",
+                          "kind":  "Zone",
+                          "capacity":  1,
+                          "holders":  [
+                                          "26a87e79-7e4f-46fb-b815-8c6bcb0f7805"
+                                      ],
+                          "waiters":  [
+
+                                      ],
+                          "queueLength":  0
+                      }
+                  ],
+    "waits":  [
+
+              ],
+    "cycles":  [
+
+               ],
+    "recentEvents":  [
+                         "2026-10-28T09:56:44.9588087+00:00|epoch:1793181404:reconciling",
+                         "2026-10-28T09:56:45.4235286+00:00|reconcile:ok:26a87e79-7e4f-46fb-b815-8c6bcb0f7805",
+                         "2026-10-28T09:56:45.4235743+00:00|reconcile:complete",
+                         "2026-10-28T09:56:50.8949497+00:00|hold-service:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:bay:EP-INBOUND",
+                         "2026-10-28T09:56:50.9334804+00:00|grant:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759",
+                         "2026-10-28T09:56:51.4806015+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:2",
+                         "2026-10-28T09:56:52.9940061+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:3",
+                         "2026-10-28T09:56:53.9569944+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:",
+                         "2026-10-28T09:56:53.9660321+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:4",
+                         "2026-10-28T09:56:54.4955091+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:5",
+                         "2026-10-28T09:56:56.0097809+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:6",
+                         "2026-10-28T09:56:57.5229193+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:7",
+                         "2026-10-28T09:56:59.0372523+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:8",
+                         "2026-10-28T09:57:00.5464957+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:9",
+                         "2026-10-28T09:57:02.0484655+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:10",
+                         "2026-10-28T09:57:03.5579978+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:11",
+                         "2026-10-28T09:57:03.7138055+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:bay:EP-PARK-1,node:44,overlap:136:144,overlap:137:139,overlap:139:144,overlap:139:154,overlap:141:144",
+                         "2026-10-28T09:57:03.7160900+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:12",
+                         "2026-10-28T09:57:05.0610647+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:13",
+                         "2026-10-28T09:57:06.5689009+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:14",
+                         "2026-10-28T09:57:08.0753441+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:15",
+                         "2026-10-28T09:57:09.2784060+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:junction:ZONE-JUNCTION-COPY-COPY-COPY,junction:ZONE-NO-STOP---9-COPY-COPY-COPY,node:42,node:43,node:45,overlap:128:144,overlap:129:139,overlap:138:144,overlap:139:142,overlap:141:142,zone:ZONE-JUNCTION-COPY-COPY-COPY,zone:ZONE-NO-STOP---9-COPY-COPY-COPY",
+                         "2026-10-28T09:57:09.2799475+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:16",
+                         "2026-10-28T09:57:09.5788406+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:17",
+                         "2026-10-28T09:57:11.0876006+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:18",
+                         "2026-10-28T09:57:12.5895994+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:19",
+                         "2026-10-28T09:57:14.0917984+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:20",
+                         "2026-10-28T09:57:15.6061293+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:21",
+                         "2026-10-28T09:57:17.1070178+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:22",
+                         "2026-10-28T09:57:18.6207995+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:23",
+                         "2026-10-28T09:57:19.3424992+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:overlap:127:134,node:36,overlap:118:127,overlap:127:136,overlap:116:127,overlap:106:127,narrow:EDGE-341,lane:EDGE-341,overlap:127:137",
+                         "2026-10-28T09:57:19.3440457+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:24",
+                         "2026-10-28T09:57:20.1288515+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:25",
+                         "2026-10-28T09:57:21.6359058+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:26",
+                         "2026-10-28T09:57:23.1509511+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:27",
+                         "2026-10-28T09:57:24.4762799+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:zone:ZONE-NO-STOP---9-COPY-COPY,zone:ZONE-JUNCTION-COPY-COPY,overlap:91:108,overlap:90:108,overlap:108:121,overlap:108:118,overlap:105:108,node:26,junction:ZONE-NO-STOP---9-COPY-COPY,junction:ZONE-JUNCTION-COPY-COPY,overlap:97:127",
+                         "2026-10-28T09:57:24.4776952+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:28",
+                         "2026-10-28T09:57:24.6652610+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:29",
+                         "2026-10-28T09:57:26.1783015+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:30",
+                         "2026-10-28T09:57:27.6851601+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:31",
+                         "2026-10-28T09:57:29.1970458+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:32",
+                         "2026-10-28T09:57:29.4868418+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:overlap:94:95,overlap:95:107,overlap:95:106,overlap:93:95,overlap:91:95,overlap:90:95,overlap:76:95,overlap:73:95,node:19,narrow:EDGE-340,lane:EDGE-340,overlap:95:109,overlap:95:116",
+                         "2026-10-28T09:57:29.4881064+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:33",
+                         "2026-10-28T09:57:30.7028876+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:a4fb0a2c-4181-4482-9624-43b6ad3f3759:seq:34",
+                         "2026-10-28T09:57:31.5658928+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:",
+                         "2026-10-28T09:57:31.5928379+00:00|route-complete:26a87e79-7e4f-46fb-b815-8c6bcb0f7805",
+                         "2026-10-28T09:57:41.1351845+00:00|grant:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c",
+                         "2026-10-28T09:57:41.2610677+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:36",
+                         "2026-10-28T09:57:42.7653589+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:37",
+                         "2026-10-28T09:57:44.2713680+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:38",
+                         "2026-10-28T09:57:45.7733400+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:39",
+                         "2026-10-28T09:57:47.2764909+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:40",
+                         "2026-10-28T09:57:48.7839009+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:41",
+                         "2026-10-28T09:57:50.2892371+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:42",
+                         "2026-10-28T09:57:51.7947828+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:43",
+                         "2026-10-28T09:57:53.3082096+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:44",
+                         "2026-10-28T09:57:54.1046399+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:node:2",
+                         "2026-10-28T09:57:54.1062209+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:45",
+                         "2026-10-28T09:57:54.8141730+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:46",
+                         "2026-10-28T09:57:56.3169758+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:47",
+                         "2026-10-28T09:57:57.8262760+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:48",
+                         "2026-10-28T09:57:59.3269221+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:49",
+                         "2026-10-28T09:58:00.8273618+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:50",
+                         "2026-10-28T09:58:02.3369074+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:51",
+                         "2026-10-28T09:58:03.8474386+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:52",
+                         "2026-10-28T09:58:05.3550917+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:53",
+                         "2026-10-28T09:58:06.8558378+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:54",
+                         "2026-10-28T09:58:08.3689124+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:55",
+                         "2026-10-28T09:58:08.7812686+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:",
+                         "2026-10-28T09:58:08.7827768+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:56",
+                         "2026-10-28T09:58:09.8810464+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:57",
+                         "2026-10-28T09:58:11.3826479+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:4bc9f2e2-b304-4580-843d-a1e2f00ede7c:seq:58",
+                         "2026-10-28T09:58:12.7408884+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:overlap:61:84,zone:ZONE-JUNCTION-COPY,node:12,overlap:60:83,overlap:60:77,node:3,junction:ZONE-JUNCTION-COPY",
+                         "2026-10-28T09:58:12.7492364+00:00|route-complete:26a87e79-7e4f-46fb-b815-8c6bcb0f7805",
+                         "2026-10-28T09:58:15.3176698+00:00|release-stale-holds:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:bay:EP-INBOUND",
+                         "2026-10-28T09:58:15.3190126+00:00|grant:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af",
+                         "2026-10-28T09:58:15.9001485+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:60",
+                         "2026-10-28T09:58:17.4071770+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:61",
+                         "2026-10-28T09:58:18.9204762+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:62",
+                         "2026-10-28T09:58:19.5739913+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:overlap:62:76,overlap:59:76,overlap:76:95,overlap:76:84,node:9,overlap:76:82,overlap:74:82,overlap:60:76,overlap:60:74",
+                         "2026-10-28T09:58:19.5752653+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:63",
+                         "2026-10-28T09:58:20.4325787+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:64",
+                         "2026-10-28T09:58:21.3043595+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:node:8,overlap:73:75,overlap:62:73,overlap:61:73,overlap:73:82,overlap:73:77,overlap:73:83,overlap:73:84,overlap:73:95",
+                         "2026-10-28T09:58:21.3061883+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:65",
+                         "2026-10-28T09:58:21.9378761+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:66",
+                         "2026-10-28T09:58:23.4414112+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:67",
+                         "2026-10-28T09:58:24.9453776+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:68",
+                         "2026-10-28T09:58:26.4522855+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:69",
+                         "2026-10-28T09:58:27.7926528+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:overlap:71:83,node:7,overlap:61:71,overlap:71:77,overlap:71:75",
+                         "2026-10-28T09:58:27.7948982+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:70",
+                         "2026-10-28T09:58:27.9643713+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:71",
+                         "2026-10-28T09:58:29.4710350+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:72",
+                         "2026-10-28T09:58:30.9789988+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:73",
+                         "2026-10-28T09:58:32.4828877+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:74",
+                         "2026-10-28T09:58:32.6888544+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:narrow:EDGE-337,overlap:69:80,overlap:71:80,overlap:68:71,node:6,overlap:65:69,overlap:66:71,node:5,lane:EDGE-337,zone:ZONE-JUNCTION,overlap:68:70,junction:ZONE-JUNCTION",
+                         "2026-10-28T09:58:32.6902911+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:75",
+                         "2026-10-28T09:58:33.9863316+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:76",
+                         "2026-10-28T09:58:35.4952711+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:77",
+                         "2026-10-28T09:58:37.0027550+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:78",
+                         "2026-10-28T09:58:38.5057424+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:79",
+                         "2026-10-28T09:58:39.0589628+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:overlap:67:81,overlap:66:81,overlap:79:81,overlap:64:81,overlap:71:81,overlap:69:81,lane:EDGE-345,overlap:70:81,node:11",
+                         "2026-10-28T09:58:39.0613513+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:80",
+                         "2026-10-28T09:58:40.0105429+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:81",
+                         "2026-10-28T09:58:41.5217757+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:82",
+                         "2026-10-28T09:58:42.5247257+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:",
+                         "2026-10-28T09:58:42.5258788+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:83",
+                         "2026-10-28T09:58:43.0305492+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:84",
+                         "2026-10-28T09:58:44.5319395+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:85",
+                         "2026-10-28T09:58:46.0347630+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:86",
+                         "2026-10-28T09:58:46.7108972+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:overlap:112:122,overlap:112:119,overlap:112:113,overlap:104:112,overlap:103:112,zone:ZONE-NO-STOP---9-COPY,zone:ZONE-JUNCTION---1-COPY,node:16,overlap:101:112,overlap:89:122,overlap:89:119,overlap:89:104,overlap:89:103,node:27,junction:ZONE-NO-STOP---9-COPY,junction:ZONE-JUNCTION---1-COPY",
+                         "2026-10-28T09:58:46.7123257+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:87",
+                         "2026-10-28T09:58:47.5388780+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:88",
+                         "2026-10-28T09:58:48.0417281+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:",
+                         "2026-10-28T09:58:48.0434510+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:89",
+                         "2026-10-28T09:58:49.0423774+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:90",
+                         "2026-10-28T09:58:50.5460092+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:91",
+                         "2026-10-28T09:58:52.0596950+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:92",
+                         "2026-10-28T09:58:53.5639824+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:93",
+                         "2026-10-28T09:58:54.3127572+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:overlap:120:122,overlap:119:120,overlap:102:120,overlap:101:120,node:34,overlap:112:124,overlap:114:120,overlap:113:120,overlap:103:120,overlap:123:145,node:31,overlap:89:123,overlap:89:120,overlap:123:130,overlap:122:123,overlap:114:123,overlap:102:123,lane:EDGE-338,overlap:120:124,overlap:120:130",
+                         "2026-10-28T09:58:54.3157146+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:94",
+                         "2026-10-28T09:58:55.0652781+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:95",
+                         "2026-10-28T09:58:56.5807135+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:96",
+                         "2026-10-28T09:58:58.0865145+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:97",
+                         "2026-10-28T09:58:59.5967480+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:98",
+                         "2026-10-28T09:59:01.1117162+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:99",
+                         "2026-10-28T09:59:02.6237681+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:100",
+                         "2026-10-28T09:59:04.1249429+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:101",
+                         "2026-10-28T09:59:04.4869094+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:overlap:112:125,overlap:122:125,node:38,junction:ZONE-NO-STOP---9,junction:ZONE-JUNCTION---1,overlap:123:146,overlap:123:131,node:35,overlap:120:125,overlap:120:126,overlap:120:131,overlap:125:148,overlap:131:148,zone:ZONE-JUNCTION---1,zone:ZONE-NO-STOP---9",
+                         "2026-10-28T09:59:04.4893234+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:102",
+                         "2026-10-28T09:59:05.6374680+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:103",
+                         "2026-10-28T09:59:07.1511024+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:104",
+                         "2026-10-28T09:59:08.6538469+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:105",
+                         "2026-10-28T09:59:10.1561979+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:106",
+                         "2026-10-28T09:59:11.6648259+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:107",
+                         "2026-10-28T09:59:13.1649328+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:108",
+                         "2026-10-28T09:59:14.6734118+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:109",
+                         "2026-10-28T09:59:16.1858910+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:110",
+                         "2026-10-28T09:59:17.3690157+00:00|safe-stop:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:overlap:125:132,node:39,overlap:123:132,overlap:132:146,overlap:126:132,overlap:124:132",
+                         "2026-10-28T09:59:17.3704783+00:00|extend:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:111",
+                         "2026-10-28T09:59:17.6939482+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:112",
+                         "2026-10-28T09:59:19.2007655+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:113",
+                         "2026-10-28T09:59:20.7145193+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:114",
+                         "2026-10-28T09:59:22.2249229+00:00|renew:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:auth:1308a167-3c84-4809-bca0-5de0a54396af:seq:115",
+                         "2026-10-28T09:59:23.1782529+00:00|quarantine:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:BLOCKED:CONTROLLER_FAILED",
+                         "2026-10-28T09:59:23.1854350+00:00|quarantine:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:NAVIGATE:CONTROLLER_FAILED",
+                         "2026-10-28T09:59:23.2988188+00:00|reconcile-robot:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:released:",
+                         "2026-10-28T09:59:23.2989128+00:00|quarantine:26a87e79-7e4f-46fb-b815-8c6bcb0f7805:BLOCKED:ROBOT_FAULTED"
+                     ]
+}

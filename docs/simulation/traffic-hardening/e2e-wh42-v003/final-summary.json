@@ -1,0 +1,17 @@
+[
+    {
+        "run":  1,
+        "status":  "REASSIGNING",
+        "failure":  "CONTROLLER_FAILED"
+    },
+    {
+        "run":  2,
+        "status":  "RUNNING",
+        "failure":  null
+    },
+    {
+        "run":  3,
+        "status":  "RUNNING",
+        "failure":  null
+    }
+]

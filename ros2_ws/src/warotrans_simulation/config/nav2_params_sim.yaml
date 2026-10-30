@@ -10,13 +10,20 @@
 # cost → RPP "collision ahead" → rotate_to_heading loop (~1 min in-place spin).
 # Sim-only: inflation 0.15 keeps centreline clear; disable rotate_to_heading so a
 # brief collision-ahead does not become an in-place spin until progress abort.
-# Keep route lookahead from nav2_params_route.yaml. Do not invent wheel calib.
+# Merged LAST (after nav2_params_route.yaml). Raise lookahead with sim speed so v/L ≤ ~1.2.
+# Do not invent wheel calib; do not disable Collision Monitor / Motion Authority.
 # =============================================================================
 
 controller_server:
   ros__parameters:
     FollowPath:
-      desired_linear_vel: 0.35
+      # Phase B: keep lane lookahead 0.20 (tight aisles); drop v so v/L ≤ ~1.2 (0.24/0.20=1.2).
+      # Raising L to 0.30 with v=0.35 cut corners → RPP collision-ahead → progress abort (E2E JOB-000007).
+      desired_linear_vel: 0.24
+      lookahead_dist: 0.20
+      min_lookahead_dist: 0.15
+      max_lookahead_dist: 0.30
+      curvature_lookahead_dist: 0.20
       # Pivot in place when the lane turns > rotate_to_heading_min_angle (base 45°) or a new MOVE starts
       # facing away from the route (e.g. leaving EP-INBOUND nose-to-wall). Arcing instead cut corners
       # into shelves/walls. The old in-aisle spin loop came from FollowPath poses with zero quaternions
@@ -32,6 +39,11 @@ controller_server:
       # stopping, then arcs into the shelf on the next segment (Gazebo trace 2026-10-27, node 26).
       use_fixed_curvature_lookahead: true
       interpolate_curvature_after_goal: true
+    general_goal_checker:
+      # Target was 0.05 m; JOB-000008 reached ~9 cm of EP-INBOUND (0.00,-0.05 vs 0.045,-0.133)
+      # then progress-aborted — 0.05 m not feasible with AMCL+lane tracking floor. Use 0.10 m.
+      xy_goal_tolerance: 0.10
+      yaw_goal_tolerance: 0.25
 
 local_costmap:
   local_costmap:
@@ -54,5 +66,7 @@ velocity_smoother:
   ros__parameters:
     max_velocity: [0.4, 0.0, 1.0]
     min_velocity: [-0.2, 0.0, -1.0]
-    max_accel: [0.8, 0.0, 1.5]
-    max_decel: [-0.8, 0.0, -1.5]
+    # Slightly softer angular accel to cut stop-go twist chatter (Phase B cause #3); keep scale on.
+    max_accel: [0.8, 0.0, 1.2]
+    max_decel: [-0.8, 0.0, -1.2]
+    scale_velocities: true

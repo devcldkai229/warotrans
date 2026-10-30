@@ -1,0 +1,27 @@
+{
+  "id": "8f37f6e6-2aac-4944-8f5d-271ece435755",
+  "requestCode": "REQ-20261029-000014",
+  "status": "SUBMITTED",
+  "warehouseId": "42cfe65f-7727-4dd2-a66b-b9b93dc2d549",
+  "mapVersionId": "1143c8a3-ae62-4660-b684-bc462450f30f",
+  "workflowId": "2e284570-a1e4-41d2-9cd0-19cbbf811b0b",
+  "planSchemaVersion": 1,
+  "requestedBy": "a0000000-0000-4000-8000-000000000002",
+  "note": "WH42 V001 single inbound E2E",
+  "workflowInputs": {},
+  "submittedAt": "2026-10-29T19:04:13.2169016+00:00",
+  "details": [
+    {
+      "id": "44a7a408-8d56-4e04-bf09-be7a4b67f571",
+      "sequenceNo": 1,
+      "containerId": "e4000000-0000-4000-8000-000000000004",
+      "sourceStorageLocationId": null,
+      "sourceEndpointId": "f483b965-7942-4003-88b8-f4c52796f9b2",
+      "sourceLevelNo": null,
+      "destinationStorageLocationId": "f2000000-0000-4000-8000-000000000001",
+      "destinationEndpointId": "9d0ff20a-56c4-4234-ac8a-514ecf493f5d",
+      "destinationLevelNo": null,
+      "status": "PENDING"
+    }
+  ]
+}

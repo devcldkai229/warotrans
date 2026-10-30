@@ -1,0 +1,1200 @@
+{
+  "mapVersionId": "f663f14f-3a28-4d14-aa4b-19d9e11bad69",
+  "mapVersionCode": "MAP-WH42CFE65F-V001",
+  "status": "PUBLISHED",
+  "endpoints": [
+    {
+      "code": "EP-CHARGER-7",
+      "name": "CHARGER A",
+      "endpointType": "CHARGER",
+      "x": -1.029,
+      "y": -0.965,
+      "yaw": -1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-PARK-5",
+      "name": "Parking A",
+      "endpointType": "PARK",
+      "x": -1.929,
+      "y": -0.965,
+      "yaw": -1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-PARK-6",
+      "name": "Parking B",
+      "endpointType": "PARK",
+      "x": -1.479,
+      "y": -0.965,
+      "yaw": -1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-WAYPOINT-1",
+      "name": "Inbound Area",
+      "endpointType": "WAYPOINT",
+      "x": 1.745,
+      "y": 1.627,
+      "yaw": -1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-WAYPOINT-10",
+      "name": "Shelf-A-03",
+      "endpointType": "WAYPOINT",
+      "x": -1.25,
+      "y": 1.343,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-WAYPOINT-11",
+      "name": "Shelf-A-04",
+      "endpointType": "WAYPOINT",
+      "x": -1.25,
+      "y": 1.664,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-WAYPOINT-12",
+      "name": "Shelf-C-01",
+      "endpointType": "WAYPOINT",
+      "x": 0.8,
+      "y": -0.771,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-WAYPOINT-13",
+      "name": "Shelf-C-02",
+      "endpointType": "WAYPOINT",
+      "x": 0.8,
+      "y": -0.99,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-WAYPOINT-14",
+      "name": "Shelf-B-01",
+      "endpointType": "WAYPOINT",
+      "x": 0.793,
+      "y": 1.695,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-WAYPOINT-15",
+      "name": "Shelf-B-02",
+      "endpointType": "WAYPOINT",
+      "x": 0.803,
+      "y": 1.348,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-WAYPOINT-16",
+      "name": "Shelf-B-04",
+      "endpointType": "WAYPOINT",
+      "x": 0.577,
+      "y": 1.35,
+      "yaw": 1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-WAYPOINT-17",
+      "name": "Shelf-B-03",
+      "endpointType": "WAYPOINT",
+      "x": 0.85,
+      "y": 0.994,
+      "yaw": 1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-WAYPOINT-2",
+      "name": "Outbound Area",
+      "endpointType": "WAYPOINT",
+      "x": 1.911,
+      "y": -1.079,
+      "yaw": 1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-WAYPOINT-3",
+      "name": "Inspection Quality Area",
+      "endpointType": "WAYPOINT",
+      "x": 1.645,
+      "y": -1.08,
+      "yaw": 1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-WAYPOINT-4",
+      "name": "Wait Point",
+      "endpointType": "WAYPOINT",
+      "x": 1.296,
+      "y": 0.85,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-WAYPOINT-8",
+      "name": "Shelf-A-01",
+      "endpointType": "WAYPOINT",
+      "x": -1.25,
+      "y": 0.604,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-WAYPOINT-9",
+      "name": "Shelf-A-02",
+      "endpointType": "WAYPOINT",
+      "x": -1.25,
+      "y": 0.953,
+      "yaw": 0,
+      "isEnabled": true
+    }
+  ],
+  "edges": [
+    {
+      "code": "EDGE-347",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            0.871,
+            -0.291
+          ],
+          [
+            1.491,
+            -0.291
+          ]
+        ]
+      },
+      "widthMeters": 0.45,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-348",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.48,
+            0.2
+          ],
+          [
+            0.868,
+            0.2
+          ]
+        ]
+      },
+      "widthMeters": 0.45,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-349",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            0.102,
+            0.45
+          ],
+          [
+            0.095,
+            1.336
+          ]
+        ]
+      },
+      "widthMeters": 0.5,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-350",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -0.419,
+            1.338
+          ],
+          [
+            -0.408,
+            0.436
+          ]
+        ]
+      },
+      "widthMeters": 0.5,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-352",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -0.685,
+            0.05
+          ],
+          [
+            -2.173,
+            0.05
+          ]
+        ]
+      },
+      "widthMeters": 0.65,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-353",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -2.179,
+            -0.99
+          ],
+          [
+            -0.69,
+            -0.99
+          ]
+        ]
+      },
+      "widthMeters": 0.65,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-354",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -0.4,
+            -0.99
+          ],
+          [
+            -0.4,
+            -0.35
+          ]
+        ]
+      },
+      "widthMeters": 0.55,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-355",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -0.4,
+            -0.99
+          ],
+          [
+            1.8,
+            -0.99
+          ]
+        ]
+      },
+      "widthMeters": 0.55,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-356",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.8,
+            -0.99
+          ],
+          [
+            1.8,
+            1.7
+          ]
+        ]
+      },
+      "widthMeters": 0.55,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-357",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            0.1,
+            1.5
+          ],
+          [
+            1.8,
+            1.5
+          ]
+        ]
+      },
+      "widthMeters": 0.5,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-359",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -1.25,
+            0.05
+          ],
+          [
+            -1.25,
+            1.7
+          ]
+        ]
+      },
+      "widthMeters": 0.45,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-360",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            0.1,
+            1.35
+          ],
+          [
+            0.85,
+            1.35
+          ]
+        ]
+      },
+      "widthMeters": 0.45,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-361",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            0.8,
+            -0.99
+          ],
+          [
+            0.8,
+            -0.75
+          ]
+        ]
+      },
+      "widthMeters": 0.45,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-362",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.3,
+            0.2
+          ],
+          [
+            1.3,
+            0.85
+          ]
+        ]
+      },
+      "widthMeters": 0.45,
+      "direction": "BIDIRECTIONAL",
+      "maxSpeed": null,
+      "isActive": true
+    }
+  ],
+  "zones": [
+    {
+      "code": "ZONE-JUNCTION---13",
+      "name": "Junction - 13",
+      "zoneType": "JUNCTION",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.685,
+              -0.607
+            ],
+            [
+              -0.68,
+              -1.295
+            ],
+            [
+              0.341,
+              -1.295
+            ],
+            [
+              0.341,
+              -0.607
+            ],
+            [
+              -0.685,
+              -0.607
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-JUNCTION---16",
+      "name": "Junction - 16",
+      "zoneType": "JUNCTION",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -2.844,
+              1.791
+            ],
+            [
+              -1.766,
+              1.781
+            ],
+            [
+              -1.762,
+              0.823
+            ],
+            [
+              -2.828,
+              0.816
+            ],
+            [
+              -2.844,
+              1.791
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-JUNCTION---18",
+      "name": "Junction - 18",
+      "zoneType": "JUNCTION",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -2.841,
+              0.819
+            ],
+            [
+              -2.173,
+              0.819
+            ],
+            [
+              -2.173,
+              -1.305
+            ],
+            [
+              -2.83,
+              -1.305
+            ],
+            [
+              -2.841,
+              0.819
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-JUNCTION---2",
+      "name": "Junction Zone",
+      "zoneType": "JUNCTION",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.687,
+              0.448
+            ],
+            [
+              0.861,
+              0.443
+            ],
+            [
+              0.865,
+              -0.6
+            ],
+            [
+              -0.682,
+              -0.611
+            ],
+            [
+              -0.687,
+              0.448
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-JUNCTION---4",
+      "name": "Junction Zone",
+      "zoneType": "JUNCTION",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              1.48,
+              1.445
+            ],
+            [
+              1.48,
+              -0.807
+            ],
+            [
+              2.112,
+              -0.807
+            ],
+            [
+              2.112,
+              1.445
+            ],
+            [
+              1.48,
+              1.445
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-JUNCTION---7",
+      "name": "Junction - 7",
+      "zoneType": "JUNCTION",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.665,
+              1.789
+            ],
+            [
+              0.341,
+              1.789
+            ],
+            [
+              0.341,
+              1.333
+            ],
+            [
+              -0.675,
+              1.333
+            ],
+            [
+              -0.665,
+              1.789
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-KEEP-OUT---20",
+      "name": "Keep-out - 20",
+      "zoneType": "KEEP_OUT",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -2.173,
+              0.819
+            ],
+            [
+              -1.794,
+              0.819
+            ],
+            [
+              -1.783,
+              0.404
+            ],
+            [
+              -2.168,
+              0.409
+            ],
+            [
+              -2.173,
+              0.819
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-NO-STOP---8",
+      "name": "No-stop - 8",
+      "zoneType": "NO_STOP",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.69,
+              1.794
+            ],
+            [
+              0.346,
+              1.794
+            ],
+            [
+              0.348,
+              1.343
+            ],
+            [
+              -0.682,
+              1.336
+            ],
+            [
+              -0.69,
+              1.794
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-OCCUPANCY---1",
+      "name": "Single Zone",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              1.121,
+              1.132
+            ],
+            [
+              1.47,
+              1.132
+            ],
+            [
+              1.47,
+              0.491
+            ],
+            [
+              1.126,
+              0.491
+            ],
+            [
+              1.121,
+              1.132
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-OCCUPANCY---10",
+      "name": "Single-occupancy - 10",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.675,
+              1.338
+            ],
+            [
+              -0.172,
+              1.338
+            ],
+            [
+              -0.162,
+              0.457
+            ],
+            [
+              -0.675,
+              0.446
+            ],
+            [
+              -0.675,
+              1.338
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-OCCUPANCY---11",
+      "name": "Storage Zone",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              0.351,
+              1.825
+            ],
+            [
+              1.378,
+              1.825
+            ],
+            [
+              1.378,
+              1.189
+            ],
+            [
+              1.039,
+              1.189
+            ],
+            [
+              1.039,
+              0.491
+            ],
+            [
+              0.392,
+              0.501
+            ],
+            [
+              0.351,
+              1.825
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-OCCUPANCY---12",
+      "name": "Storage Zone",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              0.372,
+              -0.618
+            ],
+            [
+              1.455,
+              -0.618
+            ],
+            [
+              1.455,
+              -1.264
+            ],
+            [
+              0.382,
+              -1.264
+            ],
+            [
+              0.372,
+              -0.618
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-OCCUPANCY---14",
+      "name": "Storage Zone",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.706,
+              0.419
+            ],
+            [
+              -1.747,
+              0.419
+            ],
+            [
+              -1.747,
+              1.117
+            ],
+            [
+              -0.726,
+              1.117
+            ],
+            [
+              -0.706,
+              0.419
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-OCCUPANCY---15",
+      "name": "Single-occupancy - 15",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.742,
+              1.784
+            ],
+            [
+              -0.742,
+              1.148
+            ],
+            [
+              -1.747,
+              1.148
+            ],
+            [
+              -1.747,
+              1.794
+            ],
+            [
+              -0.742,
+              1.784
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-OCCUPANCY---17",
+      "name": "Single-occupancy - 17",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -2.83,
+              0.809
+            ],
+            [
+              -2.83,
+              -1.295
+            ],
+            [
+              -2.184,
+              -1.295
+            ],
+            [
+              -2.184,
+              0.809
+            ],
+            [
+              -2.83,
+              0.809
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-OCCUPANCY---19",
+      "name": "Single-occupancy - 19",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -2.845,
+              1.794
+            ],
+            [
+              -1.77,
+              1.784
+            ],
+            [
+              -1.763,
+              0.816
+            ],
+            [
+              -2.834,
+              0.824
+            ],
+            [
+              -2.845,
+              1.794
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-OCCUPANCY---21",
+      "name": "Single Zone In Inbound",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              1.429,
+              1.835
+            ],
+            [
+              1.429,
+              1.451
+            ],
+            [
+              2.076,
+              1.451
+            ],
+            [
+              2.076,
+              1.835
+            ],
+            [
+              1.429,
+              1.835
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-OCCUPANCY---22",
+      "name": "Single Zone In Outbound/Inspection",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              1.47,
+              -0.838
+            ],
+            [
+              2.137,
+              -0.838
+            ],
+            [
+              2.137,
+              -1.249
+            ],
+            [
+              1.465,
+              -1.249
+            ],
+            [
+              1.47,
+              -0.838
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-OCCUPANCY---3",
+      "name": "Single Zone In Center",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.685,
+              0.426
+            ],
+            [
+              0.865,
+              0.453
+            ],
+            [
+              0.882,
+              -0.597
+            ],
+            [
+              -0.672,
+              -0.597
+            ],
+            [
+              -0.685,
+              0.426
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-OCCUPANCY---5",
+      "name": "Single In Lane",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              0.854,
+              0.429
+            ],
+            [
+              1.48,
+              0.426
+            ],
+            [
+              1.48,
+              -0.033
+            ],
+            [
+              0.87,
+              -0.033
+            ],
+            [
+              0.854,
+              0.429
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-OCCUPANCY---6",
+      "name": "Single In Lane",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              0.87,
+              -0.038
+            ],
+            [
+              1.47,
+              -0.038
+            ],
+            [
+              1.477,
+              -0.573
+            ],
+            [
+              0.868,
+              -0.58
+            ],
+            [
+              0.87,
+              -0.038
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-OCCUPANCY---9",
+      "name": "Single-occupancy - 9",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.158,
+              1.333
+            ],
+            [
+              0.341,
+              1.338
+            ],
+            [
+              0.375,
+              0.457
+            ],
+            [
+              -0.151,
+              0.45
+            ],
+            [
+              -0.158,
+              1.333
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    }
+  ]
+}
