@@ -40,17 +40,31 @@ __all__ = [
     "AuthorityStore",
     "DEFAULT_STATE_FILENAME",
     "LRU_CAPACITY",
+    "ManeuverStep",
     "compute_path_hash",
     "default_state_path",
     "parse_authority",
     "parse_edge_ids",
     "parse_expires_at",
+    "parse_maneuvers",
     "parse_speed_limits",
 ]
+
+MANEUVER_KINDS = frozenset({"Forward", "Reverse", "Spin"})
 
 LRU_CAPACITY = 256
 DEFAULT_STATE_FILENAME = "warotrans_authority_state.json"
 _STATE_VERSION = 1
+
+
+@dataclass(frozen=True)
+class ManeuverStep:
+    """One executable step under MotionAuthority (CompilerVersion 10+)."""
+
+    kind: str  # Forward | Reverse | Spin
+    edge_ids: tuple[int, ...] = ()
+    yaw_target: Optional[float] = None
+    resource_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -70,12 +84,21 @@ class Authority:
     goal_safe_stop_node_id: Optional[int] = None
     final_goal: Optional[tuple[float, float, float]] = None  # (x, y, yaw) trong frame map
     command_id: Optional[str] = None
+    # Empty = legacy Forward-only over segment_edge_ids (backward compatible).
+    maneuvers: tuple[ManeuverStep, ...] = ()
 
     def is_expired(self, now: float) -> bool:
         return self.expires_at is not None and now >= self.expires_at
 
     def expected_path_hash(self) -> str:
         return compute_path_hash(self.graph_hash, self.segment_edge_ids)
+
+    def resolved_maneuvers(self) -> tuple[ManeuverStep, ...]:
+        if self.maneuvers:
+            return self.maneuvers
+        if not self.segment_edge_ids:
+            return ()
+        return (ManeuverStep(kind="Forward", edge_ids=self.segment_edge_ids),)
 
 
 @dataclass(frozen=True)
@@ -175,6 +198,49 @@ def parse_final_goal(raw: Any) -> Optional[tuple[float, float, float]]:
     return (values[0], values[1], values[2])
 
 
+def parse_maneuvers(raw: Any) -> tuple[ManeuverStep, ...]:
+    """Parse optional authority.maneuvers. Missing/null/[] → empty (Forward-only legacy)."""
+    if raw is None:
+        return ()
+    if not isinstance(raw, (list, tuple)):
+        raise CommandRejected(REASON_INVALID_PAYLOAD, "'authority.maneuvers' must be an array")
+    steps: list[ManeuverStep] = []
+    for i, item in enumerate(raw):
+        if not isinstance(item, Mapping):
+            raise CommandRejected(REASON_INVALID_PAYLOAD, f"'authority.maneuvers[{i}]' must be an object")
+        kind = item.get("kind")
+        if not isinstance(kind, str) or kind not in MANEUVER_KINDS:
+            raise CommandRejected(
+                REASON_INVALID_PAYLOAD,
+                f"'authority.maneuvers[{i}].kind' must be one of {sorted(MANEUVER_KINDS)}",
+            )
+        edge_ids = parse_edge_ids(item.get("edgeIds") or [], label=f"authority.maneuvers[{i}].edgeIds")
+        yaw_raw = item.get("yawTarget")
+        yaw_target: Optional[float] = None
+        if yaw_raw is not None:
+            if isinstance(yaw_raw, bool) or not isinstance(yaw_raw, (int, float)) or not math.isfinite(float(yaw_raw)):
+                raise CommandRejected(
+                    REASON_INVALID_PAYLOAD, f"'authority.maneuvers[{i}].yawTarget' must be a finite number"
+                )
+            yaw_target = float(yaw_raw)
+        resources_raw = item.get("resourceIds")
+        resource_ids: tuple[str, ...] = ()
+        if resources_raw is not None:
+            if not isinstance(resources_raw, (list, tuple)):
+                raise CommandRejected(
+                    REASON_INVALID_PAYLOAD, f"'authority.maneuvers[{i}].resourceIds' must be an array"
+                )
+            resource_ids = tuple(str(r) for r in resources_raw)
+        if kind == "Spin" and yaw_target is None:
+            raise CommandRejected(REASON_INVALID_PAYLOAD, f"'authority.maneuvers[{i}].yawTarget' required for Spin")
+        if kind in ("Forward", "Reverse") and not edge_ids:
+            raise CommandRejected(
+                REASON_INVALID_PAYLOAD, f"'authority.maneuvers[{i}].edgeIds' required for {kind}"
+            )
+        steps.append(ManeuverStep(kind=kind, edge_ids=edge_ids, yaw_target=yaw_target, resource_ids=resource_ids))
+    return tuple(steps)
+
+
 def parse_authority(
     payload: Mapping[str, Any],
     *,
@@ -218,6 +284,7 @@ def parse_authority(
         goal_safe_stop_node_id=goal_node,
         final_goal=parse_final_goal(src.get("finalGoal")),
         command_id=command_id,
+        maneuvers=parse_maneuvers(src.get("maneuvers")),
     )
     if verify_path_hash and authority.expected_path_hash() != authority.path_hash:
         raise CommandRejected(
@@ -253,11 +320,26 @@ def _authority_to_json(a: Authority) -> dict[str, Any]:
         if a.final_goal is None
         else {"x": a.final_goal[0], "y": a.final_goal[1], "yaw": a.final_goal[2]},
         "commandId": a.command_id,
+        "maneuvers": [
+            {
+                "kind": m.kind,
+                "edgeIds": list(m.edge_ids),
+                "yawTarget": m.yaw_target,
+                "resourceIds": list(m.resource_ids),
+            }
+            for m in a.maneuvers
+        ],
     }
 
 
 def _authority_from_json(raw: Mapping[str, Any]) -> Authority:
     goal = raw.get("finalGoal")
+    maneuvers = ()
+    if raw.get("maneuvers"):
+        try:
+            maneuvers = parse_maneuvers(raw.get("maneuvers"))
+        except CommandRejected:
+            maneuvers = ()
     return Authority(
         authority_id=str(raw["authorityId"]),
         epoch=int(raw["epoch"]),
@@ -276,6 +358,7 @@ def _authority_from_json(raw: Mapping[str, Any]) -> Authority:
         if not isinstance(goal, Mapping)
         else (float(goal["x"]), float(goal["y"]), float(goal["yaw"])),
         command_id=raw.get("commandId"),
+        maneuvers=maneuvers,
     )
 
 

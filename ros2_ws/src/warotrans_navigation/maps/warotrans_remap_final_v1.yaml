@@ -1,0 +1,7 @@
+image: warotrans_remap_final_v1.pgm
+mode: trinary
+resolution: 0.050
+origin: [-1.623, -1.456, 0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.196

@@ -10,7 +10,7 @@ from typing import Any, Optional
 def _load_spawn_pose_module():
     candidates: list[str] = []
     here = os.path.dirname(os.path.abspath(__file__))
-    candidates.append(os.path.join(here, "..", "scripts", "spawn_pose.py"))
+    # Prefer lib/ (symlink-install → source) over share/scripts (may be a stale copied file).
     try:
         from ament_index_python.packages import get_package_prefix
 
@@ -18,6 +18,8 @@ def _load_spawn_pose_module():
         candidates.append(os.path.join(prefix, "lib", "warotrans_simulation", "spawn_pose.py"))
     except Exception:
         pass
+    candidates.append(os.path.join(here, "..", "..", "..", "..", "src", "warotrans_simulation", "scripts", "spawn_pose.py"))
+    candidates.append(os.path.join(here, "..", "scripts", "spawn_pose.py"))
     for path in candidates:
         path = os.path.normpath(path)
         if not os.path.isfile(path):

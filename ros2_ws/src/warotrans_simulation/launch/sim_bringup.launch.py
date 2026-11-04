@@ -75,10 +75,51 @@ def _setup(context: LaunchContext, *args, **kwargs):
         # Sim odometry is exact (OdometryPublisher), unlike the skidding real robot.
         amcl_noise = {"alpha1": 0.05, "alpha2": 0.05, "alpha3": 0.05, "alpha4": 0.05}
 
+    nav_runtime = LaunchConfiguration("nav_runtime").perform(context).strip().lower() or "nav2_semantic"
+    if nav_runtime not in ("nav2_semantic", "route_graph"):
+        raise RuntimeError(f"nav_runtime must be nav2_semantic|route_graph, got {nav_runtime!r}")
+    route_graph = LaunchConfiguration("route_graph").perform(context).strip()
+    enable_filters = "false"
+    keepout_mask = ""
+    speed_mask = ""
+    lanes_json = ""
+    no_stop_json = ""
+    keepout_json = ""
+    extra_overlays: list[str] = []
+    if _flag(context, "sim_speeds"):
+        extra_overlays.append(os.path.join(sim_pkg, "config", "nav2_params_sim.yaml"))
+    if nav_runtime == "nav2_semantic":
+        # Free-space NavigateToPose: never attach Nav2 Route Server.
+        route_graph = ""
+        # Stage-2: KEEP_OUT/SPEED filters + LaneAwareNavfn + path policy files from MAP-ONE bundle.
+        map_dir = os.path.dirname(os.path.abspath(map_yaml)) if map_yaml else ""
+        keepout_mask = os.path.join(map_dir, "keepout.yaml")
+        speed_mask = os.path.join(map_dir, "speed.yaml")
+        lanes_json = os.path.join(map_dir, "lanes.json")
+        no_stop_json = os.path.join(map_dir, "no_stop.json")
+        keepout_json = os.path.join(map_dir, "keepout.json")
+        if os.path.isfile(keepout_mask) and os.path.isfile(speed_mask):
+            enable_filters = "true"
+        else:
+            raise RuntimeError(
+                f"Stage-2 semantic masks missing under {map_dir}. "
+                "Rebuild with build_map_one_sim_bundle.py (keepout.yaml / speed.yaml)."
+            )
+        lane_overlay = os.path.join(nav_pkg, "config", "nav2_params_lane_aware.yaml")
+        if not os.path.isfile(lane_overlay):
+            raise RuntimeError(f"LaneAware overlay missing: {lane_overlay}")
+        extra_overlays.append(lane_overlay)
+    world = LaunchConfiguration("world").perform(context).strip()
+    if not world:
+        world = os.path.join(sim_pkg, "worlds", "warehouse.sdf")
+    # navigation.launch accepts one or more overlays separated by ';'
+    extra_params_joined = ";".join(extra_overlays)
+
     actions = [
         LogInfo(
             msg=(
-                f"[sim_bringup] spawn=({spawn['x']:.4f},{spawn['y']:.4f},{spawn['yaw']:.4f}) "
+                f"[sim_bringup] nav_runtime={nav_runtime} world={world} "
+                f"spawn=({spawn['x']:.4f},{spawn['y']:.4f},{spawn['yaw']:.4f}) "
                 f"source={spawn.get('source')} endpoint={spawn.get('endpoint_code')}"
             )
         ),
@@ -86,6 +127,7 @@ def _setup(context: LaunchContext, *args, **kwargs):
             PythonLaunchDescriptionSource(os.path.join(sim_pkg, "launch", "simulation.launch.py")),
             launch_arguments={
                 "gui": LaunchConfiguration("gui"),
+                "world": world,
                 "layout": layout_path,
                 "map": map_yaml,
                 "spawn_endpoint_code": endpoint,
@@ -142,23 +184,65 @@ def _setup(context: LaunchContext, *args, **kwargs):
                     PythonLaunchDescriptionSource(os.path.join(nav_pkg, "launch", "navigation.launch.py")),
                     launch_arguments={
                         "use_sim_time": "true",
-                        "enable_costmap_filters": "false",
+                        "enable_costmap_filters": enable_filters,
+                        "keepout_mask": keepout_mask,
+                        "speed_mask": speed_mask,
+                        "lanes_json": lanes_json,
                         "enable_ekf": "true" if enable_ekf else "false",
-                        # sim_speeds:=false keeps the real-robot speeds (0.10 m/s), needed to
-                        # reproduce motor-deadband stalls in turns.
-                        "extra_params_file": (
-                            os.path.join(sim_pkg, "config", "nav2_params_sim.yaml") if _flag(context, "sim_speeds") else ""
-                        ),
+                        "extra_params_file": extra_params_joined,
                         # Lane graph (fetch_route_graph.sh): Nav2 Route Server + route BT. Empty = free planning.
-                        "route_graph": LaunchConfiguration("route_graph").perform(context).strip(),
+                        "route_graph": route_graph,
                         "enable_cmd_vel_pipeline": LaunchConfiguration("enable_cmd_vel_pipeline"),
                         # Active Mode: collision_monitor -> /cmd_vel_safe -> authority gate -> /cmd_vel
                         "enable_authority_gate": LaunchConfiguration("enable_authority_gate"),
+                        # MAP-ONE free-space: longer BackUp for shelf-pocket exit (sim only).
+                        "default_nav_to_pose_bt_xml": os.path.join(
+                            sim_pkg, "behavior_trees", "navigate_to_pose_sim_aisle.xml"
+                        )
+                        if nav_runtime == "nav2_semantic"
+                        else "",
                     }.items(),
                 ),
             ],
         ),
     ]
+
+    if nav_runtime == "nav2_semantic" and lanes_json:
+        actions.append(
+            Node(
+                package="warotrans_fleet",
+                executable="path_policy_validator",
+                name="path_policy_validator",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": True,
+                        "enable": True,
+                        "lanes_json": lanes_json,
+                        "no_stop_json": no_stop_json,
+                        "keepout_json": keepout_json,
+                        "margin": 0.05,
+                        # Keep publishing PASS/FAIL evidence; do not cancel Nav2 BT on
+                        # transient /plan samples (false ONE_WAY on densified controller paths).
+                        "cancel_on_violation": False,
+                    }
+                ],
+            )
+        )
+
+    if _flag(context, "stage1_open_grant"):
+        # Wall-clock publish (use_sim_time=false): cmd_vel_authority_gate ages authority_ok with
+        # time.monotonic() and max_age=0.3s. A sim-time timer under slow Gazebo exceeds that and
+        # permanently blocks /cmd_vel even though STAGE1_OPEN_GRANT is "active".
+        actions.append(
+            Node(
+                package="warotrans_simulation",
+                executable="stage1_open_grant_node.py",
+                name="stage1_open_grant",
+                output="screen",
+                parameters=[{"use_sim_time": False, "enable": True, "hz": 20.0}],
+            )
+        )
 
     if enable_ekf:
         # Same robot_localization node/params as the Pi (warotrans_localization ekf.yaml) + sim overlay.
@@ -267,6 +351,21 @@ def generate_launch_description() -> LaunchDescription:
                 "route_graph",
                 default_value="",
                 description="Nav2 Route Server graph GeoJSON (fetch_route_graph.sh); empty = free planning",
+            ),
+            DeclareLaunchArgument(
+                "nav_runtime",
+                default_value="nav2_semantic",
+                description="nav2_semantic = free-space NavigateToPose (no Route Server); route_graph = legacy lane graph",
+            ),
+            DeclareLaunchArgument(
+                "world",
+                default_value="",
+                description="Gazebo SDF (empty = worlds/warehouse.sdf); MAP-ONE uses worlds/map_one_v001.sdf",
+            ),
+            DeclareLaunchArgument(
+                "stage1_open_grant",
+                default_value="false",
+                description="Stage-1 ONLY: publish /traffic/authority_ok=True (STAGE1_OPEN_GRANT); keep gate on",
             ),
             DeclareLaunchArgument(
                 "enable_cmd_vel_pipeline",

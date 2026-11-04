@@ -1,0 +1,5 @@
+<library path="warotrans_lane_planner">
+  <class type="warotrans_lane_planner::LaneAwareNavfn" base_class_type="nav2_core::GlobalPlanner">
+    <description>Dijkstra/A* on costmap with hard ONE_WAY lane corridor direction constraints.</description>
+  </class>
+</library>

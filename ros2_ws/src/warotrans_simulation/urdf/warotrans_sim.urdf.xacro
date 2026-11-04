@@ -25,6 +25,12 @@
 
   <xacro:include filename="$(find warotrans_description)/urdf/warotrans.urdf.xacro"/>
 
+  <!-- Stage-3 multi-robot: optional topic/frame prefix (e.g. "sim01/") so DiffDrive/lidar/TF do not collide. -->
+  <xacro:arg name="topic_prefix" default=""/>
+  <xacro:property name="tp" value="$(arg topic_prefix)"/>
+  <xacro:property name="odom_frame" value="${tp}odom"/>
+  <xacro:property name="base_frame" value="${tp}base_footprint"/>
+
   <xacro:property name="cal" value="${xacro.load_yaml('$(find warotrans_description)/config/calibration.yaml')}"/>
   <xacro:property name="wheel_radius" value="${(cal['wheel']['radius_left'] + cal['wheel']['radius_right']) / 2.0}"/>
   <xacro:property name="effective_separation" value="${cal['wheel']['separation']}"/>
@@ -99,11 +105,12 @@
   <xacro:drive_wheel name="front_right" x="${wheel_x}" y="${-wheel_y}"/>
   <xacro:drive_wheel name="rear_right" x="${-wheel_x}" y="${-wheel_y}"/>
 
-  <!-- 360 deg lidar on the real "laser" frame (yaw from geometry.yaml is kept). -->
+  <!-- 360 deg lidar on the real "laser" frame (yaw from geometry.yaml is kept).
+       gz_frame_id must match robot_state_publisher frame_prefix (e.g. sim01/laser). -->
   <gazebo reference="laser">
     <sensor name="lidar" type="gpu_lidar">
-      <gz_frame_id>laser</gz_frame_id>
-      <topic>scan</topic>
+      <gz_frame_id>${tp}laser</gz_frame_id>
+      <topic>${tp}scan</topic>
       <update_rate>10</update_rate>
       <always_on>true</always_on>
       <visualize>true</visualize>
@@ -134,8 +141,8 @@
        orientation + gyro, publishes /imu/data. Needs the world's gz-sim-imu-system plugin. -->
   <gazebo reference="imu_link">
     <sensor name="imu" type="imu">
-      <gz_frame_id>imu_link</gz_frame_id>
-      <topic>imu/data</topic>
+      <gz_frame_id>${tp}imu_link</gz_frame_id>
+      <topic>${tp}imu/data</topic>
       <update_rate>50</update_rate>
       <always_on>true</always_on>
       <imu>
@@ -161,27 +168,27 @@
       <wheel_radius>${wheel_radius}</wheel_radius>
       <max_linear_acceleration>1.0</max_linear_acceleration>
       <max_angular_acceleration>2.0</max_angular_acceleration>
-      <topic>cmd_vel</topic>
+      <topic>${tp}cmd_vel</topic>
       <!-- Wheel-integrated odometry drifts in heading with 4 skidding wheels (like the real robot).
            Default sim: unused (ground-truth /odom below). enable_ekf:=true bridges it as /odom and
            the EKF fixes the heading with the IMU, exactly the real-robot pipeline. -->
-      <odom_topic>wheel_odom</odom_topic>
-      <tf_topic>wheel_tf</tf_topic>
-      <frame_id>odom</frame_id>
-      <child_frame_id>base_footprint</child_frame_id>
+      <odom_topic>${tp}wheel_odom</odom_topic>
+      <tf_topic>${tp}wheel_tf</tf_topic>
+      <frame_id>${odom_frame}</frame_id>
+      <child_frame_id>${base_frame}</child_frame_id>
       <odom_publish_frequency>50</odom_publish_frequency>
     </plugin>
     <!-- /odom + TF odom -> base_footprint from the true simulated motion (like a well-calibrated robot). -->
     <plugin filename="gz-sim-odometry-publisher-system" name="gz::sim::systems::OdometryPublisher">
-      <odom_frame>odom</odom_frame>
-      <robot_base_frame>base_footprint</robot_base_frame>
-      <odom_topic>odom</odom_topic>
-      <tf_topic>tf</tf_topic>
+      <odom_frame>${odom_frame}</odom_frame>
+      <robot_base_frame>${base_frame}</robot_base_frame>
+      <odom_topic>${tp}odom</odom_topic>
+      <tf_topic>${tp}tf</tf_topic>
       <odom_publish_frequency>50</odom_publish_frequency>
       <dimensions>2</dimensions>
     </plugin>
     <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
-      <topic>joint_states</topic>
+      <topic>${tp}joint_states</topic>
       <joint_name>front_left_wheel_joint</joint_name>
       <joint_name>rear_left_wheel_joint</joint_name>
       <joint_name>front_right_wheel_joint</joint_name>

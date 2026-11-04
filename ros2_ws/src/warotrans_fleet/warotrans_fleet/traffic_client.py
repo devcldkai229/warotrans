@@ -34,9 +34,11 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 from warotrans_fleet.authority_store import (
     Authority,
     AuthorityStore,
+    ManeuverStep,
     parse_edge_ids,
     parse_expires_at,
     parse_final_goal,
+    parse_maneuvers,
     parse_speed_limits,
 )
 from warotrans_fleet.command_contract import (
@@ -315,7 +317,7 @@ class TrafficClient:
         self._last_authority_at = self._monotonic()
 
         try:
-            self._begin_ticket(authority.segment_edge_ids)
+            self._begin_ticket(authority.segment_edge_ids, authority.resolved_maneuvers())
         except Exception as exc:  # noqa: BLE001
             self._log(f"[TrafficClient] follow_path failed: {exc!r}")
             self._authority = None
@@ -366,7 +368,7 @@ class TrafficClient:
                 )
         return None
 
-    def _begin_ticket(self, edge_ids: Sequence[int]) -> None:
+    def _begin_ticket(self, edge_ids: Sequence[int], maneuvers: Optional[Sequence[Any]] = None) -> None:
         self._generation += 1
         gen = self._generation
         callbacks = SegmentCallbacks(
@@ -374,7 +376,11 @@ class TrafficClient:
             on_edge_exited=lambda e: self._on_edge_exited(gen, e),
             on_result=lambda r: self._on_result(gen, r),
         )
-        self._executor.follow_path(tuple(edge_ids), callbacks)
+        execute = getattr(self._executor, "execute_maneuvers", None)
+        if callable(execute) and maneuvers is not None:
+            execute(list(maneuvers), callbacks)
+        else:
+            self._executor.follow_path(tuple(edge_ids), callbacks)
         self._covered += len(edge_ids)
 
     # ------------------------------------------------------------------ extend / renew / revoke
@@ -404,6 +410,7 @@ class TrafficClient:
             expires_at = parse_expires_at(payload.get("expiresAt")) if payload.get("expiresAt") is not None else None
             limits = parse_speed_limits(payload.get("speedLimits")) if payload.get("speedLimits") is not None else None
             final_goal = parse_final_goal(payload.get("finalGoal"))
+            maneuvers = parse_maneuvers(payload.get("maneuvers"))
         except Exception as exc:  # noqa: BLE001 - CommandRejected / ValueError → INVALID_PAYLOAD
             reason = getattr(exc, "reason_code", REASON_INVALID_PAYLOAD)
             return _reject(reason, str(getattr(exc, "message", exc)))
@@ -431,6 +438,7 @@ class TrafficClient:
             speed_limits=limits if limits is not None else current.speed_limits,
             # Backend chỉ gửi finalGoal khi phần mở rộng tới đích route.
             final_goal=final_goal if final_goal is not None else current.final_goal,
+            maneuvers=maneuvers if maneuvers else current.maneuvers,
         )
         accepted = self._store.accept(
             new_auth, command_id=envelope.command_id, message_id=envelope.message_id or None, now=self._clock()
@@ -449,7 +457,11 @@ class TrafficClient:
         self._last_authority_at = self._monotonic()
         if self._state == STATE_STOPPED_AWAITING:
             try:
-                self._begin_ticket(new_auth.segment_edge_ids[self._covered :])
+                remaining = new_auth.segment_edge_ids[self._covered :]
+                steps = new_auth.maneuvers if new_auth.maneuvers else (
+                    (ManeuverStep(kind="Forward", edge_ids=remaining),) if remaining else ()
+                )
+                self._begin_ticket(remaining, steps)
             except Exception as exc:  # noqa: BLE001
                 self.fault(ERROR_CONTROLLER_FAILED, f"follow_path failed: {exc}")
                 return _reject(REASON_CONTROLLER_FAILED, f"follow_path failed: {exc}")
@@ -623,7 +635,11 @@ class TrafficClient:
             and len(auth.segment_edge_ids) > self._covered
         ):
             try:
-                self._begin_ticket(auth.segment_edge_ids[self._covered :])
+                remaining = auth.segment_edge_ids[self._covered :]
+                steps = (
+                    (ManeuverStep(kind="Forward", edge_ids=remaining),) if remaining else ()
+                )
+                self._begin_ticket(remaining, steps)
             except Exception as exc:  # noqa: BLE001
                 self.fault(ERROR_CONTROLLER_FAILED, f"follow_path failed: {exc}")
             return

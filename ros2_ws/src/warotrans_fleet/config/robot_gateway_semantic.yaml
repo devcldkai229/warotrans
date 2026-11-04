@@ -1,0 +1,55 @@
+# Real robot (Pi 5 + ESP32 + RPLIDAR), Semantic traffic: Nav2 plans, the backend checks traffic and grants.
+# Use with fleet.launch.py semantic_manifest:=<bundle>/semantic_manifest.json (sets semantic_map_fingerprint,
+# map_version_code and the zone JSONs) and the bringup navigation launch with enable_authority_gate:=true.
+# Base values match robot_gateway.yaml; only the semantic/safety differences are commented.
+robot_gateway:
+  ros__parameters:
+    robot_code: "RBT-001"
+    mqtt_host: ""              # broker LAN IP: launch arg mqtt_host:= or env WARO_MQTT_HOST
+    mqtt_port: 1883
+    mqtt_client_id: "warotrans-robot-gateway"
+    topic_prefix: "warotrans/v1"
+    map_version_code: ""       # from the semantic manifest
+    map_frame: "map"
+    base_frame: "base_link"
+    odom_topic: "/odom"
+    amcl_pose_topic: "/amcl_pose"
+    navigate_action: "navigate_to_pose"
+    heartbeat_hz: 1.0
+    telemetry_hz: 5.0
+    max_transform_age_sec: 0.5
+    # LOCALIZED needs an operator "2D Pose Estimate" since start and a bounded AMCL covariance: amcl.yaml boots
+    # at a provisional (0, 0, 0), which is fresh TF but not a known pose.
+    require_amcl_converged: true
+    initial_pose_topic: "/initialpose"
+    amcl_max_xy_std_m: 0.5
+    amcl_max_yaw_std_rad: 0.5
+    default_navigate_timeout_sec: 0.0   # backend sends payload.timeoutSeconds per MOVE step
+    goal_response_timeout_sec: 10.0
+    cancel_confirm_timeout_sec: 10.0
+    terminal_status_hold_sec: 3.0
+    command_tick_hz: 5.0
+    command_ledger_size: 500
+    # Manual drive publishes straight to cmd_vel_topic, which would bypass collision_monitor and the authority
+    # gate. Off while the robot is under traffic control.
+    teleop_enabled: false
+    cmd_vel_topic: "cmd_vel_safe"
+    # HUMAN_CONFIRM button (handover confirm; NOT an E-stop).
+    human_confirm_enabled: false
+    human_confirm_gpiochip: 4
+    human_confirm_gpio_pin: 12
+    human_confirm_active_low: true
+    human_confirm_debounce_ms: 50
+    human_confirm_min_interval_ms: 300
+    human_confirm_resend_sec: 5.0
+    traffic_mode: "semantic_active"
+    enable_authority_gate: true
+    authority_ok_topic: "traffic/authority_ok"   # = cmd_vel_authority_gate input (navigation.launch.py)
+    authority_loss_timeout_sec: 3.0
+    authority_state_path: ""
+    plan_topic: "plan"
+    semantic_map_fingerprint: ""   # from the semantic manifest; empty refuses to start
+    single_occupancy_json: ""
+    no_stop_json: ""
+    keepout_json: ""
+    lanes_json: ""

@@ -1,0 +1,139 @@
+name: map_one_v001
+source_map: maps/map_one_v001/map.yaml
+wall_height: 0.8
+spawn_endpoint_code: EP-PARKING-A
+spawn_require_clearance: false
+endpoints:
+- code: EP-INBOUND
+  name: Inbound
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: 1.747
+  y: 1.543
+  yaw: -1.5707963267948966
+  isEnabled: true
+- code: EP-INSPECTION
+  name: Inspection
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: 0.652
+  y: -0.936
+  yaw: 1.5707963267948966
+  isEnabled: true
+- code: EP-OUTBOUND
+  name: Outbound
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: 1.793
+  y: -0.977
+  yaw: 1.5707963267948966
+  isEnabled: true
+- code: EP-PARKING-A
+  name: Parking A
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: -1.743
+  y: -0.516
+  yaw: -1.5707963267948966
+  isEnabled: true
+- code: EP-PARKING-B
+  name: Parking B
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: -1.15
+  y: -0.525
+  yaw: -1.5707963267948966
+  isEnabled: true
+- code: EP-SHELF-A-01
+  name: Shelf A 01
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: -1.325
+  y: 1.644
+  yaw: 3.141592653589793
+  isEnabled: true
+- code: EP-SHELF-A-02
+  name: Shelf A 02
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: -1.332
+  y: 1.356
+  yaw: 3.141592653589793
+  isEnabled: true
+- code: EP-SHELF-A-03
+  name: Shelf A 03
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: -1.337
+  y: 0.973
+  yaw: 3.141592653589793
+  isEnabled: true
+- code: EP-SHELF-A-04
+  name: Shelf A 04
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: -1.335
+  y: 0.676
+  yaw: 3.141592653589793
+  isEnabled: true
+- code: EP-SHELF-B-01
+  name: Shelf B 01
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: 0.598
+  y: 1.025
+  yaw: 1.5707963267948966
+  isEnabled: true
+- code: EP-SHELF-B-02
+  name: Shelf B 02
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: 0.871
+  y: 1.025
+  yaw: 1.5707963267948966
+  isEnabled: true
+- code: EP-SHELF-B-03
+  name: Shelf B 03
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: 0.8
+  y: 1.411
+  yaw: 3.141592653589793
+  isEnabled: true
+- code: EP-SHELF-B-04
+  name: Shelf B 04
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: 0.793
+  y: 1.671
+  yaw: 3.141592653589793
+  isEnabled: true
+- code: EP-SHELF-C-01
+  name: Shelf C 01
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: 0.875
+  y: -0.777
+  yaw: 1.5707963267948966
+  isEnabled: true
+- code: EP-SHELF-C-02
+  name: Shelf C 02
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: 0.865
+  y: -1.09
+  yaw: 1.5707963267948966
+  isEnabled: true
+- code: EP-WAIT-POINT
+  name: Wait Point
+  type: WAYPOINT
+  endpointType: WAYPOINT
+  x: 1.292
+  y: 0.83
+  yaw: 0.0
+  isEnabled: true
+shelves: []
+web:
+  map_version_code: MAP-ONE-V001
+  map_version_id: 7863c1f3-3a46-4d06-bfa7-efab88b39300
+  note: Offline sim bundle from MAP-ONE-V001 (DB read-only)
