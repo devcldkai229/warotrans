@@ -106,18 +106,39 @@ if _HAS_RCLPY:  # pragma: no cover - cần rclpy; logic đã được test qua A
             if max_age <= 0 or gate_hz <= 0 or zero_hold < 0:
                 raise ValueError("max_authority_age_sec > 0, gate_hz > 0, zero_hold_sec >= 0")
 
+            # The grant publisher on the semantic path is a ROS timer, so under use_sim_time
+            # it ticks in sim time while this gate used to age messages with time.monotonic().
+            # A slow Gazebo then looked like a dead publisher and the gate blocked /cmd_vel
+            # while holding a perfectly valid grant. Age in whichever clock the publisher and
+            # the physics share. On the robot use_sim_time is false, so nothing changes there.
+            self._use_sim_time = bool(self.get_parameter("use_sim_time").value)
+
             self._logic = AuthorityGateLogic(max_age_sec=max_age, zero_hold_sec=zero_hold)
             self._pub = self.create_publisher(Twist, str(self.get_parameter("output_topic").value), 10)
             self.create_subscription(Twist, str(self.get_parameter("input_topic").value), self._on_cmd, 10)
             self.create_subscription(Bool, str(self.get_parameter("authority_ok_topic").value), self._on_ok, 10)
             self.create_timer(1.0 / gate_hz, self._on_timer)
             self._was_forwarding = False
+            self.get_logger().info(
+                "authority gate: max_age=%.2fs clock=%s"
+                % (max_age, "sim (/clock)" if self._use_sim_time else "monotonic")
+            )
+
+        def _now(self) -> float:
+            if not self._use_sim_time:
+                return time.monotonic()
+            nanos = self.get_clock().now().nanoseconds
+            if nanos <= 0:
+                # /clock has not arrived yet. Fall back to monotonic: the receipt timestamp is
+                # then in a different base, the age check fails, and the gate stays CLOSED.
+                return time.monotonic()
+            return nanos / 1e9
 
         def _on_ok(self, msg: "Bool") -> None:
-            self._logic.on_authority_ok(bool(msg.data), time.monotonic())
+            self._logic.on_authority_ok(bool(msg.data), self._now())
 
         def _on_cmd(self, msg: "Twist") -> None:
-            decision = self._logic.decide(time.monotonic())
+            decision = self._logic.decide(self._now())
             if decision.forward:
                 self._pub.publish(msg)
                 self._was_forwarding = True
@@ -125,7 +146,7 @@ if _HAS_RCLPY:  # pragma: no cover - cần rclpy; logic đã được test qua A
                 self._publish_zero()
 
         def _on_timer(self) -> None:
-            decision = self._logic.decide(time.monotonic())
+            decision = self._logic.decide(self._now())
             if not decision.forward and decision.publish_zero:
                 self._publish_zero()
             if not decision.forward and self._was_forwarding:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from warotrans_fleet import _vendor_path  # noqa: F401 — vendored paho for WSL without pip
+
 import json
 import logging
 import queue
@@ -171,7 +173,11 @@ class ReconnectingMqttPublisher:
 
     def _drain_loop(self, client: MqttClientLike) -> None:
         while not self._stop.is_set():
-            if not client.is_connected():
+            # Prefer our on_connect/on_disconnect latch. paho Client.is_connected() can
+            # return False under CallbackAPIVersion.VERSION2 even after a successful
+            # connect — that caused endless "MQTT connection lost" and zero grants
+            # (authority_ok stuck False → gate blocks all cmd_vel).
+            if not self._connected.is_set():
                 raise ConnectionError("MQTT connection lost")
             try:
                 item = self._queue.get(timeout=0.2)

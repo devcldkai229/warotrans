@@ -11,6 +11,7 @@ Threading:
 
 from __future__ import annotations
 
+import math
 import os
 import queue
 import threading
@@ -39,6 +40,7 @@ from warotrans_fleet.interaction_contract import (
     parse_interaction_result,
 )
 from warotrans_fleet.interaction_controller import InteractionController
+from warotrans_fleet.amcl_readiness import AmclReadiness
 from warotrans_fleet.localization_hysteresis import LocalizationHysteresis
 from warotrans_fleet.mqtt_publisher import ReconnectingMqttPublisher, default_paho_factory
 from warotrans_fleet.nav2_status_tracker import Nav2StatusTracker
@@ -94,6 +96,12 @@ class RobotGatewayNode(Node):
         self.declare_parameter("max_transform_age_sec", 0.5)
         # Consecutive stale TF samples before publishing LOST (telemetry_hz=5 → ~0.6s).
         self.declare_parameter("localization_stale_limit", 3)
+        # Real robot: LOCALIZED also needs an operator /initialpose since start + bounded AMCL covariance
+        # (amcl_readiness.py). Off for simulation, which spawns at a known pose.
+        self.declare_parameter("require_amcl_converged", False)
+        self.declare_parameter("initial_pose_topic", "/initialpose")
+        self.declare_parameter("amcl_max_xy_std_m", 0.5)
+        self.declare_parameter("amcl_max_yaw_std_rad", 0.5)
         # MOVE command
         self.declare_parameter("default_navigate_timeout_sec", 0.0)  # 0 = không timeout nếu command không gửi
         self.declare_parameter("goal_response_timeout_sec", 10.0)
@@ -143,6 +151,14 @@ class RobotGatewayNode(Node):
         self.declare_parameter("follow_path_action", "follow_path")
         self.declare_parameter("enable_authority_gate", False)  # gate is a separate launch node
         self.declare_parameter("authority_state_path", "")  # "" = file tạm mặc định của AuthorityStore
+        # Stage-3 semantic_active
+        self.declare_parameter("semantic_map_fingerprint", "")
+        self.declare_parameter("plan_topic", "plan")
+        self.declare_parameter("authority_ok_topic", "traffic/authority_ok")
+        self.declare_parameter("single_occupancy_json", "")
+        self.declare_parameter("keepout_json", "")
+        self.declare_parameter("no_stop_json", "")
+        self.declare_parameter("lanes_json", "")
 
         self._robot_code = _env_or(self._str_param("robot_code"), "WARO_ROBOT_CODE")
         self._mqtt_host = _env_or(self._str_param("mqtt_host"), "WARO_MQTT_HOST")
@@ -156,7 +172,10 @@ class RobotGatewayNode(Node):
         self._max_transform_age = self._float_param("max_transform_age_sec")
         simulated_battery = self._float_param("simulated_battery_percent")
         self._battery_percent = min(simulated_battery, 100.0) if simulated_battery >= 0.0 else None
-        client_id = self._str_param("mqtt_client_id")
+        # Unique per process — reused client_id after unclean kill causes broker
+        # session takeover (endless disconnect / zero grants / gate stuck closed).
+        base_client_id = self._str_param("mqtt_client_id").strip() or "warotrans-robot-gateway"
+        client_id = f"{base_client_id}-{os.getpid()}"
 
         default_timeout = self._float_param("default_navigate_timeout_sec")
         goal_response_timeout = self._float_param("goal_response_timeout_sec")
@@ -186,6 +205,20 @@ class RobotGatewayNode(Node):
         odom_topic = self._str_param("odom_topic")
         amcl_topic = self._str_param("amcl_pose_topic")
         self.create_subscription(Odometry, odom_topic, self._on_odom, 10)
+        self._amcl_readiness: Optional[AmclReadiness] = None
+        self._amcl_block_reason: Optional[str] = None
+        if bool(self.get_parameter("require_amcl_converged").get_parameter_value().bool_value):
+            self._amcl_readiness = AmclReadiness(
+                max_xy_std_m=self._float_param("amcl_max_xy_std_m"),
+                max_yaw_std_rad=self._float_param("amcl_max_yaw_std_rad"),
+            )
+            self.create_subscription(
+                PoseWithCovarianceStamped,
+                self._str_param("initial_pose_topic"),
+                self._on_initial_pose,
+                10,
+            )
+        # amcl publishes amcl_pose reliable + transient_local; sensor-data QoS is best-effort and still matches.
         self.create_subscription(
             PoseWithCovarianceStamped,
             amcl_topic,
@@ -194,16 +227,19 @@ class RobotGatewayNode(Node):
         )
 
         self._traffic_mode = self._str_param("traffic_mode").strip().lower()
-        if self._traffic_mode not in ("legacy", "active"):
-            raise ValueError(f"traffic_mode must be 'legacy' or 'active', got {self._traffic_mode!r}")
+        if self._traffic_mode not in ("legacy", "active", "semantic_active"):
+            raise ValueError(
+                f"traffic_mode must be 'legacy'|'active'|'semantic_active', got {self._traffic_mode!r}"
+            )
         self._authority_loss_timeout = self._float_param("authority_loss_timeout_sec")
         if self._authority_loss_timeout <= 0:
             raise ValueError("authority_loss_timeout_sec must be > 0")
         self._enable_authority_gate = bool(self.get_parameter("enable_authority_gate").get_parameter_value().bool_value)
         self._traffic_client = None
+        self._semantic_client = None
 
         navigator = self._setup_nav2()
-        route_enforcer = self._setup_route_enforcer()
+        route_enforcer = None if self._traffic_mode == "semantic_active" else self._setup_route_enforcer()
 
         self._teleop_enabled = bool(self.get_parameter("teleop_enabled").get_parameter_value().bool_value)
         human_env = os.environ.get("WARO_HUMAN_CONFIRM_ENABLED", "").strip().lower()
@@ -240,6 +276,8 @@ class RobotGatewayNode(Node):
             self._traffic_client = self._setup_traffic_client()
             # Boot sync: backend reconciles occupancy from what this robot still holds (queued until connected).
             self._publish_authority_state()
+        elif self._traffic_mode == "semantic_active":
+            self._semantic_client = self._setup_semantic_traffic_client()
 
         self._commands = build_command_stack(
             robot_code=self._robot_code,
@@ -453,6 +491,10 @@ class RobotGatewayNode(Node):
                 node=self,
                 route_port=port,
                 follow_path_action=self._str_param("follow_path_action") or "follow_path",
+                authority_ok_fn=lambda: bool(
+                    getattr(self, "_traffic_client", None) is not None
+                    and self._traffic_client.authority_valid()
+                ),
                 log=lambda m: self.get_logger().info(m),
             )
             if graph_edges:
@@ -517,16 +559,126 @@ class RobotGatewayNode(Node):
         )
         return client
 
+    def _handle_semantic_authority_command(self, body: dict[str, Any]) -> bool:
+        """Consume EXTEND/RENEW/REVOKE for semantic_active. Returns True if handled."""
+        client = self._semantic_client
+        if client is None:
+            return False
+        cmd_type = str(body.get("type") or "").upper()
+        payload = body.get("payload") or {}
+        if isinstance(payload, str):
+            import json
+
+            try:
+                payload = json.loads(payload)
+            except json.JSONDecodeError:
+                payload = {}
+        if cmd_type in ("EXTEND_AUTHORITY", "NAVIGATE_TO_POSE"):
+            # NAVIGATE may embed authority; EXTEND carries the Stage-3 grant.
+            authority = payload.get("authority") if cmd_type == "NAVIGATE_TO_POSE" else payload
+            if not isinstance(authority, dict):
+                authority = payload if isinstance(payload, dict) else {}
+            # EXTEND payload fields are top-level; also accept nested authority.
+            if "authorityId" not in authority and isinstance(payload, dict):
+                authority = {
+                    "authorityId": payload.get("authorityId"),
+                    "epoch": payload.get("epoch"),
+                    "seq": payload.get("seq"),
+                    "semanticMapFingerprint": payload.get("semanticMapFingerprint") or payload.get("graphHash"),
+                    "planRevision": payload.get("planRevision"),
+                    "resourceIds": payload.get("resourceIds"),
+                    "pathHash": payload.get("pathHash"),
+                    "expiresAt": payload.get("expiresAt"),
+                }
+            if authority.get("authorityId"):
+                client.on_authority_payload(authority)
+                return cmd_type == "EXTEND_AUTHORITY"
+            return False
+        if cmd_type == "RENEW_AUTHORITY":
+            client.on_renew(payload if isinstance(payload, dict) else {})
+            return True
+        if cmd_type == "REVOKE_AUTHORITY":
+            client.on_revoke()
+            return True
+        return False
+
     def _publish_authority_ok(self, ok: bool) -> None:
         from std_msgs.msg import Bool
 
         pub = getattr(self, "_authority_ok_pub", None)
         if pub is None:
-            self._authority_ok_pub = self.create_publisher(Bool, "/traffic/authority_ok", 10)
+            topic = self._str_param("authority_ok_topic").strip() or "traffic/authority_ok"
+            self._authority_ok_pub = self.create_publisher(Bool, topic, 10)
             pub = self._authority_ok_pub
         msg = Bool()
         msg.data = bool(ok)
         pub.publish(msg)
+
+    def _setup_semantic_traffic_client(self):
+        import json
+        from pathlib import Path
+
+        from nav_msgs.msg import Path as NavPath
+
+        from warotrans_fleet.semantic_traffic_client import SemanticTrafficClient
+
+        fp = self._str_param("semantic_map_fingerprint").strip()
+        if not fp:
+            # SemanticTrafficClient skips the map check for an empty fingerprint, so any grant would open the
+            # gate. Refuse to start rather than run semantic_active unbound to a map.
+            raise ValueError(
+                "traffic_mode=semantic_active requires semantic_map_fingerprint "
+                "(fleet.launch.py semantic_manifest:=<bundle>/semantic_manifest.json)"
+            )
+        zones: list = []
+        so_path = self._str_param("single_occupancy_json").strip()
+        if so_path and Path(so_path).is_file():
+            zones = list(json.loads(Path(so_path).read_text(encoding="utf-8")).get("zones") or [])
+
+        client = SemanticTrafficClient(
+            robot_code=self._robot_code,
+            topic_prefix=self._topic_prefix,
+            fingerprint=fp,
+            publish_json=lambda topic, body: self.mqtt.publish(topic, body, qos=1),
+            set_authority_ok=self._publish_authority_ok,
+            authority_loss_timeout_sec=float(self._authority_loss_timeout),
+        )
+        self._semantic_zones = zones
+
+        def _on_plan(msg: NavPath) -> None:
+            poses = []
+            for p in msg.poses:
+                q = p.pose.orientation
+                # yaw from quaternion
+                siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+                cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+                yaw = math.atan2(siny_cosp, cosy_cosp)
+                poses.append((float(p.pose.position.x), float(p.pose.position.y), float(yaw)))
+            goal = poses[-1] if poses else None
+            client.on_plan(poses, goal=goal)
+
+        def _semantic_tick() -> None:
+            # ≥20 Hz authority_ok liveness for cmd_vel_authority_gate (max_age ~0.3 s).
+            client.tick()
+            pose = self._traffic_pose()
+            if pose is None or not client.held_resources:
+                return
+            x, y, yaw = pose
+            cleared = client.resources_cleared_at(x, y, yaw, zones=self._semantic_zones)
+            if cleared:
+                client.publish_cleared_resources(
+                    cleared, x=x, y=y, yaw=yaw, localization_ok=True
+                )
+
+        plan_topic = self._str_param("plan_topic").strip() or "plan"
+        self.create_subscription(NavPath, plan_topic, _on_plan, 10)
+        self.create_timer(0.05, _semantic_tick)
+        self._publish_authority_ok(False)
+        self.get_logger().info(
+            f"traffic_mode=semantic_active fingerprint={fp[:12]}… plan_topic={plan_topic} "
+            f"zones={len(zones)} gate={self._enable_authority_gate} authority_ok_hz=20"
+        )
+        return client
 
     def _on_safety_supervisor_tick(self) -> None:
         supervisor = getattr(self, "_safety_supervisor", None)
@@ -653,6 +805,8 @@ class RobotGatewayNode(Node):
             except queue.Empty:
                 return
             if kind == "command":
+                if self._traffic_mode == "semantic_active" and self._handle_semantic_authority_command(body):
+                    continue
                 self._commands.router.handle_message(body)
             elif kind == "teleop" and self._teleop is not None:
                 self._teleop.handle(body)
@@ -712,8 +866,14 @@ class RobotGatewayNode(Node):
         self._lin_vel = float(msg.twist.twist.linear.x)
         self._ang_vel = float(msg.twist.twist.angular.z)
 
-    def _on_amcl_pose(self, _msg: PoseWithCovarianceStamped) -> None:
-        pass
+    def _on_amcl_pose(self, msg: PoseWithCovarianceStamped) -> None:
+        if self._amcl_readiness is not None:
+            self._amcl_readiness.on_amcl_pose(list(msg.pose.covariance))
+
+    def _on_initial_pose(self, _msg: PoseWithCovarianceStamped) -> None:
+        if self._amcl_readiness is not None:
+            self._amcl_readiness.on_initial_pose()
+            self.get_logger().info("operator initial pose received (/initialpose)")
 
     def _on_goal_status(self, msg) -> None:
         self._nav_tracker.update_from_status_list([int(s.status) for s in msg.status_list])
@@ -761,6 +921,14 @@ class RobotGatewayNode(Node):
             q = transform.transform.rotation
             yaw = quaternion_to_yaw(q.x, q.y, q.z, q.w)
             pose = {"x": float(t.x), "y": float(t.y), "yaw": float(yaw)}
+            if self._amcl_readiness is not None:
+                reason = self._amcl_readiness.blocking_reason()
+                if reason != self._amcl_block_reason:
+                    self._amcl_block_reason = reason
+                    self.get_logger().info(f"AMCL readiness: {reason or 'OK'}")
+                if reason is not None:
+                    # Fresh TF of an unconfirmed pose: report the pose, never LOCALIZED (MOVE is rejected).
+                    return pose, "UNKNOWN"
             return self._loc_hysteresis.on_good(pose)
         except TransformException:
             self._last_pose_age_sec = None

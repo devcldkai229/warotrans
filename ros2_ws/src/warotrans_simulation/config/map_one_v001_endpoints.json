@@ -1,0 +1,140 @@
+{
+  "mapName": "map_one_v001",
+  "frame": "map",
+  "spawn": {
+    "x": -1.743,
+    "y": -0.516,
+    "yaw": -1.5707963267948966
+  },
+  "endpoints": [
+    {
+      "code": "EP-INBOUND",
+      "name": "Inbound",
+      "endpointType": "WAYPOINT",
+      "x": 1.747,
+      "y": 1.543,
+      "yaw": -1.5707963267948966
+    },
+    {
+      "code": "EP-INSPECTION",
+      "name": "Inspection",
+      "endpointType": "WAYPOINT",
+      "x": 0.652,
+      "y": -0.936,
+      "yaw": 1.5707963267948966
+    },
+    {
+      "code": "EP-OUTBOUND",
+      "name": "Outbound",
+      "endpointType": "WAYPOINT",
+      "x": 1.793,
+      "y": -0.977,
+      "yaw": 1.5707963267948966
+    },
+    {
+      "code": "EP-PARKING-A",
+      "name": "Parking A",
+      "endpointType": "WAYPOINT",
+      "x": -1.743,
+      "y": -0.516,
+      "yaw": -1.5707963267948966
+    },
+    {
+      "code": "EP-PARKING-B",
+      "name": "Parking B",
+      "endpointType": "WAYPOINT",
+      "x": -1.15,
+      "y": -0.525,
+      "yaw": -1.5707963267948966
+    },
+    {
+      "code": "EP-SHELF-A-01",
+      "name": "Shelf A 01",
+      "endpointType": "WAYPOINT",
+      "x": -1.325,
+      "y": 1.644,
+      "yaw": 3.141592653589793
+    },
+    {
+      "code": "EP-SHELF-A-02",
+      "name": "Shelf A 02",
+      "endpointType": "WAYPOINT",
+      "x": -1.332,
+      "y": 1.356,
+      "yaw": 3.141592653589793
+    },
+    {
+      "code": "EP-SHELF-A-03",
+      "name": "Shelf A 03",
+      "endpointType": "WAYPOINT",
+      "x": -1.337,
+      "y": 0.973,
+      "yaw": 3.141592653589793
+    },
+    {
+      "code": "EP-SHELF-A-04",
+      "name": "Shelf A 04",
+      "endpointType": "WAYPOINT",
+      "x": -1.335,
+      "y": 0.676,
+      "yaw": 3.141592653589793
+    },
+    {
+      "code": "EP-SHELF-B-01",
+      "name": "Shelf B 01",
+      "endpointType": "WAYPOINT",
+      "x": 0.598,
+      "y": 1.025,
+      "yaw": 1.5707963267948966
+    },
+    {
+      "code": "EP-SHELF-B-02",
+      "name": "Shelf B 02",
+      "endpointType": "WAYPOINT",
+      "x": 0.871,
+      "y": 1.025,
+      "yaw": 1.5707963267948966
+    },
+    {
+      "code": "EP-SHELF-B-03",
+      "name": "Shelf B 03",
+      "endpointType": "WAYPOINT",
+      "x": 0.8,
+      "y": 1.411,
+      "yaw": 3.141592653589793
+    },
+    {
+      "code": "EP-SHELF-B-04",
+      "name": "Shelf B 04",
+      "endpointType": "WAYPOINT",
+      "x": 0.793,
+      "y": 1.671,
+      "yaw": 3.141592653589793
+    },
+    {
+      "code": "EP-SHELF-C-01",
+      "name": "Shelf C 01",
+      "endpointType": "WAYPOINT",
+      "x": 0.875,
+      "y": -0.777,
+      "yaw": 1.5707963267948966
+    },
+    {
+      "code": "EP-SHELF-C-02",
+      "name": "Shelf C 02",
+      "endpointType": "WAYPOINT",
+      "x": 0.865,
+      "y": -1.09,
+      "yaw": 1.5707963267948966
+    },
+    {
+      "code": "EP-WAIT-POINT",
+      "name": "Wait Point",
+      "endpointType": "WAYPOINT",
+      "x": 1.292,
+      "y": 0.83,
+      "yaw": 0.0
+    }
+  ],
+  "zones": []
+}

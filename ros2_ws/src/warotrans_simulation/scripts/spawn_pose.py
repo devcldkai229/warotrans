@@ -104,14 +104,19 @@ def footprint_clear(
         return True, "no occupancy check"
     yaw = pose["yaw"]
     c, s = math.cos(yaw), math.sin(yaw)
-    corners = [
+    # Corners + edge midpoints (large half_* alone can jump over thin walls).
+    local_pts = [
         (half_l, half_w),
         (half_l, -half_w),
         (-half_l, half_w),
         (-half_l, -half_w),
+        (half_l, 0.0),
+        (-half_l, 0.0),
+        (0.0, half_w),
+        (0.0, -half_w),
         (0.0, 0.0),
     ]
-    for lx, ly in corners:
+    for lx, ly in local_pts:
         wx = pose["x"] + c * lx - s * ly
         wy = pose["y"] + s * lx + c * ly
         col = int(math.floor((wx - origin_x) / resolution))
@@ -122,6 +127,125 @@ def footprint_clear(
         if (col, row_from_bottom) in occupied_cells:
             return False, f"footprint hits occupied cell col={col} row={row_from_bottom} at ({wx:.3f},{wy:.3f})"
     return True, "clear"
+
+
+def min_obstacle_distance(
+    pose: dict[str, float],
+    *,
+    occupied_cells: set[tuple[int, int]],
+    origin_x: float,
+    origin_y: float,
+    resolution: float,
+    search_radius_m: float = 1.5,
+) -> float:
+    """Euclidean distance from pose center to nearest occupied cell center."""
+    best = search_radius_m
+    cx0 = int(math.floor((pose["x"] - origin_x) / resolution))
+    ry0 = int(math.floor((pose["y"] - origin_y) / resolution))
+    n = int(search_radius_m / resolution) + 1
+    for dc in range(-n, n + 1):
+        for dr in range(-n, n + 1):
+            if (cx0 + dc, ry0 + dr) not in occupied_cells:
+                continue
+            wx = origin_x + (cx0 + dc + 0.5) * resolution
+            wy = origin_y + (ry0 + dr + 0.5) * resolution
+            best = min(best, math.hypot(wx - pose["x"], wy - pose["y"]))
+    return best
+
+
+def nudge_spawn_to_clear(
+    pose: dict[str, float],
+    *,
+    occupied_cells: set[tuple[int, int]],
+    origin_x: float,
+    origin_y: float,
+    resolution: float,
+    max_radius_m: float = 1.0,
+    step_m: float = 0.05,
+    clearance_margin_m: float = 0.08,
+    require_standoff: bool = True,
+) -> Optional[dict[str, float]]:
+    """Search a nearby clear pose (sim footprint) without changing authored endpoint goals.
+
+    MAP-ONE parking bays are tight: full diagonal standoff (~0.31 m) drags the spawn
+    south into the wall corridor where Collision Monitor permanently FootprintApproach-holds.
+    When require_standoff is False (layout spawn_require_clearance=false), only require a
+    footprint-clear cell and prefer staying on the authored Y / moving +X into the aisle.
+    """
+    base = dict(pose)
+
+    def _foot_ok(p: dict[str, float]) -> bool:
+        clear, _ = footprint_clear(
+            p,
+            occupied_cells=occupied_cells,
+            origin_x=origin_x,
+            origin_y=origin_y,
+            resolution=resolution,
+        )
+        return clear
+
+    # Keep authored pose when footprint is already clear (do not drag across the map).
+    if _foot_ok(base):
+        return base
+
+    need = math.hypot(DEFAULT_HALF_L, DEFAULT_HALF_W) + clearance_margin_m
+
+    def _standoff_ok(p: dict[str, float]) -> bool:
+        if not _foot_ok(p):
+            return False
+        return (
+            min_obstacle_distance(
+                p,
+                occupied_cells=occupied_cells,
+                origin_x=origin_x,
+                origin_y=origin_y,
+                resolution=resolution,
+            )
+            >= need
+        )
+
+    def _rank(cand: dict[str, float]) -> tuple[float, float, float]:
+        # Prefer: small displacement, stay on authored Y, then move +X (aisle exit).
+        dx = cand["x"] - base["x"]
+        dy = cand["y"] - base["y"]
+        return (math.hypot(dx, dy), abs(dy), -dx)
+
+    best: Optional[tuple[tuple[float, float, float], dict[str, float]]] = None
+    n = int(max_radius_m / step_m)
+    if require_standoff:
+        for iy in range(-n, n + 1):
+            for ix in range(-n, n + 1):
+                if ix == 0 and iy == 0:
+                    continue
+                cand = {
+                    "x": base["x"] + ix * step_m,
+                    "y": base["y"] + iy * step_m,
+                    "yaw": base["yaw"],
+                }
+                if not _standoff_ok(cand):
+                    continue
+                key = _rank(cand)
+                if best is None or key < best[0]:
+                    best = (key, cand)
+        if best is not None:
+            return best[1]
+    # Nearest footprint-clear pose (ignore standoff) — used for tight PARK bays.
+    best = None
+    for iy in range(-n, n + 1):
+        for ix in range(-n, n + 1):
+            if ix == 0 and iy == 0:
+                continue
+            cand = {
+                "x": base["x"] + ix * step_m,
+                "y": base["y"] + iy * step_m,
+                "yaw": base["yaw"],
+            }
+            if not _foot_ok(cand):
+                continue
+            key = _rank(cand)
+            if best is None or key < best[0]:
+                best = (key, cand)
+    return None if best is None else best[1]
 
 
 def load_occupied_cells_ros(map_yaml_path: Path) -> tuple[set[tuple[int, int]], dict[str, float]]:
@@ -199,6 +323,14 @@ def resolve_spawn(
     ep = find_endpoint(endpoints, code)
     source = f"overlay:{code}"
 
+    # Stage-1 / offline layouts may embed endpoints directly (no web.overlay).
+    if ep is None:
+        layout_eps = layout.get("endpoints")
+        if isinstance(layout_eps, list):
+            ep = find_endpoint(layout_eps, code)
+            if ep is not None:
+                source = f"layout.endpoints:{code}"
+
     if ep is None and backend:
         web = layout.get("web") or {}
         mvid = str(web.get("map_version_id") or "")
@@ -212,12 +344,16 @@ def resolve_spawn(
 
     if ep is None:
         raise RuntimeError(
-            f"spawn_endpoint_code={code!r} not found in overlay "
+            f"spawn_endpoint_code={code!r} not found in layout.endpoints / overlay "
             f"{(layout.get('web') or {}).get('overlay')!r} (and backend unavailable/miss)"
         )
 
     pose = _as_pose(ep)
-    if require_clearance and map_yaml:
+    # Layout may disable hard fail on PARK clearance; still nudge so LiDAR/Collision Monitor
+    # are not permanently in approach-stop (MAP-ONE parking footprint clips occupancy).
+    layout_clearance = layout.get("spawn_require_clearance")
+    do_clearance = require_clearance if layout_clearance is None else bool(layout_clearance)
+    if map_yaml:
         cells, meta = load_occupied_cells_ros(Path(map_yaml))
         ok, reason = footprint_clear(
             pose,
@@ -227,33 +363,22 @@ def resolve_spawn(
             resolution=meta.get("resolution", 0.05),
         )
         if not ok:
-            raise RuntimeError(f"PARK spawn clearance failed for {code}: {reason}")
-
-    # #region agent log
-    try:
-        import json
-        import time
-        from pathlib import Path as _P
-
-        _log = _P("/mnt/e/programming/my_project/warotrans-system/debug-100d90.log")
-        with _log.open("a", encoding="utf-8") as _f:
-            _f.write(
-                json.dumps(
-                    {
-                        "sessionId": "100d90",
-                        "runId": "spawn-resolve",
-                        "hypothesisId": "B",
-                        "location": "spawn_pose.py:resolve_spawn",
-                        "message": "resolved spawn for Gazebo/AMCL",
-                        "data": {**pose, "source": source, "endpoint_code": code},
-                        "timestamp": int(time.time() * 1000),
-                    }
-                )
-                + "\n"
+            # Tight PARK (spawn_require_clearance=false): footprint-clear only — avoid
+            # standoff nudge into south wall corridor that CM permanently holds.
+            nudged = nudge_spawn_to_clear(
+                pose,
+                occupied_cells=cells,
+                origin_x=meta.get("origin_x", 0.0),
+                origin_y=meta.get("origin_y", 0.0),
+                resolution=meta.get("resolution", 0.05),
+                require_standoff=do_clearance,
             )
-    except Exception:
-        pass
-    # #endregion
+            if nudged is None:
+                if do_clearance:
+                    raise RuntimeError(f"PARK spawn clearance failed for {code}: {reason}")
+            else:
+                pose = nudged
+                source = f"{source}+nudge"
 
     return {**pose, "source": source, "endpoint_code": code}
 

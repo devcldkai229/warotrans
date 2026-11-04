@@ -113,6 +113,10 @@ def generate_launch_description() -> LaunchDescription:
             "enable_cmd_vel_pipeline": LaunchConfiguration("enable_cmd_vel_pipeline"),
             "keepout_mask": LaunchConfiguration("keepout_mask"),
             "speed_mask": LaunchConfiguration("speed_mask"),
+            # Semantic traffic (Nav2 plans, backend grants): ONE_WAY-aware planner + cmd_vel authority gate.
+            "lanes_json": LaunchConfiguration("lanes_json"),
+            "extra_params_file": LaunchConfiguration("extra_params_file"),
+            "enable_authority_gate": LaunchConfiguration("enable_authority_gate"),
         }.items(),
         condition=IfCondition(LaunchConfiguration("start_navigation")),
     )
@@ -196,6 +200,27 @@ def generate_launch_description() -> LaunchDescription:
                 "speed_mask",
                 default_value=os.path.expanduser("~/maps/warotrans_speed.yaml"),
                 description="Phase 3 SPEED_LIMIT filter mask YAML (when filters on)",
+            ),
+            DeclareLaunchArgument(
+                "lanes_json",
+                default_value="",
+                description=(
+                    "lanes.json of the published map's semantic bundle (LaneAwareNavfn ONE_WAY). "
+                    "Use with extra_params_file:=.../nav2_params_lane_aware.yaml"
+                ),
+            ),
+            DeclareLaunchArgument(
+                "extra_params_file",
+                default_value="",
+                description="Nav2 params overlay(s) merged last (';' separated), e.g. nav2_params_lane_aware.yaml",
+            ),
+            DeclareLaunchArgument(
+                "enable_authority_gate",
+                default_value="false",
+                description=(
+                    "Semantic/Active traffic: /cmd_vel only while the backend grant is held "
+                    "(collision_monitor -> cmd_vel_safe -> cmd_vel_authority_gate -> /cmd_vel)"
+                ),
             ),
             DeclareLaunchArgument(
                 "start_ultrasonic",

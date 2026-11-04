@@ -1,0 +1,69 @@
+# Multi-robot overlay: rewrite absolute /odom /scan /filter topics + TF frames
+# for PushRosNamespace + frame_prefix. Placeholders: __NS__, __NS_SLASH__
+# (e.g. sim01 and sim01/).
+
+bt_navigator:
+  ros__parameters:
+    odom_topic: odom
+    global_frame: map
+    robot_base_frame: __NS_SLASH__base_footprint
+
+controller_server:
+  ros__parameters:
+    odom_topic: odom
+
+behavior_server:
+  ros__parameters:
+    odom_topic: odom
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      global_frame: __NS_SLASH__odom
+      robot_base_frame: __NS_SLASH__base_footprint
+      obstacle_layer:
+        scan:
+          topic: scan
+      keepout_filter:
+        filter_info_topic: "keepout_costmap_filter_info"
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      global_frame: map
+      robot_base_frame: __NS_SLASH__base_footprint
+      obstacle_layer:
+        scan:
+          topic: scan
+      keepout_filter:
+        filter_info_topic: "keepout_costmap_filter_info"
+      speed_filter:
+        filter_info_topic: "speed_costmap_filter_info"
+        speed_limit_topic: "speed_limit"
+
+keepout_filter_mask_server:
+  ros__parameters:
+    topic_name: "keepout_filter_mask"
+
+keepout_costmap_filter_info_server:
+  ros__parameters:
+    filter_info_topic: "keepout_costmap_filter_info"
+    mask_topic: "keepout_filter_mask"
+
+speed_filter_mask_server:
+  ros__parameters:
+    topic_name: "speed_filter_mask"
+
+speed_costmap_filter_info_server:
+  ros__parameters:
+    filter_info_topic: "speed_costmap_filter_info"
+    mask_topic: "speed_filter_mask"
+
+collision_monitor:
+  ros__parameters:
+    base_frame_id: __NS_SLASH__base_footprint
+    odom_frame_id: __NS_SLASH__odom
+    FootprintApproach:
+      footprint_topic: "local_costmap/published_footprint"
+    scan:
+      topic: scan

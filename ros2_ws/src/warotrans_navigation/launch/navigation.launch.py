@@ -25,9 +25,11 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction, TimerAction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.descriptions import ParameterFile
+from nav2_common.launch import RewrittenYaml
 
 
 def _setup(context, *args, **kwargs):
@@ -35,6 +37,25 @@ def _setup(context, *args, **kwargs):
     pkg = get_package_share_directory("warotrans_navigation")
     use_sim_time = LaunchConfiguration("use_sim_time")
     autostart = LaunchConfiguration("autostart")
+    # When Nav2 is launched under PushRosNamespace(ns), YAML top-level keys like
+    # `controller_server:` do not match `/ns/controller_server` unless rewritten
+    # with root_key=ns (otherwise plugins fall back to DWB → "No critics defined").
+    params_namespace = (
+        LaunchConfiguration("namespace").perform(context).strip().strip("/")
+    )
+
+    def _namespaced_param_file(path: str):
+        if not params_namespace:
+            return path
+        return ParameterFile(
+            RewrittenYaml(
+                source_file=path,
+                root_key=params_namespace,
+                param_rewrites={},
+                convert_types=True,
+            ),
+            allow_substs=True,
+        )
 
     params_path = LaunchConfiguration("nav2_params_file").perform(context).strip()
     if not params_path:
@@ -61,11 +82,17 @@ def _setup(context, *args, **kwargs):
             f"route_graph not found: {route_graph} "
             "(fetch it with warotrans_simulation/scripts/fetch_route_graph.sh)"
         )
-    bt_xml = os.path.join(
-        pkg,
-        "behavior_trees",
-        "navigate_to_pose_route.xml" if route_graph else "navigate_to_pose_w_replanning_resilient.xml",
+    bt_xml_override = os.path.expanduser(
+        LaunchConfiguration("default_nav_to_pose_bt_xml").perform(context).strip()
     )
+    if bt_xml_override:
+        bt_xml = bt_xml_override
+    else:
+        bt_xml = os.path.join(
+            pkg,
+            "behavior_trees",
+            "navigate_to_pose_route.xml" if route_graph else "navigate_to_pose_w_replanning_resilient.xml",
+        )
     if not os.path.isfile(bt_xml):
         raise RuntimeError(f"BT XML not found: {bt_xml}")
 
@@ -88,16 +115,29 @@ def _setup(context, *args, **kwargs):
     if route_graph:
         param_files.append(os.path.join(pkg, "config", "nav2_params_route.yaml"))
 
-    # Optional last overlay (e.g. warotrans_simulation nav2_params_sim.yaml). Empty = none.
-    extra_params = os.path.expanduser(
-        LaunchConfiguration("extra_params_file").perform(context).strip()
-    )
-    if extra_params:
-        if not os.path.isfile(extra_params):
-            raise RuntimeError(f"extra_params_file not found: {extra_params}")
-        param_files.append(extra_params)
+    # Optional last overlay(s) (e.g. sim speeds; Stage-2 lane-aware). ';' or ',' separated.
+    extra_params_raw = LaunchConfiguration("extra_params_file").perform(context).strip()
+    if extra_params_raw:
+        for part in extra_params_raw.replace(",", ";").split(";"):
+            extra_params = os.path.expanduser(part.strip())
+            if not extra_params:
+                continue
+            if not os.path.isfile(extra_params):
+                raise RuntimeError(f"extra_params_file not found: {extra_params}")
+            param_files.append(extra_params)
 
-    common_params = param_files + [{"use_sim_time": use_sim_time}]
+    lanes_json = os.path.expanduser(
+        LaunchConfiguration("lanes_json").perform(context).strip()
+    )
+    planner_lane_override = {}
+    if lanes_json:
+        if not os.path.isfile(lanes_json):
+            raise RuntimeError(f"lanes_json not found: {lanes_json}")
+        planner_lane_override = {"GridBased": {"lanes_json": lanes_json}}
+
+    common_params = [_namespaced_param_file(p) for p in param_files] + [
+        {"use_sim_time": use_sim_time}
+    ]
     bt_navigator_params = common_params + [{"default_nav_to_pose_bt_xml": bt_xml}]
     if route_graph:
         bt_navigator_params.append(
@@ -126,12 +166,104 @@ def _setup(context, *args, **kwargs):
         LaunchConfiguration("enable_authority_gate").perform(context).strip().lower()
         in ("true", "1", "yes")
     )
+    if enable_authority_gate and not enable_pipeline:
+        # The gate is inserted inside the cmd_vel pipeline; without it the controller drives /cmd_vel directly
+        # and the "gated" robot would move with no authority at all.
+        raise RuntimeError("enable_authority_gate:=true requires enable_cmd_vel_pipeline:=true")
     motion_remappings = remappings + ([("cmd_vel", "cmd_vel_nav")] if enable_pipeline else [])
     if enable_pipeline:
         lifecycle_nodes += ["velocity_smoother", "collision_monitor"]
 
-    actions = [
+    # When filters are on, start mask/info servers FIRST so costmaps do not activate
+    # before TransientLocal masks exist (avoids sustained "Filter mask was not received").
+    filter_prefix_actions = []
+    if enable_filters:
+        keepout_mask = LaunchConfiguration("keepout_mask").perform(context).strip()
+        speed_mask = LaunchConfiguration("speed_mask").perform(context).strip()
+        keepout_mask = os.path.expanduser(keepout_mask)
+        speed_mask = os.path.expanduser(speed_mask)
+        if not os.path.isfile(keepout_mask):
+            raise RuntimeError(
+                f"keepout mask yaml not found: {keepout_mask} "
+                "(run tools/warotrans-ensure-filter-masks.sh)"
+            )
+        if not os.path.isfile(speed_mask):
+            raise RuntimeError(
+                f"speed mask yaml not found: {speed_mask} "
+                "(run tools/warotrans-ensure-filter-masks.sh)"
+            )
+        filter_lifecycle_nodes = [
+            "keepout_filter_mask_server",
+            "keepout_costmap_filter_info_server",
+            "speed_filter_mask_server",
+            "speed_costmap_filter_info_server",
+        ]
+        filter_prefix_actions = [
+            LogInfo(msg=["[warotrans_navigation] keepout_mask=", keepout_mask]),
+            LogInfo(msg=["[warotrans_navigation] speed_mask=", speed_mask]),
+            LogInfo(msg=["[warotrans_navigation] starting costmap filter servers before Nav2"]),
+            Node(
+                package="nav2_map_server",
+                executable="map_server",
+                name="keepout_filter_mask_server",
+                output="screen",
+                parameters=[
+                    _namespaced_param_file(params_path),
+                    {"use_sim_time": use_sim_time},
+                    {"yaml_filename": keepout_mask},
+                ],
+                remappings=remappings,
+            ),
+            Node(
+                package="nav2_map_server",
+                executable="costmap_filter_info_server",
+                name="keepout_costmap_filter_info_server",
+                output="screen",
+                parameters=common_params,
+                remappings=remappings,
+            ),
+            Node(
+                package="nav2_map_server",
+                executable="map_server",
+                name="speed_filter_mask_server",
+                output="screen",
+                parameters=[
+                    _namespaced_param_file(params_path),
+                    {"use_sim_time": use_sim_time},
+                    {"yaml_filename": speed_mask},
+                ],
+                remappings=remappings,
+            ),
+            Node(
+                package="nav2_map_server",
+                executable="costmap_filter_info_server",
+                name="speed_costmap_filter_info_server",
+                output="screen",
+                parameters=common_params,
+                remappings=remappings,
+            ),
+            Node(
+                package="nav2_lifecycle_manager",
+                executable="lifecycle_manager",
+                name="lifecycle_manager_costmap_filters",
+                output="screen",
+                parameters=[
+                    {"use_sim_time": use_sim_time},
+                    {"autostart": autostart},
+                    {"node_names": filter_lifecycle_nodes},
+                    {"bond_timeout": 25.0},
+                ],
+            ),
+        ]
+
+    nav_actions = [
         LogInfo(msg=["[warotrans_navigation] nav2_params_file=", params_path]),
+        LogInfo(
+            msg=[
+                "[warotrans_navigation] params_namespace=",
+                params_namespace or "(none)",
+            ]
+        ),
         LogInfo(
             msg=[
                 "[warotrans_navigation] enable_costmap_filters=",
@@ -173,7 +305,7 @@ def _setup(context, *args, **kwargs):
             output="screen",
             respawn=True,
             respawn_delay=2.0,
-            parameters=common_params,
+            parameters=common_params + ([planner_lane_override] if planner_lane_override else []),
             remappings=remappings,
         ),
         Node(
@@ -197,6 +329,7 @@ def _setup(context, *args, **kwargs):
             remappings=remappings,
         ),
     ]
+    actions = nav_actions
 
     if route_graph:
         actions += [
@@ -247,6 +380,8 @@ def _setup(context, *args, **kwargs):
             ),
         ]
         if enable_authority_gate:
+            # Relative topics so PushRosNamespace(sim0N) isolates each robot's gate.
+            # Absolute defaults (/cmd_vel_safe, /traffic/authority_ok) break multi_sim.
             actions.append(
                 Node(
                     package="warotrans_fleet",
@@ -255,7 +390,14 @@ def _setup(context, *args, **kwargs):
                     output="screen",
                     respawn=True,
                     respawn_delay=2.0,
-                    parameters=[{"use_sim_time": use_sim_time}],
+                    parameters=[
+                        {
+                            "use_sim_time": use_sim_time,
+                            "input_topic": "cmd_vel_safe",
+                            "output_topic": "cmd_vel",
+                            "authority_ok_topic": "traffic/authority_ok",
+                        }
+                    ],
                     remappings=remappings,
                 )
             )
@@ -263,7 +405,8 @@ def _setup(context, *args, **kwargs):
                 LogInfo(
                     msg=[
                         "[warotrans_navigation] authority gate ON: "
-                        "collision_monitor->/cmd_vel_safe->gate->/cmd_vel"
+                        "collision_monitor->cmd_vel_safe->gate->cmd_vel "
+                        "(authority_ok:=traffic/authority_ok)"
                     ]
                 )
             )
@@ -283,87 +426,11 @@ def _setup(context, *args, **kwargs):
         )
     )
 
-    if enable_filters:
-        keepout_mask = LaunchConfiguration("keepout_mask").perform(context).strip()
-        speed_mask = LaunchConfiguration("speed_mask").perform(context).strip()
-        keepout_mask = os.path.expanduser(keepout_mask)
-        speed_mask = os.path.expanduser(speed_mask)
-        if not os.path.isfile(keepout_mask):
-            raise RuntimeError(
-                f"keepout mask yaml not found: {keepout_mask} "
-                "(run tools/warotrans-ensure-filter-masks.sh)"
-            )
-        if not os.path.isfile(speed_mask):
-            raise RuntimeError(
-                f"speed mask yaml not found: {speed_mask} "
-                "(run tools/warotrans-ensure-filter-masks.sh)"
-            )
-
-        filter_lifecycle_nodes = [
-            "keepout_filter_mask_server",
-            "keepout_costmap_filter_info_server",
-            "speed_filter_mask_server",
-            "speed_costmap_filter_info_server",
-        ]
-        actions.extend(
-            [
-                LogInfo(msg=["[warotrans_navigation] keepout_mask=", keepout_mask]),
-                LogInfo(msg=["[warotrans_navigation] speed_mask=", speed_mask]),
-                Node(
-                    package="nav2_map_server",
-                    executable="map_server",
-                    name="keepout_filter_mask_server",
-                    output="screen",
-                    parameters=[
-                        params_path,
-                        {"use_sim_time": use_sim_time},
-                        {"yaml_filename": keepout_mask},
-                    ],
-                    remappings=remappings,
-                ),
-                Node(
-                    package="nav2_map_server",
-                    executable="costmap_filter_info_server",
-                    name="keepout_costmap_filter_info_server",
-                    output="screen",
-                    parameters=common_params,
-                    remappings=remappings,
-                ),
-                Node(
-                    package="nav2_map_server",
-                    executable="map_server",
-                    name="speed_filter_mask_server",
-                    output="screen",
-                    parameters=[
-                        params_path,
-                        {"use_sim_time": use_sim_time},
-                        {"yaml_filename": speed_mask},
-                    ],
-                    remappings=remappings,
-                ),
-                Node(
-                    package="nav2_map_server",
-                    executable="costmap_filter_info_server",
-                    name="speed_costmap_filter_info_server",
-                    output="screen",
-                    parameters=common_params,
-                    remappings=remappings,
-                ),
-                Node(
-                    package="nav2_lifecycle_manager",
-                    executable="lifecycle_manager",
-                    name="lifecycle_manager_costmap_filters",
-                    output="screen",
-                    parameters=[
-                        {"use_sim_time": use_sim_time},
-                        {"autostart": autostart},
-                        {"node_names": filter_lifecycle_nodes},
-                        {"bond_timeout": 25.0},
-                    ],
-                ),
-            ]
-        )
-
+    if filter_prefix_actions:
+        # Allow filter lifecycle activate + TransientLocal mask publish before costmaps.
+        # 3s was too short under WSL/Gazebo load → sustained "Filter mask was not received"
+        # and BT clear_costmap recovery then never recovers masks.
+        return filter_prefix_actions + [TimerAction(period=8.0, actions=actions)]
     return actions
 
 
@@ -379,6 +446,14 @@ def generate_launch_description():
             DeclareLaunchArgument("use_sim_time", default_value="false"),
             DeclareLaunchArgument("autostart", default_value="true"),
             DeclareLaunchArgument(
+                "namespace",
+                default_value="",
+                description=(
+                    "ROS namespace for RewrittenYaml root_key when this launch is "
+                    "included under PushRosNamespace (e.g. sim01). Empty = no rewrite."
+                ),
+            ),
+            DeclareLaunchArgument(
                 "nav2_params_file",
                 default_value=default_params,
                 description="Nav2 params YAML (do not name this params_file)",
@@ -386,7 +461,20 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "extra_params_file",
                 default_value="",
-                description="Optional Nav2 params overlay merged last (after route overlay when set)",
+                description=(
+                    "Optional Nav2 params overlay(s) merged last (after route overlay when set). "
+                    "Separate multiple files with ';' or ','."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "default_nav_to_pose_bt_xml",
+                default_value="",
+                description="Optional override for NavigateToPose BT XML (empty = package default)",
+            ),
+            DeclareLaunchArgument(
+                "lanes_json",
+                default_value="",
+                description="Stage-2 lanes.json for LaneAwareNavfn (GridBased.lanes_json)",
             ),
             DeclareLaunchArgument(
                 "enable_costmap_filters",

@@ -1,7 +1,12 @@
-"""Nav2 ComputeRoute + FollowPath adapter for Active Mode segment execution.
+"""Nav2 ComputeRoute + FollowPath / FollowPathReverse / Spin for Active Mode segments.
 
 Uses existing nav2_route_client for ComputeRoute/adjust_edges coordination and
-nav2_msgs/action/FollowPath for controller tracking without BT recoveries.
+nav2_msgs actions for tracking without BT recoveries.
+
+Maneuver kinds (CompilerVersion 10+):
+  Forward — densify polylines, FollowPath, allow_reversing=false (primary controller)
+  Reverse — densify with reversed vertex order, FollowPathReverse (dedicated RPP)
+  Spin    — nav2_msgs/Spin with spin_dist from yaw delta; requires authority_ok
 """
 
 from __future__ import annotations
@@ -10,6 +15,7 @@ import math
 import threading
 from typing import Any, Callable, Optional, Sequence
 
+from warotrans_fleet.authority_store import ManeuverStep
 from warotrans_fleet.segment_executor import (
     RESULT_ABORTED,
     RESULT_CANCELED,
@@ -23,6 +29,8 @@ from warotrans_fleet.segment_executor import (
 
 
 PATH_STEP_M = 0.05
+CONTROLLER_FORWARD = "FollowPath"
+CONTROLLER_REVERSE = "FollowPathReverse"
 
 
 def densify_path(
@@ -54,6 +62,26 @@ def densify_path(
     return poses
 
 
+def densify_path_reversed(
+    polylines: Sequence[Sequence[tuple[float, float]]], step: float = PATH_STEP_M
+) -> list[tuple[float, float, float]]:
+    """Densify with reversed vertex order so RPP follow path drives reverse along the lane."""
+    reversed_lines: list[list[tuple[float, float]]] = []
+    for line in reversed(list(polylines)):
+        pts = [(float(x), float(y)) for x, y in line]
+        pts.reverse()
+        reversed_lines.append(pts)
+    return densify_path(reversed_lines, step=step)
+
+
+def _normalize_angle(a: float) -> float:
+    while a > math.pi:
+        a -= 2.0 * math.pi
+    while a < -math.pi:
+        a += 2.0 * math.pi
+    return a
+
+
 class Nav2SegmentExecutor:
     """ROS2 adapter. Construct only when rclpy/nav2_msgs are available."""
 
@@ -63,19 +91,27 @@ class Nav2SegmentExecutor:
         node: Any,
         route_port: Any,
         follow_path_action: str = "follow_path",
+        spin_action: str = "spin",
         goal_timeout_sec: float = 120.0,
+        authority_ok_fn: Optional[Callable[[], bool]] = None,
+        get_yaw_fn: Optional[Callable[[], Optional[float]]] = None,
         log: Optional[Callable[[str], None]] = None,
     ) -> None:
         self._node = node
         self._route_port = route_port
         self._log = log or (lambda _m: None)
         self._goal_timeout_sec = goal_timeout_sec
+        self._authority_ok_fn = authority_ok_fn
+        self._get_yaw_fn = get_yaw_fn
         self._lock = threading.Lock()
         self._ticket: Optional[SegmentTicket] = None
         self._callbacks: Optional[SegmentCallbacks] = None
         self._send_goal_future = None
         self._result_future = None
         self._goal_handle = None
+        self._pending_steps: list[ManeuverStep] = []
+        self._active_controller = CONTROLLER_FORWARD
+        self._spin_client = None
 
         from action_msgs.msg import GoalStatus
         from nav2_msgs.action import FollowPath
@@ -86,8 +122,15 @@ class Nav2SegmentExecutor:
         self._FollowPath = FollowPath
         self._Duration = Duration
         self._client = ActionClient(node, FollowPath, follow_path_action)
+        try:
+            from nav2_msgs.action import Spin
+
+            self._Spin = Spin
+            self._spin_client = ActionClient(node, Spin, spin_action)
+        except Exception as exc:  # noqa: BLE001
+            self._log(f"[Nav2SegmentExecutor] Spin action unavailable: {exc!r}")
+            self._Spin = None
         self._edge_poly: dict[int, list[tuple[float, float]]] = {}
-        # Optional: inject polylines via route_port.edge_polyline or set_edge_polylines().
 
     def set_edge_polylines(self, polylines: dict[int, Sequence[tuple[float, float]]]) -> None:
         self._edge_poly = {int(k): [(float(x), float(y)) for x, y in v] for k, v in polylines.items()}
@@ -102,39 +145,37 @@ class Nav2SegmentExecutor:
             return []
 
     def follow_path(self, edge_ids: Sequence[int], callbacks: SegmentCallbacks) -> SegmentTicket:
-        ticket = SegmentTicket(edge_ids)
+        """Legacy: single Forward step over edge_ids."""
+        return self.execute_maneuvers(
+            [ManeuverStep(kind="Forward", edge_ids=tuple(int(e) for e in edge_ids))],
+            callbacks,
+        )
+
+    def execute_maneuvers(
+        self, steps: Sequence[ManeuverStep], callbacks: SegmentCallbacks
+    ) -> SegmentTicket:
+        all_edges: list[int] = []
+        for step in steps:
+            all_edges.extend(int(e) for e in step.edge_ids)
+        ticket = SegmentTicket(all_edges)
         with self._lock:
             self._ticket = ticket
             self._callbacks = callbacks
+            self._pending_steps = list(steps)
 
-        if not self._client.wait_for_server(timeout_sec=2.0):
-            callbacks.on_result(SegmentResult(RESULT_ABORTED, "FOLLOW_PATH_UNAVAILABLE"))
+        if not steps:
+            callbacks.on_result(SegmentResult(RESULT_SUCCEEDED, None))
             ticket.finished = True
             return ticket
 
-        # Never drive a gap: an edge without geometry would be bridged by a straight line (audit G2).
-        missing = [e for e in edge_ids if not self._edge_points(int(e))]
-        if missing:
-            self._log(f"[Nav2SegmentExecutor] no geometry for edges {missing}; refusing FollowPath")
-            callbacks.on_result(SegmentResult(RESULT_ABORTED, "UNKNOWN_EDGE"))
-            ticket.finished = True
-            return ticket
-
-        path_msg = self._build_path_msg(list(edge_ids))
-        goal = self._FollowPath.Goal()
-        goal.path = path_msg
-        # Must match controller_server plugin name (nav2_params); empty string aborts on Jazzy.
-        goal.controller_id = "FollowPath"
-        goal.goal_checker_id = "general_goal_checker"
-
-        self._send_goal_future = self._client.send_goal_async(goal)
-        self._send_goal_future.add_done_callback(self._on_goal_response)
+        self._start_next_step()
         return ticket
 
     def cancel(self) -> None:
         with self._lock:
             ticket = self._ticket
             handle = self._goal_handle
+            self._pending_steps = []
             if ticket is not None:
                 ticket.canceled = True
         if handle is not None:
@@ -142,6 +183,91 @@ class Nav2SegmentExecutor:
                 handle.cancel_goal_async()
             except Exception as exc:  # noqa: BLE001
                 self._log(f"[Nav2SegmentExecutor] cancel failed: {exc!r}")
+
+    def _require_authority(self) -> bool:
+        if self._authority_ok_fn is None:
+            return True
+        try:
+            return bool(self._authority_ok_fn())
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _start_next_step(self) -> None:
+        with self._lock:
+            if self._ticket is not None and self._ticket.canceled:
+                self._finish(RESULT_CANCELED, None)
+                return
+            if not self._pending_steps:
+                self._finish(RESULT_SUCCEEDED, None)
+                return
+            step = self._pending_steps.pop(0)
+
+        if step.kind not in ("Forward", "Reverse", "Spin"):
+            self._log(f"[Nav2SegmentExecutor] unknown maneuver kind={step.kind!r}; refusing")
+            self._finish(RESULT_ABORTED, "UNKNOWN_MANEUVER")
+            return
+
+        if step.kind in ("Reverse", "Spin") and not self._require_authority():
+            self._finish(RESULT_ABORTED, "AUTHORITY_REQUIRED")
+            return
+
+        if step.kind == "Spin":
+            self._start_spin(step)
+            return
+
+        controller = CONTROLLER_REVERSE if step.kind == "Reverse" else CONTROLLER_FORWARD
+        self._start_follow(list(step.edge_ids), controller, reverse=step.kind == "Reverse")
+
+    def _start_follow(self, edge_ids: list[int], controller_id: str, *, reverse: bool) -> None:
+        if not self._client.wait_for_server(timeout_sec=2.0):
+            self._finish(RESULT_ABORTED, "FOLLOW_PATH_UNAVAILABLE")
+            return
+
+        missing = [e for e in edge_ids if not self._edge_points(int(e))]
+        if missing:
+            self._log(f"[Nav2SegmentExecutor] no geometry for edges {missing}; refusing FollowPath")
+            self._finish(RESULT_ABORTED, "UNKNOWN_EDGE")
+            return
+
+        path_msg = self._build_path_msg(edge_ids, reverse=reverse)
+        goal = self._FollowPath.Goal()
+        goal.path = path_msg
+        goal.controller_id = controller_id
+        goal.goal_checker_id = "general_goal_checker"
+        self._active_controller = controller_id
+
+        self._send_goal_future = self._client.send_goal_async(goal)
+        self._send_goal_future.add_done_callback(self._on_goal_response)
+
+    def _start_spin(self, step: ManeuverStep) -> None:
+        if self._spin_client is None or self._Spin is None:
+            self._finish(RESULT_ABORTED, "SPIN_UNAVAILABLE")
+            return
+        if not self._spin_client.wait_for_server(timeout_sec=2.0):
+            self._finish(RESULT_ABORTED, "SPIN_UNAVAILABLE")
+            return
+        if step.yaw_target is None:
+            self._finish(RESULT_ABORTED, "SPIN_YAW_REQUIRED")
+            return
+
+        current = None
+        if self._get_yaw_fn is not None:
+            try:
+                current = self._get_yaw_fn()
+            except Exception:  # noqa: BLE001
+                current = None
+        if current is None:
+            current = 0.0
+        spin_dist = _normalize_angle(float(step.yaw_target) - float(current))
+
+        goal = self._Spin.Goal()
+        goal.target_yaw = spin_dist  # nav2 Spin uses relative spin_dist on some distros
+        # Jazzy Spin.action field is `target_yaw` (relative). Prefer setattr for both names.
+        if hasattr(goal, "spin_dist"):
+            goal.spin_dist = spin_dist  # type: ignore[attr-defined]
+        self._active_controller = "Spin"
+        self._send_goal_future = self._spin_client.send_goal_async(goal)
+        self._send_goal_future.add_done_callback(self._on_goal_response)
 
     def _on_goal_response(self, future: Any) -> None:
         try:
@@ -170,21 +296,33 @@ class Nav2SegmentExecutor:
 
         with self._lock:
             canceled = self._ticket is not None and self._ticket.canceled
+            has_more = bool(self._pending_steps)
 
-        if status == self._GoalStatus.STATUS_SUCCEEDED:
-            self._finish(RESULT_SUCCEEDED, None)
-        elif canceled or status == self._GoalStatus.STATUS_CANCELED:
+        if canceled or status == self._GoalStatus.STATUS_CANCELED:
             self._finish(RESULT_CANCELED, None)
-        elif status == self._GoalStatus.STATUS_ABORTED:
+            return
+        if status == self._GoalStatus.STATUS_SUCCEEDED:
+            if has_more:
+                with self._lock:
+                    self._goal_handle = None
+                self._start_next_step()
+            else:
+                self._finish(RESULT_SUCCEEDED, None)
+            return
+        if status == self._GoalStatus.STATUS_ABORTED:
             self._finish(RESULT_ABORTED, "CONTROLLER_ABORTED")
-        else:
-            self._finish(RESULT_TIMEOUT if status == self._GoalStatus.STATUS_UNKNOWN else RESULT_ABORTED, f"status={status}")
+            return
+        self._finish(
+            RESULT_TIMEOUT if status == self._GoalStatus.STATUS_UNKNOWN else RESULT_ABORTED,
+            f"status={status}",
+        )
 
     def _finish(self, status: str, detail: Optional[str]) -> None:
         with self._lock:
             callbacks = self._callbacks
             ticket = self._ticket
             self._goal_handle = None
+            self._pending_steps = []
             if ticket is not None:
                 ticket.finished = True
         if callbacks is not None:
@@ -201,7 +339,7 @@ class Nav2SegmentExecutor:
                 return []
         return []
 
-    def _build_path_msg(self, edge_ids: list[int]) -> Any:
+    def _build_path_msg(self, edge_ids: list[int], *, reverse: bool = False) -> Any:
         from geometry_msgs.msg import PoseStamped
         from nav_msgs.msg import Path
 
@@ -209,7 +347,9 @@ class Nav2SegmentExecutor:
         path.header.frame_id = "map"
         path.header.stamp = self._node.get_clock().now().to_msg()
 
-        for x, y, yaw in densify_path([self._edge_points(eid) for eid in edge_ids]):
+        lines = [self._edge_points(eid) for eid in edge_ids]
+        poses = densify_path_reversed(lines) if reverse else densify_path(lines)
+        for x, y, yaw in poses:
             ps = PoseStamped()
             ps.header = path.header
             ps.pose.position.x = x
@@ -218,5 +358,5 @@ class Nav2SegmentExecutor:
             ps.pose.orientation.w = math.cos(yaw / 2.0)
             path.poses.append(ps)
         if not path.poses:
-            self._log(f"[Nav2SegmentExecutor] empty FollowPath for edges={edge_ids}")
+            self._log(f"[Nav2SegmentExecutor] empty FollowPath for edges={edge_ids} reverse={reverse}")
         return path

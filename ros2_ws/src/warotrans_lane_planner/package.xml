@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>warotrans_lane_planner</name>
+  <version>0.1.0</version>
+  <description>Lane-aware Nav2 global planner: hard ONE_WAY corridor constraints.</description>
+  <maintainer email="dev@warotrans.local">WaroTrans Team</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>nav2_core</depend>
+  <depend>nav2_costmap_2d</depend>
+  <depend>nav2_util</depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>pluginlib</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <build_depend>nlohmann-json-dev</build_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+    <nav2_core plugin="${prefix}/lane_aware_navfn_plugin.xml"/>
+  </export>
+</package>

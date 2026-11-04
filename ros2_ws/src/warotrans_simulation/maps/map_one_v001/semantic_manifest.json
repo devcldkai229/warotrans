@@ -1,0 +1,56 @@
+{
+  "mapCode": "MAP-ONE-V001",
+  "mapVersionId": "7863c1f3-3a46-4d06-bfa7-efab88b39300",
+  "frameId": "map",
+  "resolution": 0.05,
+  "origin": [
+    -2.929,
+    -1.415,
+    0.0
+  ],
+  "occupancySha256": "990b21e495efe89edae2ae45d24189dfedc03972ab1c2964be69ea661675b96d",
+  "imageWidth": 102,
+  "imageHeight": 67,
+  "contentHash": "b7ee8133e811a81e535d2ffab8ea2594cec5b1e4c7cc6be650338bfc0c7746a3",
+  "focusEndpoints": {
+    "EP-INBOUND": {
+      "x": 1.747,
+      "y": 1.543,
+      "yaw": -1.5707963267948966
+    },
+    "EP-OUTBOUND": {
+      "x": 1.793,
+      "y": -0.977,
+      "yaw": 1.5707963267948966
+    },
+    "EP-PARKING-A": {
+      "x": -1.743,
+      "y": -0.516,
+      "yaw": -1.5707963267948966
+    }
+  },
+  "footprintMeters": {
+    "length": 0.32,
+    "width": 0.26,
+    "padding": 0.02
+  },
+  "navRuntime": "nav2_semantic",
+  "sourceSnapshot": "/mnt/e/programming/my_project/warotrans-system/samples/maps/MAP-ONE-V001",
+  "world": "worlds/map_one_v001.sdf",
+  "mapYaml": "maps/map_one_v001/map.yaml",
+  "layout": "config/layouts/map_one_v001.yaml",
+  "stage": 2,
+  "outSlug": "map_one_v001",
+  "spawnEndpointCode": "EP-PARKING-A",
+  "semanticMapFingerprint": "2c3f15b0e35b0bdf46967ecc0c4941cf6dfd8d61ecc5f7a2f5f8f946ed9f2a59",
+  "plannerId": "warotrans_lane_planner::LaneAwareNavfn",
+  "policies": {
+    "keepout": "keepout.yaml",
+    "keepout_zones": "keepout.json",
+    "speed": "speed.yaml",
+    "lanes": "lanes.json",
+    "no_stop": "no_stop.json",
+    "single_occupancy": "single_occupancy.json"
+  },
+  "note": "Stage-2 fingerprint includes lanes/zones/endpoints/yaw; SINGLE_OCCUPANCY not enforced"
+}

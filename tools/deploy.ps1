@@ -56,7 +56,7 @@ if ($DryRun) {
     exit 0
 }
 
-scp tools/doctor.sh tools/check.sh tools/rollback_source.sh "${Pi}:~/warotrans_tools/"
+scp tools/doctor.sh tools/check.sh tools/rollback_source.sh tools/real_robot_readiness.py "${Pi}:~/warotrans_tools/"
 Assert-Native "scp operational tools"
 ssh $Pi 'chmod +x ~/warotrans_tools/doctor.sh ~/warotrans_tools/check.sh ~/warotrans_tools/rollback_source.sh'
 Assert-Native "chmod operational tools"

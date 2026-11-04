@@ -5,68 +5,117 @@
 # The simulated diff drive has no such limit, so the demo runs faster here.
 # This file is only loaded by warotrans_simulation launches — never on the Pi.
 #
-# 2026-10-27: V018 aisles ~0.45 m shelf-to-lane; centreline is only ~0.22 m from
-# shelf face. Base inflation 0.35 (and even 0.25) keeps the lane centre in high
-# cost → RPP "collision ahead" → rotate_to_heading loop (~1 min in-place spin).
-# Sim-only: inflation 0.15 keeps centreline clear; disable rotate_to_heading so a
-# brief collision-ahead does not become an in-place spin until progress abort.
+# 2026-11-02 (MAP-ONE-V001, measured on maps/map_one_v001/map.pgm): padded footprint
+# is 0.36x0.30 → half-width 0.15, circumscribed radius 0.234. Escaping the EP-PARKING-A
+# pocket eastward REQUIRES y <= -0.85 (at y >= -0.80 EP-INBOUND is unreachable), and the
+# widest line through the pillar gap is y ~ -0.99 at 0.30-0.41 m clearance.
+# inflation 0.15 geodesiced along y ~ -0.84 at only 0.150 m clearance -- zero margin for
+# the padded footprint, which is where Collision Monitor held (111/120 samples).
+# inflation 0.35 moves the plan to the corridor centre: min clearance 0.150 → 0.300.
+# EP-INBOUND needs a ~180 deg terminal spin (goal faces south, wall 0.317 m to the north),
+# so rotate_to_heading must be ON, but only near the goal -- see FollowPath below.
 # Merged LAST (after nav2_params_route.yaml). Raise lookahead with sim speed so v/L ≤ ~1.2.
 # Do not invent wheel calib; do not disable Collision Monitor / Motion Authority.
 # =============================================================================
 
 controller_server:
   ros__parameters:
+    # NOTE: controller_patience is a move_base name, not a Nav2 controller_server
+    # parameter -- it was silently dropped. failure_tolerance is the real knob.
+    failure_tolerance: 3.0
+    # MAP-ONE C-aisle: Collision Monitor holds cmd_vel for long stretches; 20 s progress
+    # window aborts while the robot is legally waiting on FootprintApproach (not a stall).
+    progress_checker:
+      required_movement_radius: 0.08
+      # CM approach near parking walls briefly zeros cmd_vel; need longer window.
+      movement_time_allowance: 50.0
     FollowPath:
-      # Phase B: keep lane lookahead 0.20 (tight aisles); drop v so v/L ≤ ~1.2 (0.24/0.20=1.2).
-      # Raising L to 0.30 with v=0.35 cut corners → RPP collision-ahead → progress abort (E2E JOB-000007).
-      desired_linear_vel: 0.24
-      lookahead_dist: 0.20
-      min_lookahead_dist: 0.15
-      max_lookahead_dist: 0.30
-      curvature_lookahead_dist: 0.20
-      # Pivot in place when the lane turns > rotate_to_heading_min_angle (base 45°) or a new MOVE starts
-      # facing away from the route (e.g. leaving EP-INBOUND nose-to-wall). Arcing instead cut corners
-      # into shelves/walls. The old in-aisle spin loop came from FollowPath poses with zero quaternions
-      # (always "rotate to yaw 0"); Nav2SegmentExecutor now orients every pose along the lane.
+      # Keep plugin explicit so overlay never leaves FollowPath on DWB defaults.
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      # Straighter lane track (user: avoid sin-wave). Short L=0.20 + fixed curvature chased
+      # jagged A* corners → weave. L=0.28 @ v=0.20 keeps v/L≤0.72; no SmoothPath in BT.
+      desired_linear_vel: 0.20
+      lookahead_dist: 0.28
+      min_lookahead_dist: 0.22
+      max_lookahead_dist: 0.40
+      curvature_lookahead_dist: 0.28
+      # RPP only reaches the goal yaw via shouldRotateToGoalHeading(), which needs
+      # use_rotate_to_heading ON. Earlier regressions came from min_angle 0.785 firing
+      # mid-path pivots inside 0.15-0.20 m corridors (needs 0.234 to rotate).
+      # Measured heading error on leaving EP-PARKING-A is ~1.1 rad, so 1.4 suppresses
+      # the start and mid-path pivots; the terminal rotation is NOT gated by min_angle.
       use_rotate_to_heading: true
+      rotate_to_heading_min_angle: 1.4
       rotate_to_heading_angular_vel: 0.45
-      # Match local inflation_layer below (RPP uses this for collision scaling).
       inflation_cost_scaling_factor: 3.0
-      # Slightly more patient before declaring carrot collision in tight aisles.
-      max_allowed_time_to_collision_up_to_carrot: 1.5
-      # Active Mode ends every traffic segment at a safe-stop node. Without this, curvature to a carrot
-      # pinned on the goal blows up in the last ~0.2 m and the robot swirls ~90° off the lane before
-      # stopping, then arcs into the shelf on the next segment (Gazebo trace 2026-10-27, node 26).
-      use_fixed_curvature_lookahead: true
-      interpolate_curvature_after_goal: true
+      max_allowed_time_to_collision_up_to_carrot: 3.0
+      # Required for CM A/B: RPP collision stays ON; do not disable to pass CM tests.
+      use_collision_detection: true
+      # RPP throws at configure() when allow_reversing and use_rotate_to_heading are
+      # both true. Forward-only also restores the FollowPath contract in nav2_params.yaml.
+      allow_reversing: false
+      use_fixed_curvature_lookahead: false
+      interpolate_curvature_after_goal: false
+    FollowPathReverse:
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      use_collision_detection: true
+      use_rotate_to_heading: false
+      allow_reversing: true
+      inflation_cost_scaling_factor: 3.0
     general_goal_checker:
-      # Target was 0.05 m; JOB-000008 reached ~9 cm of EP-INBOUND (0.00,-0.05 vs 0.045,-0.133)
-      # then progress-aborted — 0.05 m not feasible with AMCL+lane tracking floor. Use 0.10 m.
-      xy_goal_tolerance: 0.10
-      yaw_goal_tolerance: 0.25
+      # RPP takes goal_dist_tol_ from this xy tolerance to open the terminal-rotation
+      # gate. Measured around EP-INBOUND: clearance 0.267 at 0.05 m but 0.217 at 0.10 m
+      # (< 0.234), so rotating is only safe within ~0.05-0.07 m. 0.08 keeps the spin in
+      # the clear pocket and is still well inside the 0.20 m acceptance threshold.
+      # yaw: ~23° — must face endpoint heading (was π = ignore).
+      xy_goal_tolerance: 0.08
+      yaw_goal_tolerance: 0.40
 
 local_costmap:
   local_costmap:
     ros__parameters:
-      # MAP-WHSIM-V019 moved EP-INBOUND / EP-OUTBOUND / EP-INSPECTION off the walls, so the 2.5 cm costmap
-      # workaround for V018 is gone: it quadrupled the cell count and starved collision_monitor on WSL
-      # (lifecycle_manager then shut Nav2 down mid-goal).
       inflation_layer:
-        inflation_radius: 0.15
+        # 0.15 was below the circumscribed radius 0.234, so the gradient never pushed the
+        # plan off the pillar (min clearance 0.150). 0.35 centres it (0.300-0.412) --
+        # this tightens obstacle avoidance, it does not relax any safety margin.
+        inflation_radius: 0.35
         cost_scaling_factor: 3.0
 
 global_costmap:
   global_costmap:
     ros__parameters:
       inflation_layer:
-        inflation_radius: 0.15
+        inflation_radius: 0.35
         cost_scaling_factor: 3.0
 
 velocity_smoother:
   ros__parameters:
     max_velocity: [0.4, 0.0, 1.0]
     min_velocity: [-0.2, 0.0, -1.0]
-    # Slightly softer angular accel to cut stop-go twist chatter (Phase B cause #3); keep scale on.
     max_accel: [0.8, 0.0, 1.2]
     max_decel: [-0.8, 0.0, -1.2]
     scale_velocities: true
+
+# MAP-ONE metrics (chassis 0.32×0.26, aisle ~0.45 m → side clearance ~0.07–0.10 m):
+#   look_ahead_m ≈ v_sim(0.24) * time_before_collision
+#   0.10 s → ~0.024 m — approach action effectively inert (was debug-only)
+#   0.20 s → ~0.048 m | 0.30 s → ~0.072 m (production aisle floor)
+# 2026-11-02: raised to 0.25 now that inflation 0.35 routes the plan down the corridor
+# centre, so the horizon no longer fights a 0.150 m-clearance geodesic.
+# Toggle FootprintApproach.enabled for A/B: true=CM_ON, false=CM_OFF (debug leave).
+collision_monitor:
+  ros__parameters:
+    polygons: ["FootprintApproach"]
+    observation_sources: ["scan"]
+    FootprintApproach:
+      type: "polygon"
+      action_type: "approach"
+      time_before_collision: 0.25
+      simulation_time_step: 0.05
+      min_points: 4
+      enabled: true
+      visualize: true
+    scan:
+      type: "scan"
+      topic: "scan"
+      enabled: true

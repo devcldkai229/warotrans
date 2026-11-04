@@ -26,6 +26,7 @@ setup(
         "console_scripts": [
             "robot_gateway_node = warotrans_fleet.robot_gateway_node:main",
             "cmd_vel_authority_gate = warotrans_fleet.cmd_vel_authority_gate:main",
+            "path_policy_validator = warotrans_fleet.path_policy_validator:main",
         ],
     },
 )

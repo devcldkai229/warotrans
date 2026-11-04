@@ -1,0 +1,48 @@
+<!--
+  Sim-only NavigateToPose BT for MAP-ONE narrow aisles.
+  Same resilient structure as warotrans_navigation, with longer BackUp so the
+  robot can clear shelf pockets before Spin (C-aisle exit). Collision Monitor
+  and Motion Authority Gate remain upstream of cmd_vel.
+-->
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="6" name="NavigateRecovery">
+      <PipelineSequence name="NavigateWithReplanning">
+        <RateController hz="0.5">
+          <RecoveryNode number_of_retries="1" name="ComputePathToPose">
+            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"
+              error_code_id="{compute_path_error_code}"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Context"
+              service_name="global_costmap/clear_entirely_global_costmap"/>
+          </RecoveryNode>
+        </RateController>
+        <RecoveryNode number_of_retries="3" name="FollowPath">
+          <FollowPath path="{path}" controller_id="FollowPath"
+            error_code_id="{follow_path_error_code}"/>
+          <Sequence name="FollowPathRecovery">
+            <ClearEntireCostmap name="ClearLocalCostmap-Context"
+              service_name="local_costmap/clear_entirely_local_costmap"/>
+            <Wait wait_duration="1.0"/>
+            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"
+              error_code_id="{compute_path_error_code}"/>
+          </Sequence>
+        </RecoveryNode>
+      </PipelineSequence>
+      <ReactiveFallback name="RecoveryFallback">
+        <GoalUpdated/>
+        <RoundRobin name="RecoveryActions">
+          <Sequence name="ClearingActions">
+            <ClearEntireCostmap name="ClearLocalCostmap-Subtree"
+              service_name="local_costmap/clear_entirely_local_costmap"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Subtree"
+              service_name="global_costmap/clear_entirely_global_costmap"/>
+          </Sequence>
+          <BackUp backup_dist="0.35" backup_speed="0.08"/>
+          <Spin spin_dist="1.57"/>
+          <BackUp backup_dist="0.25" backup_speed="0.08"/>
+          <Wait wait_duration="1.5"/>
+        </RoundRobin>
+      </ReactiveFallback>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>
