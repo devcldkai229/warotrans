@@ -117,6 +117,12 @@ def generate_launch_description() -> LaunchDescription:
             "lanes_json": LaunchConfiguration("lanes_json"),
             "extra_params_file": LaunchConfiguration("extra_params_file"),
             "enable_authority_gate": LaunchConfiguration("enable_authority_gate"),
+            "gate_output_topic": PythonExpression(
+                ["'cmd_vel_motor' if '", LaunchConfiguration("enable_authority_gate"), "' == 'true' else 'cmd_vel'"]
+            ),
+            "required_authority_publisher": PythonExpression(
+                ["'robot_gateway' if '", LaunchConfiguration("enable_authority_gate"), "' == 'true' else ''"]
+            ),
         }.items(),
         condition=IfCondition(LaunchConfiguration("start_navigation")),
     )
@@ -141,6 +147,11 @@ def generate_launch_description() -> LaunchDescription:
                     "Start BNO055 + EKF; EKF owns odom→base_footprint "
                     "(wheel publish_tf off)"
                 ),
+            ),
+            DeclareLaunchArgument(
+                "motors_enabled",
+                default_value="true",
+                description="false = non-motion commissioning: odometry live, no velocity reaches the ESP32",
             ),
             DeclareLaunchArgument(
                 "start_lidar",
@@ -176,6 +187,13 @@ def generate_launch_description() -> LaunchDescription:
                 "autostart",
                 default_value="true",
                 description="Auto-transition Nav2 lifecycle nodes to active",
+            ),
+            DeclareLaunchArgument(
+                "amcl_params_file",
+                default_value=os.path.join(
+                    get_package_share_directory("warotrans_localization"), "config", "amcl.yaml"
+                ),
+                description="AMCL params. amcl.yaml assumes enable_ekf:=true; without the EKF use amcl_wheel_only.yaml",
             ),
             DeclareLaunchArgument(
                 "nav2_params_file",
@@ -257,7 +275,17 @@ def generate_launch_description() -> LaunchDescription:
                 PythonLaunchDescriptionSource(
                     _subsystem_launch("warotrans_hardware", "hardware.launch.py")
                 ),
-                launch_arguments={"publish_tf": publish_tf}.items(),
+                launch_arguments={
+                    "publish_tf": publish_tf,
+                    "motors_enabled": LaunchConfiguration("motors_enabled"),
+                    # Gate on: motors take velocity only from the gate's own topic and only from the gate.
+                    "cmd_vel_topic": PythonExpression(
+                        ["'/cmd_vel_motor' if '", LaunchConfiguration("enable_authority_gate"), "' == 'true' else '/cmd_vel'"]
+                    ),
+                    "required_cmd_vel_publisher": PythonExpression(
+                        ["'cmd_vel_authority_gate' if '", LaunchConfiguration("enable_authority_gate"), "' == 'true' else ''"]
+                    ),
+                }.items(),
                 condition=IfCondition(LaunchConfiguration("start_hardware")),
             ),
 
@@ -301,6 +329,7 @@ def generate_launch_description() -> LaunchDescription:
                 launch_arguments={
                     "map": map_file,
                     "autostart": autostart,
+                    "amcl_params_file": LaunchConfiguration("amcl_params_file"),
                 }.items(),
                 condition=IfCondition(LaunchConfiguration("start_localization")),
             ),

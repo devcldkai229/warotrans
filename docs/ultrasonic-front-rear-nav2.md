@@ -4,6 +4,16 @@
 > `tools/warotrans-check-ultrasonic-front-rear-geometry.sh` in `FRONT_REAR_GEOMETRY_OK`.  
 > LEFT/RIGHT **không** đưa vào Nav2.
 
+## Vị trí lắp khuyến nghị (2026-11-06, chưa áp dụng)
+
+Bỏ trái/phải. Dùng **2 cảm biến trước + 2 cảm biến sau, đặt gần góc, chếch ra ngoài 15–30°**:
+
+- Robot không đi ngang; khi xoay, phần va chạm trước tiên là 4 góc. Cảm biến giữa cạnh không thấy góc.
+- Hai bên hông LiDAR đã thấy từ 0,15 m trở ra. Ultrasonic chỉ có ích ở chỗ LiDAR không thấy: vật thấp hơn mặt quét (~17,5 cm), kính/vật đen, và vùng mù dưới 0,15 m.
+- Giá trị lớn nhất là **phía sau khi recovery lùi**: hiện vật thấp phía sau hoàn toàn không được phát hiện.
+
+Ultrasonic **không phải** nguyên nhân robot kẹt sát tường (`docs/NAV2_STUCK_RECOVERY_EVIDENCE.md`); đổi vị trí sẽ không sửa lỗi đó. Trước khi nối vào Nav2 phải đo lại REAR x (`calibration.md` §4b).
+
 ## Đã chuẩn bị trong repo
 
 1. URDF: link `ultrasonic_front` / `ultrasonic_rear` chỉ khi `geometry.yaml` có đủ x/y/z/yaw (không null).

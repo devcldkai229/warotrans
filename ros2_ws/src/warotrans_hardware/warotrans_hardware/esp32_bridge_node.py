@@ -36,6 +36,11 @@ class Esp32BridgeNode(Node):
         self.declare_parameter("wheel_velocity_closed_loop", False)
         self.declare_parameter("wheel_velocity_kp", 0.0)
         self.declare_parameter("wheel_velocity_ki", 0.0)
+        # Authority gate on (semantic traffic): the gate's own topic, and only the gate may publish it.
+        self.declare_parameter("cmd_vel_topic", "/cmd_vel")
+        self.declare_parameter("required_cmd_vel_publisher", "")
+        # Non-motion commissioning: encoders and odometry stay live, no velocity ever reaches the ESP32.
+        self.declare_parameter("motors_enabled", True)
 
         self._serial_port = str(self.get_parameter("serial_port").value)
         self._baud_rate = int(self.get_parameter("baud_rate").value)
@@ -64,12 +69,24 @@ class Esp32BridgeNode(Node):
         self._last_malformed_log = 0.0
         self._last_cmd_warn_log = 0.0
 
+        self._cmd_vel_topic = self.resolve_topic_name(str(self.get_parameter("cmd_vel_topic").value))
+        self._required_publisher = str(self.get_parameter("required_cmd_vel_publisher").value).strip()
+        self._motors_enabled = bool(self.get_parameter("motors_enabled").value)
+        if not self._motors_enabled:
+            self.get_logger().warning("motors_enabled=false: velocity commands are dropped, wheels will not turn")
+        # Until verified, a required publisher check blocks every command (fail closed).
+        self._publishers_ok = not self._required_publisher
         self._cmd_vel_subscription = self.create_subscription(
             Twist,
-            "/cmd_vel",
+            self._cmd_vel_topic,
             self._on_cmd_vel,
             10,
         )
+        if self._required_publisher:
+            self.create_timer(0.5, self._check_publishers)
+            self.get_logger().info(
+                f"motor commands from {self._cmd_vel_topic} only when '{self._required_publisher}' is its sole publisher"
+            )
 
         self._reader_thread = threading.Thread(
             target=self._reader_loop,
@@ -99,6 +116,9 @@ class Esp32BridgeNode(Node):
             self._last_cmd_warn_log = now
 
     def _send_velocity_command(self, linear_mps: float, angular_rps: float) -> None:
+        if not self._motors_enabled:
+            return
+
         try:
             payload = format_velocity_command(linear_mps, angular_rps).encode("ascii")
         except ValueError:
@@ -130,7 +150,27 @@ class Esp32BridgeNode(Node):
         except (serial.SerialException, OSError) as exc:
             self._log_error_throttled(f"Failed to send drive config on {self._serial_port}: {exc}")
 
+    def _check_publishers(self) -> None:
+        names = [
+            i.node_name.strip("/").split("/")[-1]
+            for i in self.get_publishers_info_by_topic(self._cmd_vel_topic)
+        ]
+        ok = len(names) >= 1 and all(n == self._required_publisher for n in names)
+        if ok != self._publishers_ok:
+            if ok:
+                self.get_logger().info(f"{self._cmd_vel_topic} publisher verified: {names}")
+            else:
+                self.get_logger().error(
+                    f"{self._cmd_vel_topic} publishers {names} != only '{self._required_publisher}': motors held at zero"
+                )
+                self._send_velocity_command(0.0, 0.0)
+        self._publishers_ok = ok
+
     def _on_cmd_vel(self, msg: Twist) -> None:
+        if not self._publishers_ok:
+            # Another node publishes the motor topic: it could bypass the authority gate.
+            self._send_velocity_command(0.0, 0.0)
+            return
         # Both axes are required for skid-steer turns (Nav2 RPP).
         # Class B debug: if angular.z is significant but /odom.angular.z is not,
         # suspect open-loop PWM realization — not a missing bridge field.

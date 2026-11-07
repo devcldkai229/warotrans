@@ -18,6 +18,18 @@ from typing import Optional
 DEFAULT_MAX_AGE_SEC = 0.3
 
 
+def publishers_trusted(publisher_nodes: list[str], required: str) -> bool:
+    """authority_ok may be trusted only when every publisher of it is the required node (and there is one).
+
+    ``required`` empty = no check (sim / legacy). A second publisher (``ros2 topic pub``, a stray node) makes the
+    gate fail closed — a Bool anyone can publish must not be able to open it.
+    """
+    if not required:
+        return True
+    names = [n.strip("/").split("/")[-1] for n in publisher_nodes]
+    return len(names) >= 1 and all(n == required for n in names)
+
+
 def should_forward(
     authority_ok: bool,
     authority_ok_age_sec: Optional[float],
@@ -50,6 +62,10 @@ class AuthorityGateLogic:
         self._authority_ok = False
         self._received_at: Optional[float] = None
         self._blocked_since: Optional[float] = None
+        # Software E-stop (latched, defence in depth only — never a substitute for the hardware E-stop).
+        self.estop = False
+        # authority_ok publishers verified (see publishers_trusted).
+        self.publishers_ok = True
 
     @property
     def authority_ok(self) -> bool:
@@ -63,7 +79,11 @@ class AuthorityGateLogic:
         return None if self._received_at is None else now - self._received_at
 
     def decide(self, now: float) -> GateDecision:
-        forward = should_forward(self._authority_ok, self.age(now), self._max_age)
+        forward = (
+            not self.estop
+            and self.publishers_ok
+            and should_forward(self._authority_ok, self.age(now), self._max_age)
+        )
         if forward:
             self._blocked_since = None
             return GateDecision(True, False)
@@ -81,6 +101,7 @@ try:  # pragma: no cover - chỉ chạy khi có ROS
     from geometry_msgs.msg import Twist
     from rclpy.executors import ExternalShutdownException
     from rclpy.node import Node
+    from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
     from std_msgs.msg import Bool
 
     _HAS_RCLPY = True
@@ -99,6 +120,8 @@ if _HAS_RCLPY:  # pragma: no cover - cần rclpy; logic đã được test qua A
             self.declare_parameter("max_authority_age_sec", DEFAULT_MAX_AGE_SEC)
             self.declare_parameter("zero_hold_sec", 1.0)
             self.declare_parameter("gate_hz", 20.0)
+            self.declare_parameter("required_authority_publisher", "")
+            self.declare_parameter("estop_topic", "/warotrans/estop")
 
             max_age = float(self.get_parameter("max_authority_age_sec").value)
             zero_hold = float(self.get_parameter("zero_hold_sec").value)
@@ -119,6 +142,15 @@ if _HAS_RCLPY:  # pragma: no cover - cần rclpy; logic đã được test qua A
             self.create_subscription(Bool, str(self.get_parameter("authority_ok_topic").value), self._on_ok, 10)
             self.create_timer(1.0 / gate_hz, self._on_timer)
             self._was_forwarding = False
+            self._ok_topic = self.resolve_topic_name(str(self.get_parameter("authority_ok_topic").value))
+            self._required_publisher = str(self.get_parameter("required_authority_publisher").value).strip()
+            if self._required_publisher:
+                self._logic.publishers_ok = False  # until verified
+                self.create_timer(0.5, self._check_publishers)
+            latched = QoSProfile(
+                depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL
+            )
+            self.create_subscription(Bool, str(self.get_parameter("estop_topic").value), self._on_estop, latched)
             self.get_logger().info(
                 "authority gate: max_age=%.2fs clock=%s"
                 % (max_age, "sim (/clock)" if self._use_sim_time else "monotonic")
@@ -133,6 +165,23 @@ if _HAS_RCLPY:  # pragma: no cover - cần rclpy; logic đã được test qua A
                 # then in a different base, the age check fails, and the gate stays CLOSED.
                 return time.monotonic()
             return nanos / 1e9
+
+        def _check_publishers(self) -> None:
+            names = [i.node_name for i in self.get_publishers_info_by_topic(self._ok_topic)]
+            ok = publishers_trusted(names, self._required_publisher)
+            if ok != self._logic.publishers_ok:
+                if ok:
+                    self.get_logger().info(f"authority_ok publisher verified: {names}")
+                else:
+                    self.get_logger().error(
+                        f"authority_ok publishers {names} != only '{self._required_publisher}': gate CLOSED"
+                    )
+            self._logic.publishers_ok = ok
+
+        def _on_estop(self, msg: "Bool") -> None:
+            if bool(msg.data) != self._logic.estop:
+                self.get_logger().warning(f"software E-stop {'ENGAGED' if msg.data else 'released'}")
+            self._logic.estop = bool(msg.data)
 
         def _on_ok(self, msg: "Bool") -> None:
             self._logic.on_authority_ok(bool(msg.data), self._now())

@@ -45,6 +45,9 @@ double distPointSeg(double px, double py, double ax, double ay, double bx, doubl
   return std::hypot(px - qx, py - qy);
 }
 
+// A shortcut may cost this much more than the grid cells it replaces, so rounding does not keep staircases alive.
+constexpr double kShortcutCostSlack = 1.02;
+
 }  // namespace
 
 void LaneAwareNavfn::configure(
@@ -76,6 +79,8 @@ void LaneAwareNavfn::configure(
     rclcpp::ParameterValue(static_cast<int>(nav2_costmap_2d::LETHAL_OBSTACLE)));
   nav2_util::declare_parameter_if_not_declared(
     node, name_ + ".lane_prefer_factor", rclcpp::ParameterValue(0.15));
+  nav2_util::declare_parameter_if_not_declared(
+    node, name_ + ".lane_center_weight", rclcpp::ParameterValue(3.0));
 
   std::string lanes_path;
   node->get_parameter(name_ + ".lanes_json", lanes_path);
@@ -83,6 +88,7 @@ void LaneAwareNavfn::configure(
   node->get_parameter(name_ + ".lethal_cost", lethal_cost_);
   node->get_parameter(name_ + ".start_goal_lethal_cost", start_goal_lethal_cost_);
   node->get_parameter(name_ + ".lane_prefer_factor", lane_prefer_factor_);
+  node->get_parameter(name_ + ".lane_center_weight", lane_center_weight_);
 
   if (!lanes_path.empty()) {
     bool loaded = false;
@@ -160,16 +166,8 @@ bool LaneAwareNavfn::moveAllowed(double x0, double y0, double x1, double y1) con
   const double my = 0.5 * (y0 + y1);
   const double move = std::atan2(y1 - y0, x1 - x0);
 
-  const LaneSeg * best = nullptr;
-  double best_d = std::numeric_limits<double>::infinity();
-  for (const auto & seg : segs_) {
-    double t = 0.0;
-    const double d = distPointSeg(mx, my, seg.ax, seg.ay, seg.bx, seg.by, t);
-    if (d <= seg.half_width && d < best_d) {
-      best_d = d;
-      best = &seg;
-    }
-  }
+  double best_d = 0.0;
+  const LaneSeg * best = nearestLane(mx, my, best_d);
   if (!best || !best->one_way) {
     return true;
   }
@@ -186,15 +184,112 @@ bool LaneAwareNavfn::moveAllowed(double x0, double y0, double x1, double y1) con
   return along >= -1e-9;
 }
 
-bool LaneAwareNavfn::onLaneCorridor(double wx, double wy) const
+const LaneSeg * LaneAwareNavfn::nearestLane(double wx, double wy, double & distance) const
 {
+  const LaneSeg * best = nullptr;
+  distance = std::numeric_limits<double>::infinity();
   for (const auto & seg : segs_) {
     double t = 0.0;
-    if (distPointSeg(wx, wy, seg.ax, seg.ay, seg.bx, seg.by, t) <= seg.half_width) {
-      return true;
+    const double d = distPointSeg(wx, wy, seg.ax, seg.ay, seg.bx, seg.by, t);
+    if (d <= seg.half_width && d < distance) {
+      distance = d;
+      best = &seg;
     }
   }
-  return false;
+  return best;
+}
+
+double LaneAwareNavfn::stepCost(double wx, double wy, unsigned char cell_cost, double dist_cells) const
+{
+  // Strongly prefer free cells so the search does not graze INSCRIBED corridors that
+  // later become disconnected pockets under live inflation + ONE_WAY.
+  // Evidence: leave EXIT still plan_min_y≈-0.89 with prefer=0.35 — inflated east aisle
+  // step≈8.7 still beat free south step=1. On mapped lanes use weak inflation weight.
+  const double cost_pen = static_cast<double>(cell_cost) / 255.0;
+  double distance = 0.0;
+  const LaneSeg * lane = nearestLane(wx, wy, distance);
+  if (!lane) {
+    return dist_cells * (1.0 + 12.0 * cost_pen * cost_pen);
+  }
+  // Without a pull to the centre line every corridor cell costs the same, so a goal to one side
+  // makes the path ride the corridor edge: the boundary with the opposite lane on a two-lane aisle.
+  const double off_center = distance / lane->half_width;
+  return dist_cells * (1.0 + 2.0 * cost_pen * cost_pen) * lane_prefer_factor_ *
+         (1.0 + lane_center_weight_ * off_center * off_center);
+}
+
+bool LaneAwareNavfn::segmentCost(
+  const WorldPoint & a, const WorldPoint & b, unsigned char max_cell_cost, double & total) const
+{
+  const double resolution = costmap_->getResolution();
+  const int samples = std::max(
+    1, static_cast<int>(std::ceil(std::hypot(b.x - a.x, b.y - a.y) / (0.5 * resolution))));
+  WorldPoint prev = a;
+  total = 0.0;
+  for (int i = 1; i <= samples; ++i) {
+    const double t = static_cast<double>(i) / samples;
+    const WorldPoint q{a.x + t * (b.x - a.x), a.y + t * (b.y - a.y)};
+    unsigned int mx, my;
+    if (!worldToMap(q.x, q.y, mx, my)) {
+      return false;
+    }
+    const unsigned char c = costmap_->getCost(mx, my);
+    if (c > max_cell_cost || c >= static_cast<unsigned char>(lethal_cost_) ||
+      c == nav2_costmap_2d::NO_INFORMATION || !moveAllowed(prev.x, prev.y, q.x, q.y))
+    {
+      return false;
+    }
+    total += stepCost(q.x, q.y, c, std::hypot(q.x - prev.x, q.y - prev.y) / resolution);
+    prev = q;
+  }
+  return true;
+}
+
+std::vector<WorldPoint> LaneAwareNavfn::simplifyPath(const std::vector<WorldPoint> & points) const
+{
+  const size_t n = points.size();
+  if (n < 3) {
+    return points;
+  }
+  const double resolution = costmap_->getResolution();
+  std::vector<unsigned char> cell(n, 0);
+  std::vector<double> cost_to(n, 0.0);
+  for (size_t i = 0; i < n; ++i) {
+    unsigned int mx, my;
+    if (!worldToMap(points[i].x, points[i].y, mx, my)) {
+      return points;
+    }
+    cell[i] = costmap_->getCost(mx, my);
+    if (i > 0) {
+      const double dist = std::hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+      cost_to[i] = cost_to[i - 1] + stepCost(points[i].x, points[i].y, cell[i], dist / resolution);
+    }
+  }
+
+  std::vector<WorldPoint> out{points.front()};
+  std::vector<unsigned char> max_cell(n, 0);
+  size_t i = 0;
+  while (i + 1 < n) {
+    unsigned char highest = cell[i];
+    for (size_t j = i + 1; j < n; ++j) {
+      highest = std::max(highest, cell[j]);
+      max_cell[j] = highest;
+    }
+    // The farthest point reachable without getting closer to an obstacle than the replaced cells.
+    size_t next = i + 1;
+    for (size_t j = n - 1; j > i + 1; --j) {
+      double cost = 0.0;
+      if (segmentCost(points[i], points[j], max_cell[j], cost) &&
+        cost <= (cost_to[j] - cost_to[i]) * kShortcutCostSlack)
+      {
+        next = j;
+        break;
+      }
+    }
+    out.push_back(points[next]);
+    i = next;
+  }
+  return out;
 }
 
 nav_msgs::msg::Path LaneAwareNavfn::createPlan(
@@ -271,6 +366,9 @@ nav_msgs::msg::Path LaneAwareNavfn::createPlan(
   static const int dx8[8] = {1, 1, 0, -1, -1, -1, 0, 1};
   static const int dy8[8] = {0, 1, 1, 1, 0, -1, -1, -1};
   static const double cost8[8] = {1, 1.41421356, 1, 1.41421356, 1, 1.41421356, 1, 1.41421356};
+  // The cheapest possible cell is a lane centre. A larger heuristic would overestimate inside lanes,
+  // turning A* greedy: non-optimal, zigzagging paths.
+  const double heuristic_scale = segs_.empty() ? 1.0 : std::min(1.0, lane_prefer_factor_);
 
   bool found = false;
   unsigned int expansions = 0;
@@ -315,23 +413,12 @@ nav_msgs::msg::Path LaneAwareNavfn::createPlan(
         continue;
       }
       const unsigned int ni = idx(ux, uy);
-      // Strongly prefer free cells so the search does not graze INSCRIBED corridors that
-      // later become disconnected pockets under live inflation + ONE_WAY.
-      // Evidence: leave EXIT still plan_min_y≈-0.89 with prefer=0.35 — inflated east aisle
-      // step≈8.7 still beat free south step=1. On mapped lanes use weak inflation weight.
-      const double cost_pen = static_cast<double>(c) / 255.0;
-      double step;
-      if (onLaneCorridor(wx1, wy1)) {
-        step = cost8[k] * (1.0 + 2.0 * cost_pen * cost_pen) * lane_prefer_factor_;
-      } else {
-        step = cost8[k] * (1.0 + 12.0 * cost_pen * cost_pen);
-      }
-      const double ng = cur.g + step;
+      const double ng = cur.g + stepCost(wx1, wy1, c, cost8[k]);
       if (!gscore.count(ni) || ng + 1e-9 < gscore[ni]) {
         gscore[ni] = ng;
         parent[ni] = cur.i;
         const double h = std::hypot(static_cast<double>(gx) - nx, static_cast<double>(gy) - ny);
-        open.push(Node{ni, ng, ng + h});
+        open.push(Node{ni, ng, ng + heuristic_scale * h});
       }
     }
   }
@@ -350,37 +437,49 @@ nav_msgs::msg::Path LaneAwareNavfn::createPlan(
   }
   std::reverse(rev.begin(), rev.end());
 
+  std::vector<WorldPoint> cells;
+  cells.reserve(rev.size() + 1);
   for (unsigned int i : rev) {
-    geometry_msgs::msg::PoseStamped p;
-    p.header = path.header;
-    const unsigned int mx = i % size_x;
-    const unsigned int my = i / size_x;
-    mapToWorld(mx, my, p.pose.position.x, p.pose.position.y);
-    p.pose.orientation.w = 1.0;
-    path.poses.push_back(p);
+    WorldPoint p{};
+    mapToWorld(i % size_x, i / size_x, p.x, p.y);
+    cells.push_back(p);
   }
-  // Orient each pose along the path tangent. Leaving w=1 (yaw=0) on every cell makes
-  // Regulated Pure Pursuit report immediate "collision ahead" on skid-steer warehouse paths.
-  for (size_t i = 0; i + 1 < path.poses.size(); ++i) {
-    const double dx = path.poses[i + 1].pose.position.x - path.poses[i].pose.position.x;
-    const double dy = path.poses[i + 1].pose.position.y - path.poses[i].pose.position.y;
-    if (dx * dx + dy * dy < 1e-12) {
-      continue;
+  cells.front() = WorldPoint{start.pose.position.x, start.pose.position.y};
+  const WorldPoint goal_point{goal.pose.position.x, goal.pose.position.y};
+  if (cells.size() == 1) {
+    cells.push_back(goal_point);
+  } else {
+    cells.back() = goal_point;
+  }
+  const std::vector<WorldPoint> corners = simplifyPath(cells);
+
+  // Back to one pose per cell length: the controller and the traffic reservation expect a dense path.
+  const double resolution = costmap_->getResolution();
+  for (size_t c = 0; c + 1 < corners.size(); ++c) {
+    const WorldPoint & a = corners[c];
+    const WorldPoint & b = corners[c + 1];
+    const double length = std::hypot(b.x - a.x, b.y - a.y);
+    const int samples = std::max(1, static_cast<int>(std::ceil(length / resolution)));
+    const double yaw = std::atan2(b.y - a.y, b.x - a.x);
+    for (int s = 0; s < samples; ++s) {
+      const double t = static_cast<double>(s) / samples;
+      geometry_msgs::msg::PoseStamped p;
+      p.header = path.header;
+      p.pose.position.x = a.x + t * (b.x - a.x);
+      p.pose.position.y = a.y + t * (b.y - a.y);
+      // Orient each pose along the path tangent. Leaving w=1 (yaw=0) on every cell makes
+      // Regulated Pure Pursuit report immediate "collision ahead" on skid-steer warehouse paths.
+      if (length > 1e-6) {
+        p.pose.orientation.z = std::sin(yaw * 0.5);
+        p.pose.orientation.w = std::cos(yaw * 0.5);
+      } else {
+        p.pose.orientation = start.pose.orientation;
+      }
+      path.poses.push_back(p);
     }
-    const double yaw = std::atan2(dy, dx);
-    path.poses[i].pose.orientation.z = std::sin(yaw * 0.5);
-    path.poses[i].pose.orientation.w = std::cos(yaw * 0.5);
   }
-  if (!path.poses.empty()) {
-    path.poses.front().pose.position = start.pose.position;
-    path.poses.front().header = path.header;
-    // Keep tangent yaw on start when possible; fall back to start orientation.
-    if (path.poses.size() == 1) {
-      path.poses.front().pose.orientation = start.pose.orientation;
-    }
-    path.poses.back() = goal;
-    path.poses.back().header = path.header;
-  }
+  path.poses.push_back(goal);
+  path.poses.back().header = path.header;
   return path;
 }
 
