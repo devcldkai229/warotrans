@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'esp32_bridge_node = warotrans_hardware.esp32_bridge_node:main',
             'wheel_odom_node = warotrans_hardware.wheel_odom_node:main',
+            'battery_monitor_node = warotrans_hardware.battery_monitor_node:main',
         ],
     },
 )

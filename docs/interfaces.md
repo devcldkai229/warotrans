@@ -83,6 +83,9 @@ topic đó vào Nav2 safety. LEFT/RIGHT không wire Nav2 Phase 0.5.
 | `/map` | `nav_msgs/msg/OccupancyGrid` | SLAM/map server → clients | target |
 | `/map_metadata` | `nav_msgs/msg/MapMetaData` | SLAM/map server → clients | target |
 | `/camera/image_raw` | `sensor_msgs/msg/Image` | camera → UI/perception | future |
+| `/battery/adc_sample` | `warotrans_msgs/msg/BatteryAdcSample` | esp32_bridge / battery_sim → battery_monitor | có khi firmware `BATTERY_ADC_ENABLED 1` (module **CHƯA LẮP**) |
+| `/battery_state` | `sensor_msgs/msg/BatteryState` | battery_monitor → mọi node | percentage 0–1 hoặc NaN; current NaN (không đo dòng) |
+| `/battery/estimate` | `warotrans_msgs/msg/BatteryEstimate` | battery_monitor → robot_gateway | mode / confidence / charging_state / fault |
 | `/diagnostics` | `diagnostic_msgs/msg/DiagnosticArray` | robot → operator | future |
 
 ### Nav2 topics (Phase 9 — Phase 0 PASS)
@@ -177,6 +180,7 @@ Contract hiện tại của firmware prototype:
 ```text
 ESP32 → Pi
 O <tickL> <tickR> <millis>\n
+B <pin_mV> <sample_count> <millis>\n   (chỉ khi BATTERY_ADC_ENABLED 1; mỗi 200 ms)
 
 Pi → ESP32
 V <linear_mps> <angular_rps>\n

@@ -1,7 +1,8 @@
-"""Launch the ESP32 bridge and wheel odometry nodes."""
+"""Launch the ESP32 bridge, wheel odometry and battery monitor nodes."""
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -12,11 +13,19 @@ def generate_launch_description():
     serial_port = LaunchConfiguration("serial_port")
     baud_rate = LaunchConfiguration("baud_rate")
     publish_tf = LaunchConfiguration("publish_tf")
+    battery_monitor = LaunchConfiguration("battery_monitor")
     hardware_config = PathJoinSubstitution(
         [
             FindPackageShare("warotrans_hardware"),
             "config",
             "hardware.yaml",
+        ]
+    )
+    battery_config = PathJoinSubstitution(
+        [
+            FindPackageShare("warotrans_hardware"),
+            "config",
+            "battery.yaml",
         ]
     )
 
@@ -38,6 +47,14 @@ def generate_launch_description():
                 description=(
                     "wheel_odom publish TF odom→base_footprint "
                     "(set false when EKF owns that edge)"
+                ),
+            ),
+            DeclareLaunchArgument(
+                "battery_monitor",
+                default_value="true",
+                description=(
+                    "Voltage-only battery SOC (/battery_state). Without the divider module "
+                    "it reports UNAVAILABLE"
                 ),
             ),
             Node(
@@ -70,6 +87,14 @@ def generate_launch_description():
                         ),
                     },
                 ],
+            ),
+            Node(
+                package="warotrans_hardware",
+                executable="battery_monitor_node",
+                name="battery_monitor_node",
+                output="screen",
+                parameters=[battery_config],
+                condition=IfCondition(battery_monitor),
             ),
         ]
     )

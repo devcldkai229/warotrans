@@ -10,6 +10,8 @@
 
   <exec_depend>launch</exec_depend>
   <exec_depend>rclpy</exec_depend>
+  <exec_depend>warotrans_hardware</exec_depend>
+  <exec_depend>warotrans_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>robot_localization</exec_depend>
   <exec_depend>nav2_msgs</exec_depend>

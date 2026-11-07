@@ -13,6 +13,7 @@ install(
           scripts/sync_web_map.py scripts/spawn_pose.py scripts/measure_landmarks.py scripts/sim_init_gate.py
           scripts/build_map_one_sim_bundle.py scripts/stage1_open_grant_node.py
           scripts/semantic_map_adapter.py scripts/write_robot_bridge_yaml.py
+          scripts/battery_sim_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -26,6 +27,7 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_semantic_map_adapter test/test_semantic_map_adapter.py)
   ament_add_pytest_test(test_lane_aware_plugin_id test/test_lane_aware_plugin_id.py)
+  ament_add_pytest_test(test_battery_sim_pipeline test/test_battery_sim_pipeline.py)
 endif()
 
 ament_package()

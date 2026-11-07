@@ -38,7 +38,7 @@ Robot chỉ nhận "đi tới pose này" — không biết TransportRequest / Jo
 | Velocity | `/odom` twist |
 | NavigationStatus | Nav2 `navigate_to_pose` action status |
 | LocalizationStatus | Valid recent TF → `LOCALIZED`; else `LOST` / `UNKNOWN` |
-| Battery | `null` (no sensor in current stack) |
+| Battery | `/battery/estimate` (voltage-only, `battery_monitor_node`) → `batteryPercent` + `batteryVoltage/EstimationMode/Confidence/ChargingState/MeasuredAt`; không có estimate mới → `null` + `UNAVAILABLE` (không bao giờ 0). Sim: `simulated_battery_percent` (mode SIMULATED) hoặc `battery_sim:=true` |
 
 When localization is not `LOCALIZED`, telemetry sends `"pose": null` (never a stale fake pose).
 

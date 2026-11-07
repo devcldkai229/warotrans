@@ -270,6 +270,9 @@ def _setup(context: LaunchContext, *args, **kwargs):
             value = LaunchConfiguration(key).perform(context).strip()
             if value:
                 overrides[key] = value
+        if _flag(context, "battery_sim"):
+            # Real voltage-only estimator fed by battery_sim_node: no fixed SIMULATED percentage.
+            overrides["simulated_battery_percent"] = -1.0
         if overrides:
             gateway_params.append(overrides)
         actions.append(
@@ -286,6 +289,28 @@ def _setup(context: LaunchContext, *args, **kwargs):
                 ],
             )
         )
+
+    if _flag(context, "battery_sim"):
+        hw_pkg = get_package_share_directory("warotrans_hardware")
+        actions += [
+            Node(
+                package="warotrans_simulation",
+                executable="battery_sim_node.py",
+                name="battery_sim_node",
+                output="screen",
+                parameters=[{"use_sim_time": True}],
+            ),
+            Node(
+                package="warotrans_hardware",
+                executable="battery_monitor_node",
+                name="battery_monitor_node",
+                output="screen",
+                parameters=[
+                    os.path.join(hw_pkg, "config", "battery.yaml"),
+                    {"use_sim_time": True, "state_file": "/tmp/warotrans_sim_battery_soc.json"},
+                ],
+            ),
+        ]
 
     if _flag(context, "rviz"):
         actions.append(
@@ -309,6 +334,11 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("gui", default_value="true", description="Show the Gazebo window"),
             DeclareLaunchArgument("rviz", default_value="false", description="Start RViz with the Nav2 view"),
             DeclareLaunchArgument("gateway", default_value="true", description="Start the MQTT fleet gateway"),
+            DeclareLaunchArgument(
+                "battery_sim",
+                default_value="false",
+                description="Emulate the battery voltage divider and run the real voltage-only SOC estimator",
+            ),
             DeclareLaunchArgument("layout", default_value=os.path.join(sim_pkg, "config", "warehouse_layout.yaml")),
             DeclareLaunchArgument("map", default_value=os.path.join(sim_pkg, "maps", "sim_warehouse.yaml")),
             DeclareLaunchArgument(

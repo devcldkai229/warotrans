@@ -11,11 +11,12 @@ import rclpy
 import serial
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
-from warotrans_msgs.msg import WheelTicks
+from warotrans_msgs.msg import BatteryAdcSample, WheelTicks
 
 from .serial_protocol import (
     format_config_command,
     format_velocity_command,
+    parse_battery_line,
     parse_config_ack,
     parse_encoder_line,
 )
@@ -54,6 +55,8 @@ class Esp32BridgeNode(Node):
         self._last_mcu_millis: Optional[int] = None
 
         self._publisher = self.create_publisher(WheelTicks, "/wheel_ticks", 10)
+        # Only fed when the firmware is built with BATTERY_ADC_ENABLED (voltage divider installed).
+        self._battery_publisher = self.create_publisher(BatteryAdcSample, "/battery/adc_sample", 10)
         self._stop_event = threading.Event()
         self._connection_lock = threading.Lock()
         # Velocity commands (ROS executor) and drive config (reader thread) share the port:
@@ -175,6 +178,17 @@ class Esp32BridgeNode(Node):
                             self.get_logger().error(f"ESP32 rejected drive config '{value}'")
                         else:
                             self.get_logger().info(f"ESP32 drive config {name}={value}")
+                        continue
+
+                    battery = parse_battery_line(raw_line)
+                    if battery is not None:
+                        pin_mv, samples, battery_millis = battery
+                        sample = BatteryAdcSample()
+                        sample.header.stamp = self.get_clock().now().to_msg()
+                        sample.mcu_millis = battery_millis
+                        sample.pin_millivolts = float(pin_mv)
+                        sample.sample_count = samples
+                        self._battery_publisher.publish(sample)
                         continue
 
                     parsed = parse_encoder_line(raw_line)

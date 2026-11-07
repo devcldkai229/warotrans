@@ -108,6 +108,10 @@
       `ConfirmationSource=ROBOT_BUTTON`; Job COMPLETED. Chi tiết:
       `warotrans-system/docs/audits/physical-human-interaction-button-e2e.md`.
 - [ ] Multi-robot.
+- [ ] **Pin (voltage-only SOC)**: phần mềm đã có (firmware `B` line sau cờ `BATTERY_ADC_ENABLED`,
+      `battery_monitor_node`, `/battery_state`, MQTT, backend, web/app), test giả lập pass.
+      Module chia áp 0–25 V trên GPIO1 **CHƯA LẮP**; hiệu chuẩn / đo thật **CHƯA LÀM**
+      → robot thật báo `UNAVAILABLE`. Quy trình: `docs/hardware/battery-voltage-sensor.md`.
 
 ## KNOWN UNKNOWNS
 

@@ -49,7 +49,9 @@ def build_telemetry(
     error_code: Optional[str] = None,
     sent_at: Optional[str] = None,
     message_id: Optional[str] = None,
+    battery: Optional[Mapping[str, Any]] = None,
 ) -> dict[str, Any]:
+    """``battery`` = battery_telemetry.battery_fields(...); when given it supplies batteryPercent too."""
     pose_payload: Any
     if pose is None:
         pose_payload = None
@@ -60,7 +62,7 @@ def build_telemetry(
             "yaw": float(pose["yaw"]),
         }
 
-    return {
+    payload = {
         "schemaVersion": 1,
         "messageId": message_id or new_message_id(),
         "robotCode": robot_code,
@@ -77,6 +79,9 @@ def build_telemetry(
         "currentCommandId": current_command_id,
         "errorCode": error_code,
     }
+    if battery is not None:
+        payload.update(battery)
+    return payload
 
 
 def build_command_ack(
