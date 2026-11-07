@@ -22,6 +22,8 @@ import math
 import os
 import socket
 import subprocess
+from email.utils import parsedate_to_datetime
+import urllib.request
 import sys
 import time
 from dataclasses import dataclass
@@ -55,7 +57,7 @@ class Probe(Node):
         self.amcl: PoseWithCovarianceStamped | None = None
         self.create_subscription(LaserScan, "/scan", lambda _m: self.scan_stamps.append(time.monotonic()),
                                  qos_profile_sensor_data)
-        self.create_subscription(Twist, "/cmd_vel", self.cmd_vel.append, 10)
+        self.create_subscription(Twist, "/cmd_vel_motor", self.cmd_vel.append, 10)
         self.create_subscription(Bool, "/traffic/authority_ok", lambda m: self.authority_ok.append(bool(m.data)), 10)
         latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self._on_amcl, latched)
@@ -107,9 +109,18 @@ def run(args: argparse.Namespace) -> list[Check]:
     teleop = subprocess.run(["systemctl", "is-active", "warotrans-teleop"], capture_output=True, text=True).stdout.strip()
     add("warotrans-teleop.service stopped (fights Nav2 for /cmd_vel)", teleop != "active", teleop or "?")
 
-    synced = subprocess.run(["timedatectl", "show", "-p", "NTPSynchronized", "--value"],
-                            capture_output=True, text=True).stdout.strip()
-    add("clock NTP-synchronized (grant expiresAt is compared to the Pi clock)", synced == "yes", synced or "?")
+    if args.backend_url:
+        # No NTP on the hotspot network and no RTC battery: the clock that matters is the backend's.
+        try:
+            with urllib.request.urlopen(args.backend_url.rstrip("/") + "/api/fleet/ping", timeout=3.0) as resp:
+                skew = time.time() - parsedate_to_datetime(resp.headers["Date"]).timestamp()
+            add("clock within 2 s of the backend (grant expiresAt)", abs(skew) <= 2.0, f"{skew:+.1f} s")
+        except (OSError, TypeError, ValueError) as exc:
+            add("clock within 2 s of the backend (grant expiresAt)", False, str(exc))
+    else:
+        synced = subprocess.run(["timedatectl", "show", "-p", "NTPSynchronized", "--value"],
+                                capture_output=True, text=True).stdout.strip()
+        add("clock NTP-synchronized (grant expiresAt)", synced == "yes", synced or "?")
 
     try:
         with socket.create_connection((args.mqtt_host, args.mqtt_port), timeout=3.0):
@@ -136,8 +147,27 @@ def run(args: argparse.Namespace) -> list[Check]:
         cm = probe.params("collision_monitor", ["cmd_vel_out_topic"]) or {}
         add("collision_monitor -> cmd_vel_safe (authority gate in path)", cm.get("cmd_vel_out_topic") == "cmd_vel_safe",
             str(cm.get("cmd_vel_out_topic")))
-        gate = probe.params("cmd_vel_authority_gate", ["input_topic", "output_topic", "authority_ok_topic"])
+        gate = probe.params("cmd_vel_authority_gate", ["input_topic", "output_topic", "authority_ok_topic",
+                                                       "required_authority_publisher", "estop_topic"])
         add("cmd_vel_authority_gate running", gate is not None, str(gate))
+        gate = gate or {}
+        add("gate forwards to cmd_vel_motor (motor-only topic)", gate.get("output_topic") == "cmd_vel_motor",
+            str(gate.get("output_topic")))
+        add("gate trusts authority_ok only from robot_gateway", gate.get("required_authority_publisher") == "robot_gateway",
+            str(gate.get("required_authority_publisher")))
+        bridge = probe.params("esp32_bridge_node", ["cmd_vel_topic", "required_cmd_vel_publisher", "motors_enabled"]) or {}
+        if args.expect_motors_disabled:
+            add("ESP32 bridge motors_enabled = false (non-motion check)", bridge.get("motors_enabled") is False,
+                str(bridge.get("motors_enabled")))
+        add("ESP32 bridge drives only from /cmd_vel_motor", bridge.get("cmd_vel_topic") == "/cmd_vel_motor",
+            str(bridge.get("cmd_vel_topic")))
+        add("ESP32 bridge requires the gate as sole publisher",
+            bridge.get("required_cmd_vel_publisher") == "cmd_vel_authority_gate", str(bridge.get("required_cmd_vel_publisher")))
+        motor_pubs = [i.node_name for i in probe.get_publishers_info_by_topic("/cmd_vel_motor")]
+        add("/cmd_vel_motor published by the gate only (no bypass: teleop, CLI)", motor_pubs == ["cmd_vel_authority_gate"],
+            str(motor_pubs))
+        ok_pubs = [i.node_name for i in probe.get_publishers_info_by_topic("/traffic/authority_ok")]
+        add("/traffic/authority_ok published by robot_gateway only", ok_pubs == ["robot_gateway"], str(ok_pubs))
 
         gw = probe.params("robot_gateway", ["traffic_mode", "semantic_map_fingerprint", "map_version_code",
                                             "teleop_enabled", "require_amcl_converged", "robot_code"]) or {}
@@ -169,19 +199,33 @@ def run(args: argparse.Namespace) -> list[Check]:
             add("AMCL covariance bounded (σxy <= 0.5 m, σyaw <= 0.5 rad)", xy <= 0.5 and yaw <= 0.5,
                 f"σxy {xy:.3f} σyaw {yaw:.3f}")
             add("AMCL pose is not the provisional boot pose (0, 0)", not near_boot, f"({p.x:.2f}, {p.y:.2f})")
+            if args.home_x is not None and args.home_y is not None:
+                d = math.hypot(p.x - args.home_x, p.y - args.home_y)
+                add(f"robot localized at its home endpoint (<= {args.home_tolerance} m)", d <= args.home_tolerance,
+                    f"{d:.2f} m from ({args.home_x}, {args.home_y})")
+
+        nodes = [name for name, _ in probe.get_node_names_and_namespaces()]
+        add("recovery_guard running (BackUp/Spin only through it)", "recovery_guard" in nodes, "")
+        ekf_on = "ekf_filter_node" in nodes
+        amcl = probe.params("amcl", ["alpha1"]) or {}
+        alpha1 = amcl.get("alpha1")
+        add("AMCL motion noise matches the odometry source (EKF 0.15, wheel-only 0.3)",
+            alpha1 is not None and math.isclose(alpha1, 0.15 if ekf_on else 0.3, abs_tol=1e-6),
+            f"ekf={'on' if ekf_on else 'off'} alpha1={alpha1}")
 
         add("traffic/authority_ok published and False (no grant held)",
             bool(probe.authority_ok) and not any(probe.authority_ok),
             f"{len(probe.authority_ok)} samples, any True={any(probe.authority_ok)}")
         moving = [t for t in probe.cmd_vel if abs(t.linear.x) > 1e-6 or abs(t.angular.z) > 1e-6]
-        add("/cmd_vel carries no motion", not moving, f"{len(probe.cmd_vel)} msgs, {len(moving)} non-zero")
+        add("/cmd_vel_motor carries no motion", not moving, f"{len(probe.cmd_vel)} msgs, {len(moving)} non-zero")
     finally:
         probe.destroy_node()
         rclpy.shutdown()
 
     add("hardware emergency stop (cuts motor power) present and tested by a person", args.estop_tested,
         "operator-stated" if args.estop_tested else
-        "NONE: firmware has only a 300 ms cmd watchdog; no E-stop topic, no hardware E-stop")
+        "NONE: firmware has only a 300 ms cmd watchdog; /warotrans/estop is software only (defence in depth), "
+        "no hardware E-stop")
     return checks
 
 
@@ -190,6 +234,11 @@ def main() -> int:
     parser.add_argument("--manifest", required=True, help="semantic_manifest.json the backend also loads")
     parser.add_argument("--mqtt-host", required=True)
     parser.add_argument("--mqtt-port", type=int, default=1883)
+    parser.add_argument("--backend-url", default="", help="compare the Pi clock with the backend (http://IP:5090)")
+    parser.add_argument("--home-x", type=float, default=None, help="home endpoint x (map frame), e.g. EP-PARKING-A")
+    parser.add_argument("--home-y", type=float, default=None)
+    parser.add_argument("--home-tolerance", type=float, default=0.30)
+    parser.add_argument("--expect-motors-disabled", action="store_true", help="non-motion commissioning run")
     parser.add_argument("--window", type=float, default=4.0, help="seconds to observe topics")
     parser.add_argument("--estop-tested", action="store_true",
                         help="a person confirms a hardware E-stop exists and was tested today")

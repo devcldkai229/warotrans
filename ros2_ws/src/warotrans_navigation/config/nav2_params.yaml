@@ -400,10 +400,12 @@ speed_costmap_filter_info_server:
 # -----------------------------------------------------------------------------
 # Pipeline (navigation.launch.py): controller / behaviors -> cmd_vel_nav -> velocity_smoother
 #   -> cmd_vel_smoothed -> collision_monitor -> cmd_vel -> esp32_bridge_node.
-# "approach": simulates the footprint along the current command and scales it down so the
-# robot stops ~1.2 s before touching a scan point. Unlike a fixed "stop" box at the nose it
-# still lets the robot rotate in place next to a wall (the T-junction case), because an
-# in-place spin does not move the rectangle into the wall.
+# "approach": simulates the padded footprint along the current command, rotation included, and
+# scales the whole command by time_to_collision / 1.2 s, so it fades out near an obstacle.
+# An in-place spin DOES sweep the corners: radius 0.234 m with padding, so a turn fades out with
+# the nose closer than ~7.4 cm or a side closer than ~10.4 cm to a wall. With 4 or more scan points
+# already inside the polygon every command becomes zero, reversing included (by design: see
+# docs/NAV2_STUCK_RECOVERY_EVIDENCE.md). Recovery starts only through recovery_guard.
 # Ultrasonic is intentionally not a source (operator decision; see
 # docs/ultrasonic-front-rear-nav2.md / nav2_collision_front_rear.yaml for that option).
 collision_monitor:

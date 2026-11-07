@@ -154,6 +154,8 @@ class RobotGatewayNode(Node):
         # Stage-3 semantic_active
         self.declare_parameter("semantic_map_fingerprint", "")
         self.declare_parameter("plan_topic", "plan")
+        # Reverse line checked before authorizing a recovery BackUp; recovery_guard refuses anything longer.
+        self.declare_parameter("recovery_backup_check_m", 0.12)
         self.declare_parameter("authority_ok_topic", "traffic/authority_ok")
         self.declare_parameter("single_occupancy_json", "")
         self.declare_parameter("keepout_json", "")
@@ -262,7 +264,9 @@ class RobotGatewayNode(Node):
             self.topic("command"),
             self.topic("interaction_request"),
             self.topic("interaction_result"),
-        ] + ([self.topic("teleop")] if self._teleop_enabled else [])
+        ] + ([self.topic("teleop")] if self._teleop_enabled else []) + (
+            [self._epoch_topic()] if self._traffic_mode == "semantic_active" else []
+        )
         self.mqtt = ReconnectingMqttPublisher(
             host=self._mqtt_host,
             port=self._mqtt_port,
@@ -301,6 +305,8 @@ class RobotGatewayNode(Node):
                 explicit=self._str_param("route_graph_hash"),
                 graph_path=self._str_param("route_graph").strip() or None,
             ),
+            traffic_hold_active=lambda: self._semantic_client is not None and self._semantic_client.held_for_traffic(),
+            arrival_pose=self._traffic_pose,
         )
 
         self._teleop: Optional[TeleopController] = None
@@ -560,47 +566,25 @@ class RobotGatewayNode(Node):
         return client
 
     def _handle_semantic_authority_command(self, body: dict[str, Any]) -> bool:
-        """Consume EXTEND/RENEW/REVOKE for semantic_active. Returns True if handled."""
+        """EXTEND/RENEW/REVOKE for semantic_active: applied by the traffic client and ACKed (terminal for the
+        backend; a refused grant is ACKed with its reason). Returns True if handled; NAVIGATE goes to the router."""
         client = self._semantic_client
         if client is None:
             return False
-        cmd_type = str(body.get("type") or "").upper()
-        payload = body.get("payload") or {}
-        if isinstance(payload, str):
-            import json
-
-            try:
-                payload = json.loads(payload)
-            except json.JSONDecodeError:
-                payload = {}
-        if cmd_type in ("EXTEND_AUTHORITY", "NAVIGATE_TO_POSE"):
-            # NAVIGATE may embed authority; EXTEND carries the Stage-3 grant.
-            authority = payload.get("authority") if cmd_type == "NAVIGATE_TO_POSE" else payload
-            if not isinstance(authority, dict):
-                authority = payload if isinstance(payload, dict) else {}
-            # EXTEND payload fields are top-level; also accept nested authority.
-            if "authorityId" not in authority and isinstance(payload, dict):
-                authority = {
-                    "authorityId": payload.get("authorityId"),
-                    "epoch": payload.get("epoch"),
-                    "seq": payload.get("seq"),
-                    "semanticMapFingerprint": payload.get("semanticMapFingerprint") or payload.get("graphHash"),
-                    "planRevision": payload.get("planRevision"),
-                    "resourceIds": payload.get("resourceIds"),
-                    "pathHash": payload.get("pathHash"),
-                    "expiresAt": payload.get("expiresAt"),
-                }
-            if authority.get("authorityId"):
-                client.on_authority_payload(authority)
-                return cmd_type == "EXTEND_AUTHORITY"
+        ack = client.handle_authority_command(body)
+        if ack is None:
             return False
-        if cmd_type == "RENEW_AUTHORITY":
-            client.on_renew(payload if isinstance(payload, dict) else {})
-            return True
-        if cmd_type == "REVOKE_AUTHORITY":
-            client.on_revoke()
-            return True
-        return False
+        if not ack["accepted"] and str(body.get("type")).upper() != "RENEW_AUTHORITY":
+            self.get_logger().warning(
+                f"semantic {body.get('type')} refused ({ack['reasonCode']}) command={body.get('commandId')} "
+                f"current_rev={client.plan_revision}"
+            )
+        if not self.mqtt.publish(self.topic("command_ack"), ack, qos=1):
+            self.get_logger().warning("command_ack queue full; authority ACK dropped")
+        return True
+
+    def _epoch_topic(self) -> str:
+        return f"{self._topic_prefix.rstrip('/')}/traffic/epoch"
 
     def _publish_authority_ok(self, ok: bool) -> None:
         from std_msgs.msg import Bool
@@ -634,6 +618,8 @@ class RobotGatewayNode(Node):
         so_path = self._str_param("single_occupancy_json").strip()
         if so_path and Path(so_path).is_file():
             zones = list(json.loads(Path(so_path).read_text(encoding="utf-8")).get("zones") or [])
+        elif so_path:
+            raise ValueError(f"single_occupancy_json not found: {so_path} (zones are needed to stay inside grants)")
 
         client = SemanticTrafficClient(
             robot_code=self._robot_code,
@@ -641,44 +627,76 @@ class RobotGatewayNode(Node):
             fingerprint=fp,
             publish_json=lambda topic, body: self.mqtt.publish(topic, body, qos=1),
             set_authority_ok=self._publish_authority_ok,
+            zones=zones,
             authority_loss_timeout_sec=float(self._authority_loss_timeout),
         )
-        self._semantic_zones = zones
 
         def _on_plan(msg: NavPath) -> None:
             poses = []
             for p in msg.poses:
                 q = p.pose.orientation
-                # yaw from quaternion
                 siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
                 cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
                 yaw = math.atan2(siny_cosp, cosy_cosp)
                 poses.append((float(p.pose.position.x), float(p.pose.position.y), float(yaw)))
             goal = poses[-1] if poses else None
-            client.on_plan(poses, goal=goal)
+            # Only plans of the backend NAVIGATE being executed are proposed (no command: never granted).
+            client.on_plan(poses, goal=goal, command_id=self._commands.move.active_command_id)
+
+        link_was_up = [False]
 
         def _semantic_tick() -> None:
-            # ≥20 Hz authority_ok liveness for cmd_vel_authority_gate (max_age ~0.3 s).
-            client.tick()
+            # 20 Hz authority_ok liveness for cmd_vel_authority_gate (max_age ~0.3 s).
+            connected = self.mqtt.is_connected
+            client.on_link(connected)
+            if connected and not link_was_up[0]:
+                # (Re)connected: tell the backend what this robot holds so it can reconcile.
+                self._publish_authority_state()
+            link_was_up[0] = connected
+            if connected and client.state_report_due():
+                self._publish_authority_state()
+            active = self._commands.move.active_command_id
+            if client.command_id is not None and active != client.command_id:
+                client.on_command_finished(client.command_id)
             pose = self._traffic_pose()
-            if pose is None or not client.held_resources:
+            if client.localization_regained(pose is not None) and connected:
+                self._publish_authority_state()
+            client.tick(pose)
+            if pose is None or client.grant is None:
                 return
             x, y, yaw = pose
-            cleared = client.resources_cleared_at(x, y, yaw, zones=self._semantic_zones)
+            cleared = client.resources_cleared_at(x, y)
             if cleared:
-                client.publish_cleared_resources(
-                    cleared, x=x, y=y, yaw=yaw, localization_ok=True
-                )
+                client.publish_cleared_resources(cleared, x=x, y=y, yaw=yaw, localization_ok=True)
 
         plan_topic = self._str_param("plan_topic").strip() or "plan"
         self.create_subscription(NavPath, plan_topic, _on_plan, 10)
         self.create_timer(0.05, _semantic_tick)
+        self._setup_recovery_authorization(client)
         self._publish_authority_ok(False)
         self.get_logger().info(
-            f"traffic_mode=semantic_active fingerprint={fp[:12]}… plan_topic={plan_topic} "
+            f"traffic_mode=semantic_active fingerprint={fp[:12]} plan_topic={plan_topic} "
             f"zones={len(zones)} gate={self._enable_authority_gate} authority_ok_hz=20"
         )
         return client
+
+    def _setup_recovery_authorization(self, client) -> None:
+        """Answers recovery_guard: may a recovery start inside the current grant? Same pose as the gate uses."""
+        from std_srvs.srv import Trigger
+
+        backup_m = float(self.get_parameter("recovery_backup_check_m").value)
+
+        def answer(kind: str, distance: float):
+            def callback(_request, response):
+                reason = client.recovery_block_reason(self._traffic_pose(), kind, distance)
+                response.success = reason is None
+                response.message = reason or ""
+                return response
+
+            return callback
+
+        self.create_service(Trigger, "traffic/authorize_backup", answer("backup", backup_m))
+        self.create_service(Trigger, "traffic/authorize_spin", answer("spin", 0.0))
 
     def _on_safety_supervisor_tick(self) -> None:
         supervisor = getattr(self, "_safety_supervisor", None)
@@ -698,15 +716,24 @@ class RobotGatewayNode(Node):
     def _publish_authority_state(self) -> bool:
         import uuid
 
+        semantic = getattr(self, "_semantic_client", None)
         client = self._traffic_client
-        if client is None:
+        if client is None and semantic is None:
             return False
+        report = client.authority_state_report() if client is not None else semantic.state_report()
+        if semantic is not None:
+            pose = self._traffic_pose()
+            report.update(
+                {"poseX": pose[0], "poseY": pose[1], "localizationOk": True}
+                if pose is not None
+                else {"localizationOk": False}
+            )
         body = {
             "schemaVersion": 1,
             "messageId": str(uuid.uuid4()),
             "robotCode": self._robot_code,
             "bootId": self._seq.boot_id,
-            **client.authority_state_report(),
+            **report,
             "sentAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
         }
         if not self.mqtt.publish(self.topic("authority_state"), body, qos=1):
@@ -794,6 +821,8 @@ class RobotGatewayNode(Node):
             self._inbox.put(("interaction_request", body))
         elif topic == self.topic("interaction_result"):
             self._inbox.put(("interaction_result", body))
+        elif self._traffic_mode == "semantic_active" and topic == self._epoch_topic():
+            self._inbox.put(("epoch", body))
         else:
             return
         self._inbox_signal.trigger()
@@ -814,6 +843,15 @@ class RobotGatewayNode(Node):
                 self._handle_interaction_request(body)
             elif kind == "interaction_result":
                 self._handle_interaction_result(body)
+            elif kind == "epoch" and self._semantic_client is not None:
+                before = self._semantic_client.known_epoch
+                self._semantic_client.on_epoch(body)
+                if self._semantic_client.known_epoch != before:
+                    self.get_logger().warning(
+                        f"traffic epoch {before} -> {self._semantic_client.known_epoch}: older grants void"
+                    )
+                    # The new coordinator rebuilds occupancy from what this robot reports.
+                    self._publish_authority_state()
 
     def _handle_interaction_request(self, body: dict) -> None:
         try:

@@ -2,13 +2,16 @@
   WaroTrans resilient NavigateToPose BT
   - Replan chậm (0.33 Hz) để giảm thrash path
   - FollowPath fail → clear local costmap → wait → replan (thử lại trong goal)
-  - Recovery theo thứ tự: clear costmaps → BackUp → Spin 90° → Wait
-  - 2026-10-16: giới hạn tổng số lần thử (4 vòng ngoài × 2 vòng trong) để goal không giải
-    được sẽ ABORT trong khoảng ≤ 2–3 phút thay vì "treo" nhiều phút (progress checker 20 s).
+  - Recovery chỉ đi qua recovery_guard (server_name="guarded_*"): guard kiểm tra scan và grant trước khi
+    chuyển tiếp tới Nav2. Bị từ chối = action fail, robot không nhận lệnh, RoundRobin chuyển sang bước sau.
+    KHÔNG gọi BackUp/Spin trực tiếp trong cây này (test_recovery_tree.py kiểm tra điều đó).
+  - Thứ tự: lùi 0,10 m → xoay trái 45° → xoay phải 45° → xoá costmap → chờ.
+    0,10 m nằm trong phần dư ≥ 0,131 m của grant (docs/NAV2_STUCK_RECOVERY_EVIDENCE.md).
+  - Số lần thử có giới hạn: goal không giải được sẽ ABORT, không treo.
 -->
 <root main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
-    <RecoveryNode number_of_retries="4" name="NavigateRecovery">
+    <RecoveryNode number_of_retries="5" name="NavigateRecovery">
       <PipelineSequence name="NavigateWithReplanning">
         <RateController hz="0.33">
           <RecoveryNode number_of_retries="1" name="ComputePathToPose">
@@ -18,7 +21,7 @@
               service_name="global_costmap/clear_entirely_global_costmap"/>
           </RecoveryNode>
         </RateController>
-        <RecoveryNode number_of_retries="2" name="FollowPath">
+        <RecoveryNode number_of_retries="1" name="FollowPath">
           <FollowPath path="{path}" controller_id="FollowPath"
             error_code_id="{follow_path_error_code}"/>
           <Sequence name="FollowPathRecovery">
@@ -33,15 +36,15 @@
       <ReactiveFallback name="RecoveryFallback">
         <GoalUpdated/>
         <RoundRobin name="RecoveryActions">
+          <BackUp name="GuardedBackUp" server_name="guarded_backup" backup_dist="0.10" backup_speed="0.06" time_allowance="8"/>
+          <Spin name="GuardedSpinLeft" server_name="guarded_spin" spin_dist="0.785" time_allowance="8"/>
+          <Spin name="GuardedSpinRight" server_name="guarded_spin" spin_dist="-0.785" time_allowance="8"/>
           <Sequence name="ClearingActions">
             <ClearEntireCostmap name="ClearLocalCostmap-Subtree"
               service_name="local_costmap/clear_entirely_local_costmap"/>
             <ClearEntireCostmap name="ClearGlobalCostmap-Subtree"
               service_name="global_costmap/clear_entirely_global_costmap"/>
           </Sequence>
-          <!-- Lùi khỏi tường / góc kệ trước khi quay (tránh quay chạm góc ở ngã 3) -->
-          <BackUp backup_dist="0.15" backup_speed="0.06"/>
-          <Spin spin_dist="1.57"/>
           <Wait wait_duration="2.0"/>
         </RoundRobin>
       </ReactiveFallback>

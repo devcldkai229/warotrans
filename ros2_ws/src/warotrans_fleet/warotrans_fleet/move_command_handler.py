@@ -7,6 +7,7 @@ cancel/timeout luôn đi qua cancel_goal_async và chờ Nav2 xác nhận.
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 from dataclasses import dataclass, field
@@ -79,6 +80,10 @@ _TRAFFIC_NAV_STATUS = {
 }
 
 # Lý do cancel
+# nav2_msgs ComputePathToPose error codes. No path cannot be caused by the gate holding the robot, so a goal aborted
+# with one of these is a navigation failure even while a traffic hold is active.
+_NAV2_PLANNER_ERROR_CODES = range(200, 300)
+
 _CANCEL_BY_BACKEND = "BACKEND"
 _CANCEL_BY_TIMEOUT = "TIMEOUT"
 _CANCEL_BY_CORRIDOR = "CORRIDOR"
@@ -99,6 +104,7 @@ class _ActiveMove:
     cancel_sent_at: Optional[float] = None
     cancel_sessions: list[CommandSession] = field(default_factory=list)
     started: bool = False
+    traffic_retries: int = 0
     last_feedback: Optional[NavFeedback] = None
     last_progress_log_at: Optional[float] = None
 
@@ -130,8 +136,16 @@ class MoveCommandHandler:
         traffic_mode: str = "legacy",
         traffic_client: Optional["TrafficClient"] = None,
         expected_graph_hash: Optional[str] = None,
+        traffic_hold_active: Callable[[], bool] = lambda: False,
+        max_traffic_retries: int = 30,
+        arrival_pose: Callable[[], Optional[tuple[float, float, float]]] = lambda: None,
     ) -> None:
         self._navigator = navigator
+        self._arrival_pose = arrival_pose
+        # semantic_active: the authority gate held the robot for traffic (no grant / outside reservation). Nav2's
+        # progress checker then aborts the goal although nothing failed; such an abort re-sends the goal instead.
+        self._traffic_hold_active = traffic_hold_active
+        self._max_traffic_retries = int(max_traffic_retries)
         self._localization_provider = localization_provider
         self._log = log
         self._lock = lock if lock is not None else threading.RLock()
@@ -395,7 +409,8 @@ class MoveCommandHandler:
                 return
             now = self._clock()
             move.goal_sent_at = now
-            if move.timeout_sec is not None:
+            if move.timeout_sec is not None and move.deadline is None:
+                # Once per command: a goal re-sent after a traffic hold keeps the original timeoutSeconds.
                 move.deadline = now + move.timeout_sec
             t = move.target
             goal = NavGoal(command_id=move.command_id, frame_id=t.frame_id, x=t.x, y=t.y, yaw=t.yaw)
@@ -488,7 +503,7 @@ class MoveCommandHandler:
             nav2_detail = f"nav2ErrorCode={result.error_code} nav2ErrorMsg={result.error_message!r}"
 
             if status == STATUS_SUCCEEDED:
-                self._log.info(f"[NavigationSucceeded] commandId={move.command_id}")
+                self._log.info(f"[NavigationSucceeded] commandId={move.command_id}{self._arrival_error_text(move)}")
                 self._finish(move, OUTCOME_SUCCEEDED, None, None, status, "SUCCEEDED", result)
             elif status == STATUS_CANCELED and move.cancel_reason == _CANCEL_BY_TIMEOUT:
                 self._log.warning(f"[NavigationTimeout] commandId={move.command_id} goal canceled by Nav2")
@@ -533,6 +548,19 @@ class MoveCommandHandler:
                     "CANCELED",
                     result,
                 )
+            elif (
+                status == STATUS_ABORTED
+                and result.error_code not in _NAV2_PLANNER_ERROR_CODES
+                and self._held_for_traffic(move)
+            ):
+                move.traffic_retries += 1
+                self._log.warning(
+                    f"[NavigationHeldForTraffic] commandId={move.command_id} Nav2 aborted while the authority gate "
+                    f"held the robot; re-sending goal (retry {move.traffic_retries}/{self._max_traffic_retries}) {nav2_detail}"
+                )
+                move.ticket = GoalTicket()
+                move.phase = _SENDING
+                self._send_goal(move)
             elif status == STATUS_ABORTED:
                 self._log.warning(f"[NavigationFailed] commandId={move.command_id} aborted {nav2_detail}")
                 self._finish(
@@ -555,6 +583,31 @@ class MoveCommandHandler:
                     "UNKNOWN",
                     result,
                 )
+
+    def _arrival_error_text(self, move: _ActiveMove) -> str:
+        """Measured data for the goal tolerance decision: Nav2 accepts 0.15 m and any heading, endpoints ask for less."""
+        try:
+            pose = self._arrival_pose()
+        except Exception:  # noqa: BLE001 - a log line must never affect the result of the command
+            pose = None
+        if pose is None:
+            return " arrivalError=unknown"
+        t = move.target
+        xy = math.hypot(pose[0] - t.x, pose[1] - t.y)
+        yaw = abs(math.atan2(math.sin(pose[2] - t.yaw), math.cos(pose[2] - t.yaw)))
+        return f" arrivalErrorXy={xy:.3f}m arrivalErrorYaw={yaw:.3f}rad"
+
+    def _held_for_traffic(self, move: _ActiveMove) -> bool:
+        if self._traffic_mode != "semantic_active" or move.cancel_reason is not None:
+            return False
+        if move.traffic_retries >= self._max_traffic_retries:
+            return False
+        if move.deadline is not None and self._clock() >= move.deadline:
+            return False
+        try:
+            return bool(self._traffic_hold_active())
+        except Exception:  # noqa: BLE001 — unknown → report the abort
+            return False
 
     def _request_cancel(self, move: _ActiveMove, reason: str, cancel_session: Optional[CommandSession]) -> None:
         with self._lock:

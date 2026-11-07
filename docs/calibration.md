@@ -206,6 +206,8 @@ ROS convention: +X front, +Y left, +Z up.
 
 ROS convention: +X front, +Y left, +Z up. Đo tới tâm transducer (hoặc mặt phát đã thống nhất).
 
+**Cần đo lại REAR x:** −0.02892 m đặt cảm biến gần tâm khung xe dài 0.32 m, trong khi FRONT dùng 154.2 mm; "15.42" nhiều khả năng là gõ nhầm. Chưa sửa số vì chưa đo lại. Hiện chưa có gì dùng giá trị này.
+
 **Nav2 Phase 0.5 chỉ cần FRONT + REAR** (vật đột ngột trước/sau).  
 LEFT / RIGHT: **không** đưa vào Collision Monitor / costmap; có thể để trống hoặc ghi “không dùng Nav2”.
 

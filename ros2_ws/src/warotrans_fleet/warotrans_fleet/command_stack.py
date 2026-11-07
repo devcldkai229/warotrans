@@ -47,6 +47,8 @@ def build_command_stack(
     traffic_mode: str = "legacy",
     traffic_client: Optional[object] = None,
     expected_graph_hash: Optional[str] = None,
+    traffic_hold_active: Callable[[], bool] = lambda: False,
+    arrival_pose: Callable[[], Optional[tuple[float, float, float]]] = lambda: None,
 ) -> CommandStack:
     lock = threading.RLock()
     router = CommandRouter(
@@ -73,6 +75,8 @@ def build_command_stack(
         traffic_mode=traffic_mode,
         traffic_client=traffic_client,  # type: ignore[arg-type]
         expected_graph_hash=expected_graph_hash,
+        traffic_hold_active=traffic_hold_active,
+        arrival_pose=arrival_pose,
     )
     router.register(move)
     router.register(CancelCommandHandler(move))
