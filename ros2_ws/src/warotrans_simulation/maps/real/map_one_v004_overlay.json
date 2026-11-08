@@ -1,0 +1,525 @@
+{
+  "mapVersionId": "11b453ef-f28e-448d-8382-0d880818c706",
+  "mapVersionCode": "MAP-ONE-V004",
+  "status": "PUBLISHED",
+  "endpoints": [
+    {
+      "code": "EP-CHARGE",
+      "name": "Charge",
+      "endpointType": "CHARGER",
+      "x": 0.444,
+      "y": 2.569,
+      "yaw": 3.141592653589793,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-INBOUND",
+      "name": "Inbound",
+      "endpointType": "WAYPOINT",
+      "x": 2.607,
+      "y": 0.078,
+      "yaw": 3.141592653589793,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-OUTBOUND",
+      "name": "Outbound",
+      "endpointType": "WAYPOINT",
+      "x": 0.081,
+      "y": 0.046,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-PARKING-A",
+      "name": "Parking A",
+      "endpointType": "PARK",
+      "x": 0.495,
+      "y": 3.722,
+      "yaw": 3.141592653589793,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-PARKING-B",
+      "name": "Parking B",
+      "endpointType": "PARK",
+      "x": 0.465,
+      "y": 3.123,
+      "yaw": 3.141592653589793,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-QUEUE-POINT",
+      "name": "Queue Point",
+      "endpointType": "WAYPOINT",
+      "x": 2.068,
+      "y": 0.503,
+      "yaw": -1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SHELF-A-01",
+      "name": "Shelf A 01",
+      "endpointType": "WAYPOINT",
+      "x": 2.409,
+      "y": 3.158,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SHELF-B-01",
+      "name": "Shelf B 01",
+      "endpointType": "WAYPOINT",
+      "x": 2.195,
+      "y": 1.113,
+      "yaw": 0,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SHELF-B-02",
+      "name": "Shelf B 02",
+      "endpointType": "WAYPOINT",
+      "x": 2.611,
+      "y": 1.113,
+      "yaw": 1.5707963267948966,
+      "isEnabled": true
+    },
+    {
+      "code": "EP-SHELF-C-01",
+      "name": "Shelf C 01",
+      "endpointType": "WAYPOINT",
+      "x": 0.087,
+      "y": 1.088,
+      "yaw": -1.5707963267948966,
+      "isEnabled": true
+    }
+  ],
+  "edges": [
+    {
+      "code": "EDGE-LANE-BTT-A---3",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.168,
+            2.823
+          ],
+          [
+            1.169,
+            3.436
+          ]
+        ]
+      },
+      "widthMeters": 0.7,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-LANE-BTT-C---2",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.189,
+            0.116
+          ],
+          [
+            1.181,
+            1.155
+          ]
+        ]
+      },
+      "widthMeters": 0.65,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-LANE-LTR-A---2",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.474,
+            3.565
+          ],
+          [
+            2.237,
+            3.566
+          ]
+        ]
+      },
+      "widthMeters": 0.7,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-LANE-LTR-B---2",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            1.28,
+            1.829
+          ],
+          [
+            2.514,
+            1.829
+          ]
+        ]
+      },
+      "widthMeters": 0.65,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-LANE-RTL-B---2",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            2.502,
+            2.489
+          ],
+          [
+            1.28,
+            2.489
+          ]
+        ]
+      },
+      "widthMeters": 0.65,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-LANE-RTL-PARKING---2",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            2.329,
+            4.282
+          ],
+          [
+            0.406,
+            4.294
+          ]
+        ]
+      },
+      "widthMeters": 0.6,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "EDGE-LANE-TTB-C---2",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            0.512,
+            1.155
+          ],
+          [
+            0.52,
+            0.116
+          ]
+        ]
+      },
+      "widthMeters": 0.65,
+      "direction": "ONE_WAY",
+      "maxSpeed": null,
+      "isActive": true
+    }
+  ],
+  "zones": [
+    {
+      "code": "ZONE-KEEP-OUT-A",
+      "name": "Keep Out A",
+      "zoneType": "KEEP_OUT",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              0.765,
+              3.922
+            ],
+            [
+              2.164,
+              3.928
+            ],
+            [
+              2.164,
+              3.98
+            ],
+            [
+              0.77,
+              3.975
+            ],
+            [
+              0.765,
+              3.922
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-NO-STOP-ZONE-A",
+      "name": "No Stop Zone A",
+      "zoneType": "NO_STOP",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              0.807,
+              3.914
+            ],
+            [
+              1.462,
+              3.914
+            ],
+            [
+              1.462,
+              3.252
+            ],
+            [
+              0.807,
+              3.244
+            ],
+            [
+              0.807,
+              3.914
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-NO-STOP-ZONE-B",
+      "name": "No Stop Zone B",
+      "zoneType": "NO_STOP",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              2.27,
+              2.822
+            ],
+            [
+              2.902,
+              2.819
+            ],
+            [
+              2.906,
+              1.484
+            ],
+            [
+              2.283,
+              1.479
+            ],
+            [
+              2.27,
+              2.822
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-CENTER",
+      "name": "Single Center",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              0.181,
+              1.04
+            ],
+            [
+              1.521,
+              1.054
+            ],
+            [
+              1.517,
+              2.834
+            ],
+            [
+              0.798,
+              2.834
+            ],
+            [
+              0.806,
+              2.144
+            ],
+            [
+              0.415,
+              2.144
+            ],
+            [
+              0.175,
+              1.458
+            ],
+            [
+              0.181,
+              1.04
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-SHELF-A",
+      "name": "Single Shelf A",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              2.064,
+              4.606
+            ],
+            [
+              2.064,
+              3.265
+            ],
+            [
+              2.868,
+              3.265
+            ],
+            [
+              2.879,
+              4.611
+            ],
+            [
+              2.064,
+              4.606
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-SHELF-ZONE-B",
+      "name": "Single Shelf Zone B",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              1.904,
+              1.425
+            ],
+            [
+              2.902,
+              1.425
+            ],
+            [
+              2.91,
+              0.777
+            ],
+            [
+              1.9,
+              0.773
+            ],
+            [
+              1.904,
+              1.425
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SINGLE-ZONE-B",
+      "name": "Single Zone B",
+      "zoneType": "SINGLE_OCCUPANCY",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              2.27,
+              2.826
+            ],
+            [
+              2.91,
+              2.838
+            ],
+            [
+              2.918,
+              1.479
+            ],
+            [
+              2.275,
+              1.484
+            ],
+            [
+              2.27,
+              2.826
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": null,
+      "isActive": true
+    },
+    {
+      "code": "ZONE-SPEED-ZONE-C",
+      "name": "Speed Zone C",
+      "zoneType": "SPEED",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              0.188,
+              0.356
+            ],
+            [
+              0.202,
+              -0.269
+            ],
+            [
+              2.448,
+              -0.264
+            ],
+            [
+              2.451,
+              0.356
+            ],
+            [
+              0.188,
+              0.356
+            ]
+          ]
+        ]
+      },
+      "maxSpeed": 0.3,
+      "isActive": true
+    }
+  ]
+}

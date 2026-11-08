@@ -2,145 +2,89 @@
   "mapName": "sim_warehouse",
   "frame": "map",
   "spawn": {
-    "x": -1.929,
-    "y": -0.95,
-    "yaw": 0.0
+    "x": 0.495,
+    "y": 3.722,
+    "yaw": 3.141592653589793
   },
   "endpoints": [
     {
-      "code": "EP-CHARGER-A---5",
-      "name": "CHARGER A",
+      "code": "EP-CHARGE",
+      "name": "Charge",
       "endpointType": "CHARGER",
-      "x": -1.029,
-      "y": -0.95,
+      "x": 0.444,
+      "y": 2.569,
+      "yaw": 3.141592653589793
+    },
+    {
+      "code": "EP-INBOUND",
+      "name": "Inbound",
+      "endpointType": "WAYPOINT",
+      "x": 2.607,
+      "y": 0.078,
+      "yaw": 3.141592653589793
+    },
+    {
+      "code": "EP-OUTBOUND",
+      "name": "Outbound",
+      "endpointType": "WAYPOINT",
+      "x": 0.081,
+      "y": 0.046,
       "yaw": 0
     },
     {
-      "code": "EP-INBOUND-AREA---5",
-      "name": "Inbound Area",
-      "endpointType": "WAYPOINT",
-      "x": 1.7,
-      "y": 1.55,
-      "yaw": 0
-    },
-    {
-      "code": "EP-INSPECTION-QUALITY-AREA---5",
-      "name": "Inspection Quality Area",
-      "endpointType": "WAYPOINT",
-      "x": 1.8,
-      "y": 0,
-      "yaw": -1.5707963267948966
-    },
-    {
-      "code": "EP-OUTBOUND-AREA---5",
-      "name": "Outbound Area",
-      "endpointType": "WAYPOINT",
-      "x": 1.8,
-      "y": -0.2,
-      "yaw": -1.5707963267948966
-    },
-    {
-      "code": "EP-PARKING-A---5",
+      "code": "EP-PARKING-A",
       "name": "Parking A",
       "endpointType": "PARK",
-      "x": -1.929,
-      "y": -0.95,
-      "yaw": 0
+      "x": 0.495,
+      "y": 3.722,
+      "yaw": 3.141592653589793
     },
     {
-      "code": "EP-PARKING-B---5",
+      "code": "EP-PARKING-B",
       "name": "Parking B",
       "endpointType": "PARK",
-      "x": -1.479,
-      "y": -0.95,
+      "x": 0.465,
+      "y": 3.123,
+      "yaw": 3.141592653589793
+    },
+    {
+      "code": "EP-QUEUE-POINT",
+      "name": "Queue Point",
+      "endpointType": "WAYPOINT",
+      "x": 2.068,
+      "y": 0.503,
+      "yaw": -1.5707963267948966
+    },
+    {
+      "code": "EP-SHELF-A-01",
+      "name": "Shelf A 01",
+      "endpointType": "WAYPOINT",
+      "x": 2.409,
+      "y": 3.158,
       "yaw": 0
     },
     {
-      "code": "EP-SHELF-A-01---5",
-      "name": "Shelf-A-01",
+      "code": "EP-SHELF-B-01",
+      "name": "Shelf B 01",
       "endpointType": "WAYPOINT",
-      "x": -0.3,
-      "y": 0.6,
-      "yaw": 1.5707963267948966
-    },
-    {
-      "code": "EP-SHELF-A-02---5",
-      "name": "Shelf-A-02",
-      "endpointType": "WAYPOINT",
-      "x": -0.3,
-      "y": 0.95,
-      "yaw": 1.5707963267948966
-    },
-    {
-      "code": "EP-SHELF-A-03---5",
-      "name": "Shelf-A-03",
-      "endpointType": "WAYPOINT",
-      "x": -0.3,
-      "y": 1.3,
-      "yaw": 1.5707963267948966
-    },
-    {
-      "code": "EP-SHELF-A-04---5",
-      "name": "Shelf-A-04",
-      "endpointType": "WAYPOINT",
-      "x": -0.3,
-      "y": 1.45,
-      "yaw": 1.5707963267948966
-    },
-    {
-      "code": "EP-SHELF-B-01---5",
-      "name": "Shelf-B-01",
-      "endpointType": "WAYPOINT",
-      "x": 1.7,
-      "y": 1.45,
-      "yaw": 1.5707963267948966
-    },
-    {
-      "code": "EP-SHELF-B-02---5",
-      "name": "Shelf-B-02",
-      "endpointType": "WAYPOINT",
-      "x": 1.7,
-      "y": 1.25,
-      "yaw": 1.5707963267948966
-    },
-    {
-      "code": "EP-SHELF-B-03---5",
-      "name": "Shelf-B-03",
-      "endpointType": "WAYPOINT",
-      "x": 1.7,
-      "y": 1.05,
-      "yaw": 1.5707963267948966
-    },
-    {
-      "code": "EP-SHELF-B-04---5",
-      "name": "Shelf-B-04",
-      "endpointType": "WAYPOINT",
-      "x": 1.7,
-      "y": 0.85,
-      "yaw": 1.5707963267948966
-    },
-    {
-      "code": "EP-SHELF-C-01---5",
-      "name": "Shelf-C-01",
-      "endpointType": "WAYPOINT",
-      "x": -0.6,
-      "y": -0.95,
+      "x": 2.195,
+      "y": 1.113,
       "yaw": 0
     },
     {
-      "code": "EP-SHELF-C-02---5",
-      "name": "Shelf-C-02",
+      "code": "EP-SHELF-B-02",
+      "name": "Shelf B 02",
       "endpointType": "WAYPOINT",
-      "x": -0.8,
-      "y": -0.95,
-      "yaw": 0
+      "x": 2.611,
+      "y": 1.113,
+      "yaw": 1.5707963267948966
     },
     {
-      "code": "EP-WAIT-POINT---5",
-      "name": "Wait Point",
+      "code": "EP-SHELF-C-01",
+      "name": "Shelf C 01",
       "endpointType": "WAYPOINT",
-      "x": 1.8,
-      "y": 0.5,
+      "x": 0.087,
+      "y": 1.088,
       "yaw": -1.5707963267948966
     }
   ],

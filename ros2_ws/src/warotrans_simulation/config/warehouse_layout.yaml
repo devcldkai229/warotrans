@@ -1,33 +1,40 @@
 # =============================================================================
-# WaroTrans simulation — ACTIVE layout: MAP-WH42CFE65F-V003 (ONE_WAY free ring)
+# WaroTrans simulation — ACTIVE layout: real SLAM remap 2026-11-04 v3 (no web map version yet)
 # =============================================================================
-# Occupancy from published web map (origin -2.929, -1.415, resolution 0.05).
-# V001 kept ARCHIVED for rollback. Shelf props are visual only.
+# Occupancy straight from the robot's scan (66x103 px, origin -0.341, -0.475, resolution 0.05).
+# Shelf rectangles are derived from the PGM cells: x = -0.341 + 0.05*col, y = -0.475 + 0.05*(103 - row).
+# SHELF-04 stands outside the west wall (outside the scanned area, rows 64-78): a full rack from the floor
+# (solid_base), hidden from the lidar by the wall, so Nav2 / AMCL are unaffected.
+# Previous layout (MAP-WH42CFE65F-V003): config/layouts/map_wh42cfe65f_v003.yaml
 #
-#   python3 scripts/sync_web_map.py --user admin --password 'Admin@123'
 #   python3 scripts/generate_warehouse.py
 # =============================================================================
 
 name: sim_warehouse
-source_map: maps/web/map_wh42cfe65f_v003.yaml
+source_map: maps/real/warotrans_remap_20261104_v3.yaml
 wall_height: 0.8
 
-# Visual rack props (approximate). Occupancy cells remain the authority.
-# Service Endpoints for Shelf-A sit on the free center lane (x≈-0.30), not aisle x=-1.25.
-shelves:
-  - { code: SHELF-A-01, x0: -1.55, x1: -1.15, y0: 0.45, y1: 0.75, sz: 1.0, levels: 2 }
-  - { code: SHELF-A-02, x0: -1.55, x1: -1.15, y0: 0.80, y1: 1.10, sz: 1.0, levels: 2 }
-  - { code: SHELF-A-03, x0: -1.55, x1: -1.15, y0: 1.20, y1: 1.50, sz: 1.0, levels: 2 }
-  - { code: SHELF-A-04, x0: -1.55, x1: -1.15, y0: 1.50, y1: 1.80, sz: 1.0, levels: 2 }
-  - { code: SHELF-B-01, x0: 1.50, x1: 1.90, y0: 1.30, y1: 1.55, sz: 1.0, levels: 2 }
-  - { code: SHELF-B-02, x0: 1.50, x1: 1.90, y0: 1.10, y1: 1.30, sz: 1.0, levels: 2 }
-  - { code: SHELF-C-01, x0: -0.85, x1: -0.45, y0: -1.10, y1: -0.80, sz: 1.0, levels: 2 }
-
+# Web map version with the same occupancy (MAP-ONE-V004 = this v3 scan, byte-identical PGM).
+# scripts/sync_web_map.py downloads its Endpoints / lanes / Zones into `overlay` and paints them on the floor.
 web:
   backend: http://localhost:5090
-  map_version_id: 1143c8a3-ae62-4660-b684-bc462450f30f
-  map_version_code: MAP-WH42CFE65F-V003
-  overlay: config/web/map_wh42cfe65f_v003.overlay.json
+  map_version_id: 11b453ef-f28e-448d-8382-0d880818c706
+  map_version_code: MAP-ONE-V004
+  overlay: maps/real/map_one_v004_overlay.json
 
-# Robot spawn = Parking A on published V003 (clone codes EP-PARKING-A---5).
-spawn_endpoint_code: EP-PARKING-A---5
+# Robot spawns on the web endpoint Parking A (pose from web.overlay). The map origin (0, 0) where the SLAM scan
+# started is only 0.22 m from the wall, closer than the robot footprint radius, so traffic cannot plan from there.
+spawn_endpoint_code: EP-PARKING-A
+spawn: { x: 0.0, y: 0.0, yaw: 0.0 }   # fallback when no overlay is available
+
+# Wall in front of SHELF-03 (rows 77-78, cols 59-65) removed so the rack faces the bay north of it.
+# West wall in front of SHELF-04 (rows 65-77, cols 1-3) removed: the bay leads straight into that rack.
+clear_cells:
+  - { x0: 2.60, x1: 2.96, y0: 0.73, y1: 0.82 }
+  - { x0: -0.34, x1: -0.15, y0: 0.78, y1: 1.42 }
+
+shelves:
+  - { code: SHELF-01, x0: 1.46, x1: 1.91, y0: 2.93, y1: 3.23, sz: 1.0, levels: 2 }   # col 36-44, row 29-34
+  - { code: SHELF-02, x0: 1.46, x1: 1.91, y0: 0.78, y1: 1.48, sz: 1.0, levels: 2 }   # col 36-44, row 64-77
+  - { code: SHELF-03, x0: 2.56, x1: 2.96, y0: 0.38, y1: 0.73, sz: 1.0, levels: 2, solid_base: true }   # col 58-65, row 79-85, open to the north
+  - { code: SHELF-04, x0: -0.80, x1: -0.35, y0: 0.78, y1: 1.48, sz: 1.0, levels: 2, solid_base: true }  # outside west wall
