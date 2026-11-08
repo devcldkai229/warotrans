@@ -86,8 +86,8 @@ def main() -> int:
     # Map files exactly as uploaded on the web.
     map_yaml_path = PKG_ROOT / layout["source_map"]
     pgm_path = map_yaml_path.with_suffix(".pgm")
-    def asset(uri: str) -> bytes:  # local /map-assets/... or an absolute (S3) URL
-        return http(uri if uri.startswith("http") else base + uri)
+    def asset(uri: str) -> bytes:  # local /map-assets/... (needs the token since POL-04) or an absolute (S3) URL
+        return http(uri, None) if uri.startswith("http") else http(base + uri, token)
 
     pgm = asset(detail["mapUri"])
     meta = yaml.safe_load(asset(detail["mapYamlUri"]).decode("utf-8"))
