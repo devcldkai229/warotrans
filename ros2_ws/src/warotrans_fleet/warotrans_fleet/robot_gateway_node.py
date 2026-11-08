@@ -108,6 +108,30 @@ class RobotGatewayNode(Node):
         self.declare_parameter("cancel_confirm_timeout_sec", 10.0)
         self.declare_parameter("terminal_status_hold_sec", 3.0)
         self.declare_parameter("command_tick_hz", 5.0)
+        # RB-03: STOP counts as verified once odometry shows the robot still for stop_settle_sec.
+        self.declare_parameter("stop_settle_sec", 0.5)
+        self.declare_parameter("stop_verify_timeout_sec", 5.0)
+        # Topic the hold drives to zero (default: cmd_vel_topic). Real robot with the authority gate: authority_ok
+        # is also forced false while held, so the gate outputs zero whatever Nav2 or teleop publish.
+        self.declare_parameter("hold_cmd_vel_topic", "")
+        # RB-09: system actions this robot accepts. Empty (default) = none; each needs its shell command, run as is
+        # (e.g. "sudo -n /usr/bin/systemctl restart warotrans-robot.service" with a matching sudoers rule).
+        self.declare_parameter("system_actions_enabled", [""])
+        self.declare_parameter("system_action_restart_stack_command", "")
+        self.declare_parameter("system_action_reboot_command", "")
+        self.declare_parameter("system_action_shutdown_command", "")
+        # RB-10: diagnostics snapshot on MQTT robots/{code}/health. Topic checks are
+        # "name:topic:msg_type:min_hz[:optional]"; a required one that goes silent is ERROR, an optional one STALE.
+        self.declare_parameter("health_period_sec", 5.0)
+        self.declare_parameter(
+            "health_topics",
+            [
+                "lidar:/scan:sensor_msgs/msg/LaserScan:5",
+                "odometry:/odom:nav_msgs/msg/Odometry:10",
+                "imu:/imu/data:sensor_msgs/msg/Imu:20:optional",
+                "ultrasonic:/ultrasonic/range:sensor_msgs/msg/Range:5:optional",
+            ],
+        )
         self.declare_parameter("command_ledger_size", 500)
         # Robot has no battery sensor yet → telemetry sends null. Simulation only: a fixed value
         # (0..100) so backend CHECK.BATTERY_MIN can be exercised. < 0 = disabled (real robot).
@@ -307,7 +331,16 @@ class RobotGatewayNode(Node):
             ),
             traffic_hold_active=lambda: self._semantic_client is not None and self._semantic_client.held_for_traffic(),
             arrival_pose=self._traffic_pose,
+            speed_provider=self._odom_speed,
+            stop_settle_sec=self._float_param("stop_settle_sec"),
+            stop_verify_timeout_sec=self._float_param("stop_verify_timeout_sec"),
+            system_actions_enabled=self._system_actions_enabled(),
+            run_system_action=self._run_system_action,
         )
+        self._hold_cmd_vel_pub = None
+        self.create_timer(0.1, self._enforce_motion_hold)
+        self._navigator_port = navigator
+        self._setup_health()
 
         self._teleop: Optional[TeleopController] = None
         if self._teleop_enabled:
@@ -595,7 +628,8 @@ class RobotGatewayNode(Node):
             self._authority_ok_pub = self.create_publisher(Bool, topic, 10)
             pub = self._authority_ok_pub
         msg = Bool()
-        msg.data = bool(ok)
+        # RB-03: a held robot never gets motion authority, whoever asks for it.
+        msg.data = bool(ok) and not self._motion_held()
         pub.publish(msg)
 
     def _setup_semantic_traffic_client(self):
@@ -838,7 +872,10 @@ class RobotGatewayNode(Node):
                     continue
                 self._commands.router.handle_message(body)
             elif kind == "teleop" and self._teleop is not None:
-                self._teleop.handle(body)
+                if self._motion_held():
+                    self._teleop.stop()  # RB-03: no manual motion while STOP holds; RESUME first
+                else:
+                    self._teleop.handle(body)
             elif kind == "interaction_request":
                 self._handle_interaction_request(body)
             elif kind == "interaction_result":
@@ -903,6 +940,85 @@ class RobotGatewayNode(Node):
     def _on_odom(self, msg: Odometry) -> None:
         self._lin_vel = float(msg.twist.twist.linear.x)
         self._ang_vel = float(msg.twist.twist.angular.z)
+        self._odom_at = time.monotonic()
+
+    # ------------------------------------------------------------------ motion hold (RB-03) / system actions (RB-09)
+
+    def _motion_held(self) -> bool:
+        commands = getattr(self, "_commands", None)
+        return bool(commands is not None and commands.hold is not None and commands.hold.held)
+
+    def _odom_speed(self) -> Optional[tuple[float, float]]:
+        """Measured (linear, angular) speed; None when odometry is older than 1 s (cannot verify a stop)."""
+        at = getattr(self, "_odom_at", None)
+        if at is None or time.monotonic() - at > 1.0:
+            return None
+        return (self._lin_vel, self._ang_vel)
+
+    def _enforce_motion_hold(self) -> None:
+        if not self._motion_held():
+            return
+        if self._hold_cmd_vel_pub is None:
+            topic = self._str_param("hold_cmd_vel_topic").strip() or self._str_param("cmd_vel_topic")
+            self._hold_cmd_vel_pub = self.create_publisher(Twist, topic, 10)
+        self._hold_cmd_vel_pub.publish(Twist())
+        if self._enable_authority_gate:
+            self._publish_authority_ok(False)
+
+    def _setup_health(self) -> None:
+        from warotrans_fleet.health_monitor import parse_topic_checks
+
+        specs = list(self.get_parameter("health_topics").get_parameter_value().string_array_value)
+        self._health_checks = []
+        for check, msg_type in parse_topic_checks(specs):
+            try:
+                from rosidl_runtime_py.utilities import get_message
+
+                msg_class = get_message(msg_type)
+            except (AttributeError, ModuleNotFoundError, ValueError) as exc:
+                self.get_logger().warning(f"[Health] {check.name}: unknown type {msg_type} ({exc}); reported UNKNOWN")
+                self._health_checks.append(check)
+                continue
+            self.create_subscription(
+                msg_class, check.topic, lambda _msg, c=check: c.record(time.monotonic()), qos_profile_sensor_data
+            )
+            self._health_checks.append(check)
+        period = max(1.0, self._float_param("health_period_sec"))
+        self.create_timer(period, self._publish_health)
+
+    def _publish_health(self) -> None:
+        from warotrans_fleet import health_monitor as hm
+
+        now = time.monotonic()
+        items = [check.evaluate(now) for check in self._health_checks]
+        items.append(hm.tf_item(getattr(self, "_last_pose_age_sec", None), self._max_transform_age))
+        ready = None
+        is_ready = getattr(self._navigator_port, "is_ready", None)
+        if callable(is_ready):
+            try:
+                ready = bool(is_ready())
+            except Exception:  # noqa: BLE001 - a probe failure is reported, not raised
+                ready = False
+        items.append(hm.nav2_item(ready))
+        items.append(hm.cpu_load_item())
+        items.append(hm.temperature_item())
+        items.append(hm.memory_item())
+        self.mqtt.publish(self.topic("health"), hm.build_health(robot_code=self._robot_code, items=items))
+
+    def _system_actions_enabled(self) -> tuple[str, ...]:
+        raw = self.get_parameter("system_actions_enabled").get_parameter_value().string_array_value
+        return tuple(a.strip().upper() for a in raw if a and a.strip())
+
+    def _run_system_action(self, action: str) -> None:
+        import shlex
+        import subprocess
+
+        command = self._str_param(f"system_action_{action.lower()}_command").strip()
+        if not command:
+            self.get_logger().error(f"[SystemAction] {action} enabled but no command configured")
+            return
+        self.get_logger().warning(f"[SystemAction] running {action}: {command}")
+        subprocess.Popen(shlex.split(command), start_new_session=True)  # noqa: S603 - operator-configured command
 
     def _on_amcl_pose(self, msg: PoseWithCovarianceStamped) -> None:
         if self._amcl_readiness is not None:
@@ -924,6 +1040,9 @@ class RobotGatewayNode(Node):
             robot_code=self._robot_code,
             boot_id=self._seq.boot_id,
             sequence=seq,
+            capabilities=(
+                self._commands.system_actions.capabilities if self._commands.system_actions is not None else []
+            ),
         )
         self.mqtt.publish(self.topic("heartbeat"), payload)
 
@@ -999,6 +1118,7 @@ class RobotGatewayNode(Node):
             angular_velocity=self._ang_vel,
             current_command_id=self._commands.move.active_command_id,
             error_code=None,
+            motion_hold=self._motion_held(),
         )
         self.mqtt.publish(self.topic("telemetry"), payload)
 

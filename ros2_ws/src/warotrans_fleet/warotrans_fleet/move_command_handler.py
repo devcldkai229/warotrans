@@ -367,6 +367,23 @@ class MoveCommandHandler:
                 after_ack=lambda: self._request_cancel(move, _CANCEL_BY_BACKEND, cancel_session)
             )
 
+    def stop_active(self, reason: str) -> Optional[str]:
+        """STOP / PAUSE (RB-03): cancel whatever goal runs now, without a CANCEL session.
+
+        The stopped command still reports its own RESULT (CANCELED). Returns its id, or None when idle.
+        """
+        with self._lock:
+            if self._active_traffic_mode():
+                command_id = self._traffic_client.command_id  # type: ignore[union-attr]
+                if command_id:
+                    self._traffic_client.cancel_command(command_id)  # type: ignore[union-attr]
+                return command_id
+            move = self._active
+        if move is None:
+            return None
+        self._request_cancel(move, reason, None)
+        return move.command_id
+
     def _request_cancel_active(self, target_command_id: str, cancel_session: CommandSession) -> AckDecision:
         client = self._traffic_client
         assert client is not None

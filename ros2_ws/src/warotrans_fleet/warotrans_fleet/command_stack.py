@@ -13,6 +13,14 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from warotrans_fleet.command_router import CommandEventPublisher, CommandRouter, LogSink
+from warotrans_fleet.motion_hold import (
+    HoldGuard,
+    MotionHold,
+    ResumeCommandHandler,
+    SpeedProvider,
+    StopCommandHandler,
+    SystemActionHandler,
+)
 from warotrans_fleet.move_command_handler import CancelCommandHandler, MoveCommandHandler
 from warotrans_fleet.navigator import NavigatorPort
 from warotrans_fleet.route_enforcer import RouteEnforcer
@@ -25,6 +33,8 @@ if False:  # TYPE_CHECKING without importing typing.TYPE_CHECKING for py39-ish
 class CommandStack:
     router: CommandRouter
     move: MoveCommandHandler
+    hold: Optional[MotionHold] = None
+    system_actions: Optional[SystemActionHandler] = None
 
 
 def build_command_stack(
@@ -49,6 +59,11 @@ def build_command_stack(
     expected_graph_hash: Optional[str] = None,
     traffic_hold_active: Callable[[], bool] = lambda: False,
     arrival_pose: Callable[[], Optional[tuple[float, float, float]]] = lambda: None,
+    speed_provider: SpeedProvider = lambda: None,
+    stop_settle_sec: float = 0.5,
+    stop_verify_timeout_sec: float = 5.0,
+    system_actions_enabled: tuple[str, ...] = (),
+    run_system_action: Callable[[str], None] = lambda action: None,
 ) -> CommandStack:
     lock = threading.RLock()
     router = CommandRouter(
@@ -78,8 +93,26 @@ def build_command_stack(
         traffic_hold_active=traffic_hold_active,
         arrival_pose=arrival_pose,
     )
-    router.register(move)
+    # RB-03: STOP / PAUSE / RESUME work in every traffic mode; a held robot takes no NAVIGATE.
+    hold = MotionHold(
+        stop_active=move.stop_active,
+        speed_provider=speed_provider,
+        clock=clock,
+        log=log,
+        settle_sec=stop_settle_sec,
+        verify_timeout_sec=stop_verify_timeout_sec,
+    )
+    router.register(HoldGuard(move, hold))
     router.register(CancelCommandHandler(move))
+    router.register(StopCommandHandler(hold))
+    router.register(ResumeCommandHandler(hold))
+    system_actions = SystemActionHandler(
+        hold,
+        enabled_actions=system_actions_enabled,
+        goal_active=lambda: move.active_command_id is not None,
+        run_action=run_system_action,
+    )
+    router.register(system_actions)
     if traffic_mode == "active" and traffic_client is not None:
         from warotrans_fleet.authority_command_handler import (
             ExtendAuthorityHandler,
@@ -90,4 +123,4 @@ def build_command_stack(
         router.register(ExtendAuthorityHandler(traffic_client, expected_graph_hash=expected_graph_hash))  # type: ignore[arg-type]
         router.register(RenewAuthorityHandler(traffic_client))  # type: ignore[arg-type]
         router.register(RevokeAuthorityHandler(traffic_client))  # type: ignore[arg-type]
-    return CommandStack(router=router, move=move)
+    return CommandStack(router=router, move=move, hold=hold, system_actions=system_actions)

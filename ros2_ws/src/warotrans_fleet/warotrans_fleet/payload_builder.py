@@ -22,8 +22,9 @@ def build_heartbeat(
     sequence: int,
     sent_at: Optional[str] = None,
     message_id: Optional[str] = None,
+    capabilities: Optional[list[str]] = None,
 ) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "schemaVersion": 1,
         "messageId": message_id or new_message_id(),
         "robotCode": robot_code,
@@ -31,6 +32,10 @@ def build_heartbeat(
         "sequence": sequence,
         "sentAt": sent_at or utc_now_iso(),
     }
+    if capabilities is not None:
+        # RB-09: the system actions this robot performs (RESTART_STACK, REBOOT, SHUTDOWN).
+        payload["capabilities"] = list(capabilities)
+    return payload
 
 
 def build_telemetry(
@@ -49,6 +54,7 @@ def build_telemetry(
     error_code: Optional[str] = None,
     sent_at: Optional[str] = None,
     message_id: Optional[str] = None,
+    motion_hold: Optional[bool] = None,
 ) -> dict[str, Any]:
     pose_payload: Any
     if pose is None:
@@ -76,6 +82,8 @@ def build_telemetry(
         "angularVelocity": float(angular_velocity),
         "currentCommandId": current_command_id,
         "errorCode": error_code,
+        # RB-03: true while STOP/PAUSE holds every motion (null from callers that do not know).
+        "motionHold": motion_hold,
     }
 
 
