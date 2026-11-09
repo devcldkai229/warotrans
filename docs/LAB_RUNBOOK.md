@@ -8,6 +8,8 @@ Thứ tự cứng cho buổi lab. Không bỏ qua bước FAIL; ghi số đo và
 
 **Trước buổi lab:** bundle V004 đã được tạo lại nên fingerprint đổi. Deploy lên Pi và khởi động lại Host để hai bên nạp cùng bundle, nếu không mọi plan bị từ chối `FINGERPRINT_MISMATCH`. Planner cũng đổi nên Pi phải build lại `warotrans_lane_planner`.
 
+**Khi Host chạy bản có WH-01 và WH-08** (nhánh `feature/khai-*` của warotrans-system): TR nhiều thùng thành nhiều Job (`JobPlanning:MaxContainersPerJob`, mặc định 1), Job sau tự chạy khi Job trước kết thúc, sau khi người vận hành đã start Job đầu. Xác nhận lấy hàng làm thùng thành `IN_TRANSIT` và trừ tồn kệ nguồn. Job lỗi hoặc bị hủy khi hàng còn trên xe thì thùng vẫn `IN_TRANSIT` tới khi có người khai báo kệ (Containers → Recover). Bản này chưa chạy trên robot thật. Giữ bản cũ cho buổi lab đầu nếu không muốn đổi luồng.
+
 **Chỉ giao job sau khi readiness đạt.** Goal gửi lúc mask keep-out chưa tới thì plan đầu đi xuyên keep-out: backend từ chối đúng, gate đóng, robot đứng tới khi có plan sạch (khoảng 20 giây trên rig).
 
 ---

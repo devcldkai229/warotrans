@@ -66,6 +66,8 @@ class Host:
             "Traffic__RequireCoordinatorLease": "true",
             "Traffic__AuthorityRenewIntervalSec": "1.0",
             "Traffic__AuthorityTtlSec": "30",
+            # Most scenarios put several Containers on one Job; test_batch_flow.py uses the real limit of 1.
+            "JobPlanning__MaxContainersPerJob": "10",
             "Logging__Console__FormatterName": "simple",
             "Logging__Console__FormatterOptions__TimestampFormat": "HH:mm:ss.fff ",
             "Logging__LogLevel__Default": "Information",
