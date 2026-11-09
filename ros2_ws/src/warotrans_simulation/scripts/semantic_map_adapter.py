@@ -68,6 +68,10 @@ def world_to_pixel(
     return col, row
 
 
+# More than the footprint radius (hypot(0.18, 0.15) = 0.234 m).
+KEEPOUT_PLANNING_INFLATE_M = 0.25
+
+
 def rasterize_keepout(
     zones: Iterable[dict[str, Any]],
     *,
@@ -76,26 +80,56 @@ def rasterize_keepout(
     origin_x: float,
     origin_y: float,
     resolution: float,
+    footprint_inflate_m: float = 0.0,
 ) -> bytes:
+    """Raster KEEP_OUT, optionally grown so a planner that only checks the robot centre keeps the body out.
+
+    Cells whose centre lies within ``footprint_inflate_m`` of the polygon (inside or near an edge) are lethal.
+    """
     grid = bytearray([FREE]) * (width * height)
+    inflate = max(0.0, float(footprint_inflate_m))
     for z in zones:
         if str(z.get("zone_type") or z.get("zoneType") or "").upper() != "KEEP_OUT":
             continue
         if z.get("is_active") is False:
             continue
         for ring in polygon_rings(z.get("geometry")):
-            # Bounding box scan
             xs = [p[0] for p in ring]
             ys = [p[1] for p in ring]
-            c0, r0 = world_to_pixel(min(xs), max(ys), origin_x=origin_x, origin_y=origin_y, resolution=resolution, height=height)
-            c1, r1 = world_to_pixel(max(xs), min(ys), origin_x=origin_x, origin_y=origin_y, resolution=resolution, height=height)
+            pad = inflate + resolution
+            c0, r0 = world_to_pixel(
+                min(xs) - pad, max(ys) + pad,
+                origin_x=origin_x, origin_y=origin_y, resolution=resolution, height=height,
+            )
+            c1, r1 = world_to_pixel(
+                max(xs) + pad, min(ys) - pad,
+                origin_x=origin_x, origin_y=origin_y, resolution=resolution, height=height,
+            )
             for row in range(max(0, min(r0, r1)), min(height, max(r0, r1) + 1)):
                 for col in range(max(0, min(c0, c1)), min(width, max(c0, c1) + 1)):
                     wx = origin_x + (col + 0.5) * resolution
                     wy = origin_y + (height - row - 0.5) * resolution
-                    if point_in_ring(wx, wy, ring):
+                    if point_in_ring(wx, wy, ring) or (
+                        inflate > 0 and _point_to_ring_distance(wx, wy, ring) <= inflate
+                    ):
                         grid[row * width + col] = KEEPOUT_LETHAL
     return bytes(grid)
+
+
+def _point_to_ring_distance(x: float, y: float, ring: list[list[float]]) -> float:
+    best = float("inf")
+    n = len(ring)
+    if n < 2:
+        return best
+    for i in range(n):
+        x1, y1 = float(ring[i][0]), float(ring[i][1])
+        x2, y2 = float(ring[(i + 1) % n][0]), float(ring[(i + 1) % n][1])
+        vx, vy = x2 - x1, y2 - y1
+        c2 = vx * vx + vy * vy
+        t = 0.0 if c2 <= 0 else max(0.0, min(1.0, (vx * (x - x1) + vy * (y - y1)) / c2))
+        dx, dy = x - (x1 + t * vx), y - (y1 + t * vy)
+        best = min(best, math.hypot(dx, dy))
+    return best
 
 
 def rasterize_speed(
@@ -125,6 +159,8 @@ def rasterize_speed(
         lim = float(raw)
         if lim <= 0:
             continue
+        # Zone speed is a ceiling relative to the robot's usual cruise — never raise RPP target.
+        lim = min(lim, float(default_limit_mps))
         for ring in polygon_rings(z.get("geometry")):
             xs = [p[0] for p in ring]
             ys = [p[1] for p in ring]
@@ -460,20 +496,47 @@ def export_from_snapshot(
     edges = snap.get("edges") or []
     endpoints = snap.get("endpoints") or []
 
+    # keepout: as drawn, for the controller, which checks the footprint itself.
     keepout_px = rasterize_keepout(
         zones, width=width, height=height, origin_x=origin_x, origin_y=origin_y, resolution=resolution
     )
+    # keepout_planning: for the planner, which checks the centre only. Beyond the footprint radius (0.234 m), no pose
+    # of a planned path can touch the zone at any heading. Lanes beside MAP-ONE-V004's strip leave room for this.
+    keepout_planning_px = rasterize_keepout(
+        zones,
+        width=width,
+        height=height,
+        origin_x=origin_x,
+        origin_y=origin_y,
+        resolution=resolution,
+        footprint_inflate_m=KEEPOUT_PLANNING_INFLATE_M,
+    )
+    # Cap SPEED masks at usual cruise (0.10 m/s) so zone limits never raise Nav2 desired speed.
     speed_px = rasterize_speed(
-        zones, width=width, height=height, origin_x=origin_x, origin_y=origin_y, resolution=resolution
+        zones,
+        width=width,
+        height=height,
+        origin_x=origin_x,
+        origin_y=origin_y,
+        resolution=resolution,
+        default_limit_mps=0.10,
     )
     keepout_pgm = out_dir / "keepout.pgm"
     speed_pgm = out_dir / "speed.pgm"
     write_pgm(keepout_pgm, width, height, keepout_px)
+    write_pgm(out_dir / "keepout_planning.pgm", width, height, keepout_planning_px)
     write_pgm(speed_pgm, width, height, speed_px)
     origin = [origin_x, origin_y, 0.0]
     write_mask_yaml(
         out_dir / "keepout.yaml",
         image="keepout.pgm",
+        resolution=resolution,
+        origin=origin,
+        mode="trinary",
+    )
+    write_mask_yaml(
+        out_dir / "keepout_planning.yaml",
+        image="keepout_planning.pgm",
         resolution=resolution,
         origin=origin,
         mode="trinary",
@@ -515,11 +578,25 @@ def export_from_snapshot(
         for e in sorted(endpoints, key=lambda z: str(z.get("code") or ""))
         if e.get("code")
     ]
+    # Geometry of every zone kind: moving a zone without renaming it must change the fingerprint.
+    zone_geometry = {
+        kind: [{"code": z["code"], "rings": z["rings"]} for z in export_zone_list(zones, kind)]
+        for kind in ("KEEP_OUT", "SPEED", "NO_STOP", "SINGLE_OCCUPANCY")
+    }
+    keepout_mask_sha = hashlib.sha256(keepout_px).hexdigest()
+    keepout_planning_mask_sha = hashlib.sha256(keepout_planning_px).hexdigest()
+    speed_mask_sha = hashlib.sha256(speed_px).hexdigest()
     fp = semantic_fingerprint(
         {
             "occupancySha256": occupancy_sha256,
             "lanes": lanes,
             "keepoutCodes": [z["code"] for z in export_zone_list(zones, "KEEP_OUT")],
+            "zoneGeometry": zone_geometry,
+            "keepoutMaskSha256": keepout_mask_sha,
+            "keepoutPlanningMaskSha256": keepout_planning_mask_sha,
+            "speedMaskSha256": speed_mask_sha,
+            "keepoutPlanningInflateM": KEEPOUT_PLANNING_INFLATE_M,
+            "speedCeilingMps": 0.10,
             "speed": [
                 {"code": z["code"], "max_speed": z["max_speed"]} for z in export_zone_list(zones, "SPEED")
             ],
@@ -546,6 +623,7 @@ def export_from_snapshot(
             "stage": 2,
             "policies": {
                 "keepout": "keepout.yaml",
+                "keepout_planning": "keepout_planning.yaml",
                 "keepout_zones": "keepout.json",
                 "speed": "speed.yaml",
                 "lanes": "lanes.json",

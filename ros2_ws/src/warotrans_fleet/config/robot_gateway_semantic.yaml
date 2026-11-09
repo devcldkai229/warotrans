@@ -34,8 +34,8 @@ robot_gateway:
     # gate. Off while the robot is under traffic control.
     teleop_enabled: false
     cmd_vel_topic: "cmd_vel_safe"
-    # HUMAN_CONFIRM button (handover confirm; NOT an E-stop).
-    human_confirm_enabled: false
+    # HUMAN_CONFIRM button (handover confirm; NOT an E-stop). Default on for lab TR→button→COMPLETED.
+    human_confirm_enabled: true
     human_confirm_gpiochip: 4
     human_confirm_gpio_pin: 12
     human_confirm_active_low: true

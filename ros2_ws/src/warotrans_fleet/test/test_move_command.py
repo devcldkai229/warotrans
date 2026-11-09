@@ -66,6 +66,31 @@ def test_arrival_error_is_logged_and_does_not_change_the_result():
     assert h.recorder.results[0]["outcome"] == "SUCCEEDED"
 
 
+def test_arrival_error_is_measured_after_the_robot_settled():
+    pose = {"yaw": 1.5708 + 0.5}  # still turning when the goal checker passes
+    h = Harness(arrival_pose=lambda: (4.25, 2.10, pose["yaw"]), arrival_settle_sec=1.0)
+    h.send(navigate(CMD))
+    h.nav.accept()
+    h.nav.finish(STATUS_SUCCEEDED)
+    assert h.recorder.results == []
+    pose["yaw"] = 1.5708 + 0.1
+    h.tick(1.0)
+    result = h.recorder.results[0]
+    assert result["outcome"] == "SUCCEEDED"
+    assert result["result"]["arrivalErrorYawRad"] == pytest.approx(0.1, abs=1e-3)
+
+
+def test_cancel_while_settling_is_ineffective_and_never_reaches_nav2():
+    h = Harness(arrival_settle_sec=1.0)
+    h.send(navigate(CMD))
+    h.nav.accept()
+    h.nav.finish(STATUS_SUCCEEDED)
+    h.send(cancel(CMD))
+    assert h.recorder.kinds().count("nav2_cancel") == 0
+    h.tick(1.0)
+    assert [r["outcome"] for r in h.recorder.results] == ["SUCCEEDED", "FAILED"]
+
+
 def test_arrival_pose_failure_never_affects_the_result():
     def boom():
         raise RuntimeError("tf down")
@@ -94,17 +119,22 @@ def test_goal_rejected_by_nav2_results_failed():
     assert h.move.navigation_status == "FAILED"
 
 
-# 3. Nav2 execution failure → RESULT FAILED
-def test_nav2_aborted_results_navigation_failed():
-    h = Harness()
-    h.send(navigate(CMD))
+# 3. Obstacle abort within wait window → replan; past window → NAVIGATION_BLOCKED
+def test_nav2_obstacle_abort_replans_then_reports_navigation_blocked():
+    h = Harness(obstacle_wait_sec=60.0)
+    h.send(navigate(CMD, timeoutSeconds=300))
     h.nav.accept()
+    h.nav.feedback(2.0)
     h.nav.finish(STATUS_ABORTED, error_code=104, error_message="No valid path")
+    assert h.recorder.results == []
+    assert len(h.nav.goals) == 2  # replan
 
+    h.nav.accept()
+    h.tick(61.0)  # no further progress since last feedback
+    h.nav.finish(STATUS_ABORTED, error_code=104, error_message="No valid path")
     result = h.recorder.results[0]
     assert result["outcome"] == "FAILED"
-    assert result["errorCode"] == "NAVIGATION_FAILED"
-    assert "No valid path" in result["errorMessage"]
+    assert result["errorCode"] == "NAVIGATION_BLOCKED"
     assert result["result"]["nav2ErrorCode"] == 104
 
 
@@ -388,21 +418,96 @@ def test_semantic_abort_while_held_for_traffic_resends_the_goal_within_the_timeo
     assert len(h.nav.goals) == 2  # same goal re-sent
     assert h.move.active_command_id == CMD
 
-    # Released by traffic, then Nav2 really fails: reported.
+    # Released by traffic; obstacle abort still waits/replans, then BLOCKED after the window.
     held["value"] = False
     h.nav.accept()
+    h.tick(61.0)
     h.nav.finish(STATUS_ABORTED, error_code=104, error_message="No valid path")
-    assert h.recorder.results[0]["errorCode"] == "NAVIGATION_FAILED"
+    assert h.recorder.results[0]["errorCode"] == "NAVIGATION_BLOCKED"
 
 
-def test_semantic_planner_failure_is_reported_even_while_held_for_traffic():
-    h = Harness(traffic_mode="semantic_active", traffic_hold_active=lambda: True)
-    h.send(navigate(CMD, timeoutSeconds=100))
+def test_a_long_traffic_hold_is_not_an_obstacle_block():
+    """Two robots: the follower waits at a single-occupancy zone far longer than the obstacle window."""
+    held = {"value": True}
+    h = Harness(traffic_mode="semantic_active", traffic_hold_active=lambda: held["value"], obstacle_wait_sec=60.0)
+    h.send(navigate(CMD, timeoutSeconds=900))
+    h.nav.accept()
+    h.nav.feedback(2.0)
+    for _ in range(6):
+        h.tick(20.0)
+        h.nav.finish(STATUS_ABORTED, error_code=105, error_message="Failed to make progress")
+        assert h.recorder.results == []
+        h.nav.accept()
+    assert len(h.nav.goals) == 7
+
+    # The hold ends: the 120 s spent waiting do not count, the robot gets a full window.
+    held["value"] = False
+    h.tick(30.0)
+    assert h.recorder.results == []
+    assert h.move.active_command_id == CMD
+
+
+def test_obstacle_window_ends_on_time_even_if_nav2_never_aborts():
+    """Nav2's recovery tree can run for minutes before it aborts: the 60 s limit must not wait for that."""
+    h = Harness(traffic_mode="semantic_active", traffic_hold_active=lambda: False, obstacle_wait_sec=60.0)
+    h.send(navigate(CMD, timeoutSeconds=900))
+    h.nav.accept()
+    h.nav.feedback(2.0)
+    h.tick(59.0)
+    assert h.recorder.kinds().count("nav2_cancel") == 0
+    h.tick(2.0)
+    assert h.recorder.kinds().count("nav2_cancel") == 1  # result only once Nav2 confirms
+    h.nav.finish(STATUS_CANCELED)
+    result = h.recorder.results[0]
+    assert result["outcome"] == "FAILED" and result["errorCode"] == "NAVIGATION_BLOCKED"
+
+
+def test_a_long_detour_is_progress_even_though_distance_remaining_went_up():
+    pose = {"xy": (0.0, 0.0)}
+    h = Harness(arrival_pose=lambda: (*pose["xy"], 0.0), obstacle_wait_sec=60.0)
+    h.send(navigate(CMD, timeoutSeconds=900))
+    h.nav.accept()
+    h.nav.feedback(2.0)
+    h.tick(1.0)
+    for i in range(1, 8):
+        h.nav.feedback(5.0)  # longer than the best so far: the replan went around
+        pose["xy"] = (0.3 * i, 0.0)
+        h.tick(20.0)
+    assert h.recorder.kinds().count("nav2_cancel") == 0 and h.recorder.results == []
+
+
+def test_no_feedback_at_all_still_ends_the_obstacle_retries():
+    """A goal re-sent after each planner abort must not restart the window."""
+    h = Harness(traffic_mode="semantic_active", traffic_hold_active=lambda: False, obstacle_wait_sec=60.0)
+    h.send(navigate(CMD))
+    for _ in range(4):
+        h.nav.accept()
+        h.tick(25.0)
+        h.nav.finish(STATUS_ABORTED, error_code=208, error_message="no path")
+    assert h.recorder.results[0]["errorCode"] == "NAVIGATION_BLOCKED"
+
+
+def test_rpp_collision_code_is_an_obstacle_block():
+    h = Harness(obstacle_wait_sec=60.0)
+    h.send(navigate(CMD, timeoutSeconds=300))
+    h.nav.accept()
+    h.nav.feedback(2.0)
+    h.nav.finish(STATUS_ABORTED, error_code=106, error_message="collision ahead")
+    assert h.recorder.results == [] and len(h.nav.goals) == 2
+
+
+def test_semantic_planner_failure_replans_within_obstacle_wait_then_blocks():
+    h = Harness(traffic_mode="semantic_active", traffic_hold_active=lambda: True, obstacle_wait_sec=60.0)
+    h.send(navigate(CMD, timeoutSeconds=300))
     h.nav.accept()
     h.nav.finish(STATUS_ABORTED, error_code=208, error_message="GridBased generated a empty path")
-    assert len(h.nav.goals) == 1  # not re-sent
+    assert len(h.nav.goals) == 2  # wait+replan
+    assert h.recorder.results == []
+    h.nav.accept()
+    h.tick(61.0)
+    h.nav.finish(STATUS_ABORTED, error_code=208, error_message="GridBased generated a empty path")
     result = h.recorder.results[0]
-    assert result["errorCode"] == "NAVIGATION_FAILED"
+    assert result["errorCode"] == "NAVIGATION_BLOCKED"
     assert "208" in result["errorMessage"]
 
 

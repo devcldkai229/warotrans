@@ -1,7 +1,7 @@
 """Frontend flow against the real backend, one robot: the exact API sequence of web/src/.../runOnRobot.ts queueAndStart.
 
 Create Transport Request → queue → start Job (no robot id: the backend picks) → robot runs the workflow → staff confirm.
-The robot is the motion-free simulator of this harness, but it follows REAL Nav2 paths of MAP-ONE-V002
+The robot is the motion-free simulator of this harness, but it follows REAL Nav2 paths of MAP-ONE-V004
 (real_nav2_paths.json) with the real reservation geometry, zones and lanes. Real robot: not involved, no command to it.
 """
 

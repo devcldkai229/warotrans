@@ -76,11 +76,12 @@ controller_server:
     general_goal_checker:
       stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.15       # TUNING: metres
+      # Endpoints ask for 0.08 m: the checker passes at the first pose inside this, and rig runs stop right at its edge.
+      xy_goal_tolerance: 0.07       # metres — lab may retune; was 0.15
       # 2026-10-16: RViz (WSL) gửi goal luôn có yaw = 0 (17/17 goal đo được) → robot quay tại chỗ
       # tới heading giả, open-loop vọt lố + đảo chiều liên tục. π = bỏ qua heading khi đến đích.
       # Đặt lại 0.25 khi cần heading thật (docking) và nguồn goal gửi yaw đúng.
-      yaw_goal_tolerance: 3.14      # TUNING: radians
+      yaw_goal_tolerance: 0.13      # radians (~7.4°) — below endpoint 0.14; was 3.14 (any yaw "ok")
 
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
@@ -352,7 +353,8 @@ global_costmap:
       keepout_filter:
         plugin: "nav2_costmap_2d::KeepoutFilter"
         enabled: false
-        filter_info_topic: "/keepout_costmap_filter_info"
+        # Grown by the footprint: this costmap serves the planner, which only checks the robot centre.
+        filter_info_topic: "/keepout_planning_costmap_filter_info"
       speed_filter:
         plugin: "nav2_costmap_2d::SpeedFilter"
         enabled: false
@@ -376,6 +378,22 @@ keepout_costmap_filter_info_server:
     type: 0
     filter_info_topic: "/keepout_costmap_filter_info"
     mask_topic: "/keepout_filter_mask"
+    base: 0.0
+    multiplier: 1.0
+
+keepout_planning_filter_mask_server:
+  ros__parameters:
+    use_sim_time: false
+    frame_id: map
+    topic_name: "/keepout_planning_filter_mask"
+    # yaml_filename set by launch
+
+keepout_planning_costmap_filter_info_server:
+  ros__parameters:
+    use_sim_time: false
+    type: 0
+    filter_info_topic: "/keepout_planning_costmap_filter_info"
+    mask_topic: "/keepout_planning_filter_mask"
     base: 0.0
     multiplier: 1.0
 

@@ -48,6 +48,8 @@ def build_command_stack(
     traffic_client: Optional[object] = None,
     expected_graph_hash: Optional[str] = None,
     traffic_hold_active: Callable[[], bool] = lambda: False,
+    obstacle_wait_sec: float = 60.0,
+    arrival_settle_sec: float = 0.0,
     arrival_pose: Callable[[], Optional[tuple[float, float, float]]] = lambda: None,
 ) -> CommandStack:
     lock = threading.RLock()
@@ -76,6 +78,8 @@ def build_command_stack(
         traffic_client=traffic_client,  # type: ignore[arg-type]
         expected_graph_hash=expected_graph_hash,
         traffic_hold_active=traffic_hold_active,
+        obstacle_wait_sec=obstacle_wait_sec,
+        arrival_settle_sec=arrival_settle_sec,
         arrival_pose=arrival_pose,
     )
     router.register(move)

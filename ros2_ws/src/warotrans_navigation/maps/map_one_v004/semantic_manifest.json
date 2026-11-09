@@ -21,11 +21,12 @@
   "target": "real_robot",
   "sourceSnapshot": "MAP-ONE-V004",
   "exportedAt": "2026-11-07T08:24:10.180336+00:00",
-  "semanticMapFingerprint": "2f3e403cd8ce50eada9e2d2a114cd0238b1c42049f4d8e1f8ff30a2a8fb8a52d",
+  "semanticMapFingerprint": "d57134a17d94218acb7a48cc55eade0cb44315f59b1956a30631e9fe9dbc1f14",
   "plannerId": "warotrans_lane_planner::LaneAwareNavfn",
   "stage": 2,
   "policies": {
     "keepout": "keepout.yaml",
+    "keepout_planning": "keepout_planning.yaml",
     "keepout_zones": "keepout.json",
     "speed": "speed.yaml",
     "lanes": "lanes.json",

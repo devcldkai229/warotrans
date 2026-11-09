@@ -62,6 +62,9 @@ private:
   /// Cost of the straight segment a-b; false if it breaks a lane direction or enters a cell above max_cell_cost.
   bool segmentCost(
     const WorldPoint & a, const WorldPoint & b, unsigned char max_cell_cost, double & total) const;
+  /// True when the segment runs along a lane away from its centre: costs alone allow that, since the wall inflation
+  /// on one side of a lane can pay for the offset, and on opposite lanes it brings the two paths together.
+  bool shortcutLeavesLaneCentre(const WorldPoint & a, const WorldPoint & b) const;
   /// Replaces grid staircases with straight segments that are no worse than the cells they replace.
   std::vector<WorldPoint> simplifyPath(const std::vector<WorldPoint> & points) const;
 
@@ -76,6 +79,10 @@ private:
   double lane_prefer_factor_{0.15};
   /// Extra cost at the corridor edge relative to the lane centre line: 1 + w * (d / half_width)^2.
   double lane_center_weight_{3.0};
+  double start_escape_radius_{0.30};
+  /// Largest offset from the lane centre of a shortcut along a lane, away from its ends. Above half a costmap cell,
+  /// or a centre line between two cells would forbid every shortcut.
+  double lane_shortcut_max_offset_{0.035};
   /// Cost threshold that blocks *traversal* (Nav2 LETHAL=254). INSCRIBED is soft-cost only.
   int lethal_cost_{254};
   /// Cost threshold that blocks *start/goal acceptance* (Nav2 LETHAL=254).

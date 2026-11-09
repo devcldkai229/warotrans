@@ -76,7 +76,7 @@ class InteractionController:
 
     def handle_request(self, req: InteractionRequest) -> None:
         if self.active is not None and self.active.job_step_id == req.job_step_id:
-            # Idempotent re-arm of the same step.
+            # Idempotent re-arm of the same step (also after gateway restart + backend re-send).
             self.active = ActiveInteraction(
                 job_id=req.job_id,
                 job_step_id=req.job_step_id,

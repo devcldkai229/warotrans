@@ -7,7 +7,9 @@ PI="${PI:-waro@warotrans.local}"
 RUN=""
 BUILD=1
 DRY=0
-DELETE=1
+# Default: do NOT wipe remote source (--delete-after only with --delete). Safer for lab Pi.
+DELETE=0
+SYNC_CLOCK=1
 
 usage(){
   cat <<USAGE
@@ -16,10 +18,12 @@ Usage: ./tools/deploy.sh [options]
   --run NAME            run warotrans_bringup NAME.launch.py after build
   --no-build            sync only
   --dry-run             show rsync changes only; no backup/build/run
-  --no-delete           do not delete stale files on remote source
+  --no-delete           (default) do not delete stale files on remote source
+  --delete              rsync --delete-after (destructive to remote ros2_ws/src extras)
+  --no-sync-clock       skip setting Pi UTC from this machine
 
-Default deploy creates a timestamped remote source backup, then mirrors ros2_ws/src.
-Runtime data outside ros2_ws/src is untouched.
+Default deploy creates a timestamped remote source backup, then mirrors ros2_ws/src
+without deleting remote-only files. Runtime data outside ros2_ws/src is untouched.
 USAGE
 }
 
@@ -30,6 +34,8 @@ while [[ $# -gt 0 ]]; do
     --no-build) BUILD=0; shift;;
     --dry-run) DRY=1; shift;;
     --no-delete) DELETE=0; shift;;
+    --delete) DELETE=1; shift;;
+    --no-sync-clock) SYNC_CLOCK=0; shift;;
     -h|--help) usage; exit 0;;
     *) echo "Unknown option: $1"; usage; exit 2;;
   esac
@@ -60,8 +66,14 @@ if [[ $DRY -eq 1 ]]; then
 fi
 
 # Copy operational tools; these do not modify runtime data by themselves.
-scp -q tools/doctor.sh tools/check.sh tools/rollback_source.sh tools/real_robot_readiness.py tools/nav_stuck_probe.py tools/set_initial_pose.py tools/pi_run_semantic.sh "${PI}:~/warotrans_tools/"
+scp -q tools/doctor.sh tools/check.sh tools/rollback_source.sh tools/real_robot_readiness.py tools/nav_stuck_probe.py tools/set_initial_pose.py tools/pi_run_semantic.sh tools/measure_speed.py "${PI}:~/warotrans_tools/"
 ssh "$PI" 'chmod +x ~/warotrans_tools/pi_run_semantic.sh ~/warotrans_tools/doctor.sh ~/warotrans_tools/check.sh ~/warotrans_tools/rollback_source.sh'
+
+if [[ $SYNC_CLOCK -eq 1 ]]; then
+  echo "==> Sync Pi clock to this machine (UTC)"
+  # Grant TTL / MQTT expiresAt break when the Pi clock is minutes off the backend.
+  ssh -t "$PI" "sudo date -u -s @$(date +%s)" || echo "[WARN] clock sync failed (need passwordless sudo date)"
+fi
 
 if [[ $BUILD -eq 1 ]]; then
   echo "==> Build on Pi"

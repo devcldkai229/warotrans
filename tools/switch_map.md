@@ -1,8 +1,8 @@
 # Move the real robot to a newly published map
 
 Semantic traffic ties everything to one bundle: the backend (`Traffic:SemanticMapDirectory`) and the robot gateway
-(`semantic_manifest`) must load the same `semantic_manifest.json`. Do these in order; `<MAP>` is e.g. `MAP-ONE-V003`,
-`<slug>` e.g. `map_one_v003`. Steps 1-2 only read the database.
+(`semantic_manifest`) must load the same `semantic_manifest.json`. Do these in order; `<MAP>` is e.g. `MAP-ONE-V004`,
+`<slug>` e.g. `map_one_v004`. Steps 1-2 only read the database. Lab baseline is **MAP-ONE-V004**.
 
 1. Publish the map on the web, then export a snapshot (from `warotrans-system`):
    `powershell -ExecutionPolicy Bypass -File samples/maps/export-map-snapshot.ps1 -MapCode <MAP>`

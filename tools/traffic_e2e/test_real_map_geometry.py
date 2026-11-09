@@ -1,7 +1,7 @@
-"""Reservation, footprint, lane and zone checks on MAP-ONE-V002 with REAL Nav2 paths (real_nav2_paths.json).
+"""Reservation, footprint, lane and zone checks on MAP-ONE-V004 with REAL Nav2 paths (real_nav2_paths.json).
 
-The fixture is produced by generate_nav2_paths.py on the Pi: planner_server with LaneAwareNavfn, the V002 map and its
-lanes. These are planner outputs, not driven trajectories. No backend or broker is needed; the geometry is the code the
+The fixture holds the first plan of each of the 90 legs of an all-pairs rig run: planner_server with LaneAwareNavfn, the
+V004 bundle and its lanes. These are planner outputs, not driven trajectories. No backend or broker is needed; the geometry is the code the
 robot gateway runs, which is pinned to the backend by the shared vectors (SemanticCellsParityTests).
 """
 
@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROBOT_REPO / "ros2_ws" / "src" / "warotrans_fleet"))
 
 from warotrans_fleet.semantic_traffic_client import SemanticGeometry, collect_resources, footprint_resources  # noqa: E402
 
-BUNDLE = ROBOT_REPO / "ros2_ws" / "src" / "warotrans_navigation" / "maps" / "map_one_v002"
+BUNDLE = ROBOT_REPO / "ros2_ws" / "src" / "warotrans_navigation" / "maps" / "map_one_v004"
 FIXTURE = json.loads((HERE / "real_nav2_paths.json").read_text(encoding="utf-8"))
 ZONES = json.loads((BUNDLE / "single_occupancy.json").read_text(encoding="utf-8"))["zones"]
 LANES = json.loads((BUNDLE / "lanes.json").read_text(encoding="utf-8"))
@@ -70,7 +70,7 @@ def footprint_clearance_hits(x: float, y: float, yaw: float) -> int:
 
 def test_every_endpoint_pair_has_a_real_path():
     assert FIXTURE["source"] == "nav2"
-    assert len(PATHS) == 132
+    assert len(PATHS) == 90
     assert [p for p in PATHS if not p["ok"]] == []
 
 
@@ -112,7 +112,8 @@ def test_real_paths_do_not_drive_against_a_one_way_lane():
     assert any(one_way for _, one_way, *_ in segments), "no ONE_WAY lane read from lanes.json"
     against = {}
     for p in PATHS:
-        for (x0, y0, _), (x1, y1, _) in zip(p["poses"], p["poses"][1:]):
+        # From the second pose: the first step joins the start pose to the grid, up to a cell long, and the search never saw it.
+        for (x0, y0, _), (x1, y1, _) in zip(p["poses"][1:], p["poses"][2:]):
             dx, dy = x1 - x0, y1 - y0
             n = math.hypot(dx, dy)
             if n < 1e-3:
@@ -160,7 +161,7 @@ def test_workflow_routes_use_zones_as_expected_and_conflict_with_a_robot_on_them
 @pytest.mark.parametrize("a,b", [("EP-PARKING-A", "EP-PARKING-B")])
 def test_report_parked_endpoints_spacing(a, b, capsys):
     """Not a pass/fail of safety: documents which endpoints two robots cannot occupy at once (multi-robot planning)."""
-    snap = json.loads((ROBOT_REPO.parent / "warotrans-system" / "samples" / "maps" / "MAP-ONE-V002" / "snapshot.json")
+    snap = json.loads((ROBOT_REPO.parent / "warotrans-system" / "samples" / "maps" / "MAP-ONE-V004" / "snapshot.json")
                       .read_text(encoding="utf-8"))
     eps = {e["code"]: e for e in snap["endpoints"]}
     seat = {c: footprint_resources(e["x"], e["y"], GEOM.reserve_radius, ZONES, GEOM.cell_size) for c, e in eps.items()}
@@ -168,5 +169,5 @@ def test_report_parked_endpoints_spacing(a, b, capsys):
     (HERE / "artifacts").mkdir(exist_ok=True)
     (HERE / "artifacts" / "endpoint_conflicts.json").write_text(json.dumps(clash, indent=1), encoding="utf-8")
     with capsys.disabled():
-        print(f"\n[info] endpoint pairs two parked robots cannot hold at once: {len(clash)} of 66")
+        print(f"\n[info] endpoint pairs two parked robots cannot hold at once: {len(clash)} of 45")
     assert a in eps and b in eps

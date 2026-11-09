@@ -4,7 +4,7 @@ The dev database is only READ (``SELECT ... jsonb_agg``). Rows are written to th
 database whose name contains "test" (integration tests TRUNCATE it). Re-runnable: rows with the same ids are
 replaced. No map asset files are written — Semantic traffic reads the bundle on disk, not the PGM.
 
-    python tools/traffic_e2e/seed_test_db.py --map-code MAP-ONE-V002 --workflow-code INBOUND
+    python tools/traffic_e2e/seed_test_db.py --map-code MAP-ONE-V004 --workflow-code INBOUND
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source-db", default="warotrans")
     ap.add_argument("--target-db", default="warotrans_test")
-    ap.add_argument("--map-code", default="MAP-ONE-V002")
+    ap.add_argument("--map-code", default="MAP-ONE-V004")
     ap.add_argument("--workflow-code", default="INBOUND")
     ap.add_argument("--cleanup-e2e-robots", action="store_true",
                     help="only delete the harness's own E2E-* robots (and their commands) from the target, then exit")

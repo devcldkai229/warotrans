@@ -192,14 +192,23 @@ def _setup(context, *args, **kwargs):
                 f"speed mask yaml not found: {speed_mask} "
                 "(run tools/warotrans-ensure-filter-masks.sh)"
             )
+        # The planner reasons about the robot centre, so it needs keep-out grown by the footprint. The controller checks
+        # the footprint itself, so it needs keep-out as drawn: growing that too counts the body twice and RPP reports
+        # "collision ahead" on lanes beside the zone. Bundles without a planning mask use the same mask for both.
+        planning_mask = os.path.join(os.path.dirname(keepout_mask), "keepout_planning.yaml")
+        if not os.path.isfile(planning_mask):
+            planning_mask = keepout_mask
         filter_lifecycle_nodes = [
             "keepout_filter_mask_server",
             "keepout_costmap_filter_info_server",
+            "keepout_planning_filter_mask_server",
+            "keepout_planning_costmap_filter_info_server",
             "speed_filter_mask_server",
             "speed_costmap_filter_info_server",
         ]
         filter_prefix_actions = [
             LogInfo(msg=["[warotrans_navigation] keepout_mask=", keepout_mask]),
+            LogInfo(msg=["[warotrans_navigation] keepout_planning_mask=", planning_mask]),
             LogInfo(msg=["[warotrans_navigation] speed_mask=", speed_mask]),
             LogInfo(msg=["[warotrans_navigation] starting costmap filter servers before Nav2"]),
             Node(
@@ -218,6 +227,26 @@ def _setup(context, *args, **kwargs):
                 package="nav2_map_server",
                 executable="costmap_filter_info_server",
                 name="keepout_costmap_filter_info_server",
+                output="screen",
+                parameters=common_params,
+                remappings=remappings,
+            ),
+            Node(
+                package="nav2_map_server",
+                executable="map_server",
+                name="keepout_planning_filter_mask_server",
+                output="screen",
+                parameters=[
+                    _namespaced_param_file(params_path),
+                    {"use_sim_time": use_sim_time},
+                    {"yaml_filename": planning_mask},
+                ],
+                remappings=remappings,
+            ),
+            Node(
+                package="nav2_map_server",
+                executable="costmap_filter_info_server",
+                name="keepout_planning_costmap_filter_info_server",
                 output="screen",
                 parameters=common_params,
                 remappings=remappings,
