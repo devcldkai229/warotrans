@@ -41,6 +41,7 @@ from warotrans_fleet.interaction_contract import (
 )
 from warotrans_fleet.interaction_controller import InteractionController
 from warotrans_fleet.amcl_readiness import AmclReadiness
+from warotrans_fleet.battery_telemetry import battery_fields
 from warotrans_fleet.localization_hysteresis import LocalizationHysteresis
 from warotrans_fleet.mqtt_publisher import ReconnectingMqttPublisher, default_paho_factory
 from warotrans_fleet.nav2_status_tracker import Nav2StatusTracker
@@ -50,6 +51,7 @@ from warotrans_fleet.payload_builder import build_heartbeat, build_telemetry
 from warotrans_fleet.sequence import SequenceClock
 from warotrans_fleet.teleop import TeleopController
 from warotrans_fleet.transforms import quaternion_to_yaw
+from warotrans_msgs.msg import BatteryEstimate
 
 
 def _env_or(param_value: str, env_name: str) -> str:
@@ -109,8 +111,12 @@ class RobotGatewayNode(Node):
         self.declare_parameter("terminal_status_hold_sec", 3.0)
         self.declare_parameter("command_tick_hz", 5.0)
         self.declare_parameter("command_ledger_size", 500)
-        # Robot has no battery sensor yet → telemetry sends null. Simulation only: a fixed value
-        # (0..100) so backend CHECK.BATTERY_MIN can be exercised. < 0 = disabled (real robot).
+        # Battery: warotrans_hardware battery_monitor_node (voltage-only SOC) → /battery/estimate.
+        # No fresh VOLTAGE_ONLY estimate → batteryPercent null + UNAVAILABLE (never 0).
+        self.declare_parameter("battery_estimate_topic", "/battery/estimate")
+        self.declare_parameter("battery_estimate_stale_sec", 3.0)
+        # Simulation only: a fixed value (0..100, mode SIMULATED) so backend CHECK.BATTERY_MIN can be
+        # exercised. < 0 = disabled (real robot, and the sim when battery_sim feeds the real estimator).
         self.declare_parameter("simulated_battery_percent", -1.0)
         # Manual drive (MQTT `teleop` topic → /cmd_vel). Limits default to the real robot's provisional
         # motor limits (calibration.yaml); the simulation overrides them.
@@ -177,7 +183,11 @@ class RobotGatewayNode(Node):
         self._base_frame = self._str_param("base_frame")
         self._max_transform_age = self._float_param("max_transform_age_sec")
         simulated_battery = self._float_param("simulated_battery_percent")
-        self._battery_percent = min(simulated_battery, 100.0) if simulated_battery >= 0.0 else None
+        self._simulated_battery = min(simulated_battery, 100.0) if simulated_battery >= 0.0 else None
+        self._battery_stale_sec = self._float_param("battery_estimate_stale_sec")
+        self._battery_estimate: Optional[BatteryEstimate] = None
+        self._battery_estimate_at: Optional[float] = None  # time.monotonic() of receipt
+        self._battery_measured_at: Optional[str] = None
         # Unique per process — reused client_id after unclean kill causes broker
         # session takeover (endless disconnect / zero grants / gate stuck closed).
         base_client_id = self._str_param("mqtt_client_id").strip() or "warotrans-robot-gateway"
@@ -211,6 +221,9 @@ class RobotGatewayNode(Node):
         odom_topic = self._str_param("odom_topic")
         amcl_topic = self._str_param("amcl_pose_topic")
         self.create_subscription(Odometry, odom_topic, self._on_odom, 10)
+        self.create_subscription(
+            BatteryEstimate, self._str_param("battery_estimate_topic"), self._on_battery_estimate, 10
+        )
         self._amcl_readiness: Optional[AmclReadiness] = None
         self._amcl_block_reason: Optional[str] = None
         if bool(self.get_parameter("require_amcl_converged").get_parameter_value().bool_value):
@@ -1090,6 +1103,21 @@ class RobotGatewayNode(Node):
             return nav_state.NAVIGATING
         return status
 
+    def _on_battery_estimate(self, msg: BatteryEstimate) -> None:
+        self._battery_estimate = msg
+        self._battery_estimate_at = time.monotonic()
+        self._battery_measured_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+    def _battery_fields(self) -> dict:
+        age = None if self._battery_estimate_at is None else time.monotonic() - self._battery_estimate_at
+        return battery_fields(
+            simulated_percent=self._simulated_battery,
+            estimate=self._battery_estimate,
+            estimate_age_s=age,
+            stale_after_s=self._battery_stale_sec,
+            measured_at=self._battery_measured_at,
+        )
+
     def _on_telemetry_timer(self) -> None:
         pose, localization_status = self._lookup_map_pose()
         self._last_localization = localization_status
@@ -1103,7 +1131,7 @@ class RobotGatewayNode(Node):
             sequence=seq,
             map_version_code=self._map_version_code,
             pose=pose,
-            battery_percent=self._battery_percent,
+            battery_percent=None,
             navigation_status=self._navigation_status(),
             localization_status=localization_status,
             linear_velocity=self._lin_vel,
@@ -1111,6 +1139,7 @@ class RobotGatewayNode(Node):
             current_command_id=self._commands.move.active_command_id,
             error_code=None,
             motion_hold=self._motion_hold.held,
+            battery=self._battery_fields(),
         )
         self.mqtt.publish(self.topic("telemetry"), payload)
 

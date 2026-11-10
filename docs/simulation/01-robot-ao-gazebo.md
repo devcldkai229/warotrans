@@ -144,7 +144,7 @@ Chưa kiểm bằng mắt cửa sổ Gazebo GUI. Bạn chạy `run-sim.sh` để
 ## 8. Giới hạn đã biết
 
 - Robot ảo là **4 bánh skid-steer** giống khung thật (wheelbase 0.146 m, bánh R≈0.0328 m, `wheel_separation` hiệu dụng 0.4535 m lấy từ `calibration.yaml`). Độ trượt khi quay phụ thuộc ma sát Gazebo (`mu2 = 0.4`), nên **không** dùng sim để hiệu chỉnh bánh/PID.
-- Pin: telemetry `batteryPercent = null` (robot thật cũng chưa có cảm biến pin). Bước `BATTERY_MIN` ở GĐ 3 cần xử lý null.
+- Pin: mặc định sim gửi giá trị cố định `simulated_battery_percent` (87/90, mode `SIMULATED`). `battery_sim:=true` thay bằng pin giả lập điện áp chạy qua đúng `battery_monitor_node` thật (mode `VOLTAGE_ONLY`). Robot thật chưa lắp module nên gửi `null` (`UNAVAILABLE`); backend coi là Unknown, không bao giờ 0 %.
 - Mỗi lần chạy, robot luôn spawn ở PARK. Muốn đổi thì sửa `spawn` trong layout.
 
 ## 9. GĐ 2 (backend nhận robot ảo) — XONG, xem backend repo `docs/simulation/02-backend-nhan-robot-ao.md`

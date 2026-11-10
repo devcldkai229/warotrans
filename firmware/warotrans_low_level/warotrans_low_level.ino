@@ -54,6 +54,18 @@ constexpr uint32_t serial_baud = 921600;
 constexpr uint32_t report_period_ms = 20;
 constexpr uint32_t command_watchdog_ms = 300;
 
+// Battery voltage: 0-25 V divider module (nominal 30k/7.5k, ~1/5) -> 1 kOhm series -> GPIO 1 (ADC1_CH0),
+// 100 nF to GND at the pin. NOT INSTALLED YET: keep 0 until the module is wired, otherwise the floating pin
+// would be reported. Wiring / calibration: docs/hardware/battery-voltage-sensor.md.
+// Output: "B <avg_pin_millivolts> <sample_count> <millis>" every 200 ms. Conversion to pack volts and SOC
+// is done on the Pi (warotrans_hardware battery_monitor_node), so calibration never needs a reflash.
+#ifndef BATTERY_ADC_ENABLED
+#define BATTERY_ADC_ENABLED 0
+#endif
+constexpr uint8_t battery_adc_pin = 1;
+constexpr uint32_t battery_sample_period_ms = 5;
+constexpr uint32_t battery_report_period_ms = 200;
+
 // TUNING START VALUE. Verify against the actual MDD10A and motor setup.
 constexpr uint32_t pwm_frequency_hz = 5000;
 constexpr uint8_t pwm_resolution_bits = 8;
@@ -689,6 +701,48 @@ void report_telemetry(uint32_t now) {
                 static_cast<unsigned long>(now));
 }
 
+#if BATTERY_ADC_ENABLED
+uint32_t battery_mv_sum = 0;
+uint16_t battery_sample_count = 0;
+uint32_t next_battery_sample_ms = 0;
+uint32_t next_battery_report_ms = 0;
+
+void setup_battery_adc(uint32_t now) {
+  analogReadResolution(12);
+  // 11 dB (= 12 dB in IDF 5): ~0-3.1 V at the pin; a full 12.6 V pack reads ~2.52 V.
+  analogSetPinAttenuation(battery_adc_pin, ADC_11db);
+  next_battery_sample_ms = now + battery_sample_period_ms;
+  next_battery_report_ms = now + battery_report_period_ms;
+}
+
+// One eFuse-calibrated read per call at most every 5 ms: keeps loop() responsive for commands.
+void sample_battery(uint32_t now) {
+  if (static_cast<int32_t>(now - next_battery_sample_ms) < 0) {
+    return;
+  }
+  next_battery_sample_ms = now + battery_sample_period_ms;
+  battery_mv_sum += analogReadMilliVolts(battery_adc_pin);
+  ++battery_sample_count;
+}
+
+void report_battery(uint32_t now) {
+  if (static_cast<int32_t>(now - next_battery_report_ms) < 0) {
+    return;
+  }
+  next_battery_report_ms = now + battery_report_period_ms;
+  if (battery_sample_count == 0) {
+    return;
+  }
+  const uint32_t average_mv =
+      (battery_mv_sum + battery_sample_count / 2U) / battery_sample_count;
+  Serial.printf("B %lu %u %lu\n", static_cast<unsigned long>(average_mv),
+                static_cast<unsigned>(battery_sample_count),
+                static_cast<unsigned long>(now));
+  battery_mv_sum = 0;
+  battery_sample_count = 0;
+}
+#endif
+
 void setup() {
   // Drive PWM low before configuring the rest of the hardware.
   pinMode(left_pwm_pin, OUTPUT);
@@ -706,6 +760,9 @@ void setup() {
 
   Serial.begin(serial_baud);
   next_report_ms = millis() + report_period_ms;
+#if BATTERY_ADC_ENABLED
+  setup_battery_adc(millis());
+#endif
 }
 
 void loop() {
@@ -719,4 +776,8 @@ void loop() {
 
   process_serial_commands();
   report_telemetry(now);
+#if BATTERY_ADC_ENABLED
+  sample_battery(now);
+  report_battery(now);
+#endif
 }
