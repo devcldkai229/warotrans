@@ -1,7 +1,7 @@
-image: warotrans_remap_20261104_v2.pgm
+image: warotrans_lab_20261110.pgm
 mode: trinary
 resolution: 0.050
-origin: [-0.704, -0.443, 0]
+origin: [-0.554, -4.579, 0]
 negate: 0
 occupied_thresh: 0.65
 free_thresh: 0.196

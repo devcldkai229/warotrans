@@ -90,6 +90,7 @@ _OBSTACLE_PROGRESS_MOVE_M = 0.20
 _NAV2_PLANNER_ERROR_CODES = range(200, 300)
 
 _CANCEL_BY_BACKEND = "BACKEND"
+REASON_MOTION_HELD = "MOTION_HELD"
 _CANCEL_BY_TIMEOUT = "TIMEOUT"
 _CANCEL_BY_CORRIDOR = "CORRIDOR"
 _CANCEL_BY_GRANT_LOSS = "GRANT_LOSS"
@@ -157,12 +158,14 @@ class MoveCommandHandler:
         obstacle_wait_sec: float = 60.0,
         arrival_settle_sec: float = 0.0,
         arrival_pose: Callable[[], Optional[tuple[float, float, float]]] = lambda: None,
+        motion_hold_active: Callable[[], bool] = lambda: False,
     ) -> None:
         self._navigator = navigator
         self._arrival_pose = arrival_pose
         # semantic_active: the authority gate held the robot for traffic (no grant / outside reservation). Nav2's
         # progress checker then aborts the goal although nothing failed; such an abort re-sends the goal instead.
         self._traffic_hold_active = traffic_hold_active
+        self._motion_hold_active = motion_hold_active
         self._max_traffic_retries = int(max_traffic_retries)
         self._obstacle_wait_sec = float(obstacle_wait_sec)
         # The goal checker passes while the robot still coasts: the heading that counts is the one it stops at.
@@ -219,6 +222,9 @@ class MoveCommandHandler:
 
     def handle(self, command: CommandEnvelope, session: CommandSession) -> AckDecision:
         with self._lock:
+            # RB-03: after STOP nothing moves until RESUME, whoever asks.
+            if self._motion_hold_active():
+                raise CommandRejected(REASON_MOTION_HELD, "robot holds all motion after STOP; send RESUME first")
             if self._traffic_mode == "active" and self._traffic_client is not None and parse_authority is not None:
                 return self._handle_active(command, session)
 
@@ -383,6 +389,22 @@ class MoveCommandHandler:
                 elif violation == ERROR_GRANT_LOSS:
                     self._log.warning(f"[GrantLoss] commandId={move.command_id}; MQTT disconnect timeout")
                     self._request_cancel(move, _CANCEL_BY_GRANT_LOSS, None)
+
+    # ------------------------------------------------------------------ STOP (MotionHold)
+
+    def halt(self) -> Optional[str]:
+        """Cancels the running MOVE without a CANCEL command (STOP). Returns its command id, or None if idle."""
+        with self._lock:
+            if self._active_traffic_mode():
+                command_id = self._traffic_client.command_id  # type: ignore[union-attr]
+                if command_id:
+                    self._traffic_client.cancel_command(command_id)  # type: ignore[union-attr]
+                return command_id
+            move = self._active
+        if move is None:
+            return None
+        self._request_cancel(move, _CANCEL_BY_BACKEND, None)
+        return move.command_id
 
     # ------------------------------------------------------------------ CANCEL (từ CancelCommandHandler)
 

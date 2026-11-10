@@ -49,6 +49,7 @@ def build_telemetry(
     error_code: Optional[str] = None,
     sent_at: Optional[str] = None,
     message_id: Optional[str] = None,
+    motion_hold: Optional[bool] = None,
 ) -> dict[str, Any]:
     pose_payload: Any
     if pose is None:
@@ -76,6 +77,8 @@ def build_telemetry(
         "angularVelocity": float(angular_velocity),
         "currentCommandId": current_command_id,
         "errorCode": error_code,
+        # RB-03: the robot is the truth about whether it holds motion. Omitted (null) by callers that do not know.
+        "motionHold": motion_hold,
     }
 
 
