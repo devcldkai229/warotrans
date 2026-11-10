@@ -11,7 +11,7 @@ import math
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from warotrans_fleet import navigation_state as nav_state
 from warotrans_fleet.command_contract import (
@@ -24,6 +24,7 @@ from warotrans_fleet.command_contract import (
     ERROR_INTERNAL_ERROR,
     ERROR_NAV2_CANCEL_UNCONFIRMED,
     ERROR_NAV2_UNAVAILABLE,
+    ERROR_NAVIGATION_BLOCKED,
     ERROR_NAVIGATION_CANCELED,
     ERROR_NAVIGATION_FAILED,
     ERROR_NAVIGATION_TIMEOUT,
@@ -69,6 +70,7 @@ from warotrans_fleet.navigator import (
 _SENDING = "SENDING"  # đã gửi goal, chờ Nav2 accept/reject
 _ACTIVE = "ACTIVE"  # Nav2 đã accept, robot đang chạy
 _CANCELING = "CANCELING"  # đã gửi cancel_goal_async, chờ Nav2 kết thúc goal
+_SETTLING = "SETTLING"  # Nav2 đã xong; chờ robot đứng yên hẳn rồi mới đo sai số và báo RESULT
 
 # TrafficClient state → navigationStatus cho telemetry (IDLE → dùng state legacy).
 _TRAFFIC_NAV_STATUS = {
@@ -80,14 +82,19 @@ _TRAFFIC_NAV_STATUS = {
 }
 
 # Lý do cancel
-# nav2_msgs ComputePathToPose error codes. No path cannot be caused by the gate holding the robot, so a goal aborted
-# with one of these is a navigation failure even while a traffic hold is active.
+# nav2_msgs: controller (100–199) and planner (200–299). Obstacle / blocked path → wait+replan ≤60s, then PAUSED.
+# RPP "collision ahead" is NO_VALID_CONTROL (106), or PATIENCE_EXCEEDED (104) once failure_tolerance is used up.
+_NAV2_CONTROLLER_BLOCK_CODES = frozenset({104, 105, 106})  # PATIENCE_EXCEEDED, FAILED_TO_MAKE_PROGRESS, NO_VALID_CONTROL
+# Moving this far counts as progress even while distance_remaining is above its best (a long detour after a replan).
+_OBSTACLE_PROGRESS_MOVE_M = 0.20
 _NAV2_PLANNER_ERROR_CODES = range(200, 300)
 
 _CANCEL_BY_BACKEND = "BACKEND"
+REASON_MOTION_HELD = "MOTION_HELD"
 _CANCEL_BY_TIMEOUT = "TIMEOUT"
 _CANCEL_BY_CORRIDOR = "CORRIDOR"
 _CANCEL_BY_GRANT_LOSS = "GRANT_LOSS"
+_CANCEL_BY_OBSTACLE = "OBSTACLE"
 
 
 @dataclass
@@ -105,8 +112,18 @@ class _ActiveMove:
     cancel_sessions: list[CommandSession] = field(default_factory=list)
     started: bool = False
     traffic_retries: int = 0
+    obstacle_retries: int = 0
     last_feedback: Optional[NavFeedback] = None
     last_progress_log_at: Optional[float] = None
+    last_progress_at: Optional[float] = None
+    last_distance_remaining: Optional[float] = None
+    # Obstacle window: last_progress_at slides forward while the gate holds the robot, so a traffic wait is not counted.
+    last_tick_at: Optional[float] = None
+    progress_pose: Optional[tuple[float, float]] = None
+    # First planner failure since the last progress. A closed gate cannot cause "no path", so this ignores holds.
+    planner_failing_since: Optional[float] = None
+    settle_until: Optional[float] = None
+    succeeded_result: Optional[NavResult] = None
 
     @property
     def command_id(self) -> str:
@@ -138,14 +155,21 @@ class MoveCommandHandler:
         expected_graph_hash: Optional[str] = None,
         traffic_hold_active: Callable[[], bool] = lambda: False,
         max_traffic_retries: int = 30,
+        obstacle_wait_sec: float = 60.0,
+        arrival_settle_sec: float = 0.0,
         arrival_pose: Callable[[], Optional[tuple[float, float, float]]] = lambda: None,
+        motion_hold_active: Callable[[], bool] = lambda: False,
     ) -> None:
         self._navigator = navigator
         self._arrival_pose = arrival_pose
         # semantic_active: the authority gate held the robot for traffic (no grant / outside reservation). Nav2's
         # progress checker then aborts the goal although nothing failed; such an abort re-sends the goal instead.
         self._traffic_hold_active = traffic_hold_active
+        self._motion_hold_active = motion_hold_active
         self._max_traffic_retries = int(max_traffic_retries)
+        self._obstacle_wait_sec = float(obstacle_wait_sec)
+        # The goal checker passes while the robot still coasts: the heading that counts is the one it stops at.
+        self._arrival_settle_sec = float(arrival_settle_sec)
         self._localization_provider = localization_provider
         self._log = log
         self._lock = lock if lock is not None else threading.RLock()
@@ -198,6 +222,9 @@ class MoveCommandHandler:
 
     def handle(self, command: CommandEnvelope, session: CommandSession) -> AckDecision:
         with self._lock:
+            # RB-03: after STOP nothing moves until RESUME, whoever asks.
+            if self._motion_hold_active():
+                raise CommandRejected(REASON_MOTION_HELD, "robot holds all motion after STOP; send RESUME first")
             if self._traffic_mode == "active" and self._traffic_client is not None and parse_authority is not None:
                 return self._handle_active(command, session)
 
@@ -298,6 +325,11 @@ class MoveCommandHandler:
                 return
             now = self._clock()
 
+            if move.phase == _SETTLING:
+                if move.settle_until is not None and now >= move.settle_until:
+                    self._finish_succeeded(move)
+                return
+
             if move.phase == _SENDING and move.goal_sent_at is not None:
                 if now - move.goal_sent_at >= self._goal_response_timeout_sec:
                     self._log.error(
@@ -336,6 +368,14 @@ class MoveCommandHandler:
                 self._request_cancel(move, _CANCEL_BY_TIMEOUT, None)
                 return
 
+            if self._obstacle_window_expired(move, now):
+                self._log.warning(
+                    f"[NavigationBlockedByObstacle] commandId={move.command_id} no progress for "
+                    f"{self._obstacle_wait_sec:.0f}s with the gate open; canceling Nav2 goal"
+                )
+                self._request_cancel(move, _CANCEL_BY_OBSTACLE, None)
+                return
+
             if (
                 self._route_enforcer is not None
                 and self._route_enforcer.enabled
@@ -349,6 +389,22 @@ class MoveCommandHandler:
                 elif violation == ERROR_GRANT_LOSS:
                     self._log.warning(f"[GrantLoss] commandId={move.command_id}; MQTT disconnect timeout")
                     self._request_cancel(move, _CANCEL_BY_GRANT_LOSS, None)
+
+    # ------------------------------------------------------------------ STOP (MotionHold)
+
+    def halt(self) -> Optional[str]:
+        """Cancels the running MOVE without a CANCEL command (STOP). Returns its command id, or None if idle."""
+        with self._lock:
+            if self._active_traffic_mode():
+                command_id = self._traffic_client.command_id  # type: ignore[union-attr]
+                if command_id:
+                    self._traffic_client.cancel_command(command_id)  # type: ignore[union-attr]
+                return command_id
+            move = self._active
+        if move is None:
+            return None
+        self._request_cancel(move, _CANCEL_BY_BACKEND, None)
+        return move.command_id
 
     # ------------------------------------------------------------------ CANCEL (từ CancelCommandHandler)
 
@@ -409,6 +465,9 @@ class MoveCommandHandler:
                 return
             now = self._clock()
             move.goal_sent_at = now
+            if move.last_progress_at is None:
+                move.last_progress_at = now  # a re-sent goal must not restart the obstacle window
+                move.last_tick_at = now
             if move.timeout_sec is not None and move.deadline is None:
                 # Once per command: a goal re-sent after a traffic hold keeps the original timeoutSeconds.
                 move.deadline = now + move.timeout_sec
@@ -477,14 +536,23 @@ class MoveCommandHandler:
                 return
             move.last_feedback = feedback
             now = self._clock()
+            dist = feedback.distance_remaining
             if not move.started:
                 move.started = True
                 move.last_progress_log_at = now
+                self._mark_progress(move, now)
+                move.last_distance_remaining = dist
                 self._log.info(
                     f"[NavigationStarted] commandId={move.command_id} distanceRemaining="
-                    f"{_fmt(feedback.distance_remaining)}"
+                    f"{_fmt(dist)}"
                 )
                 return
+            # Distance drop resets the obstacle wait window (robot made forward progress).
+            if dist is not None and (
+                move.last_distance_remaining is None or dist < move.last_distance_remaining - 0.05
+            ):
+                self._mark_progress(move, now)
+                move.last_distance_remaining = dist
             if (
                 move.last_progress_log_at is None
                 or now - move.last_progress_log_at >= self._progress_log_interval_sec
@@ -492,7 +560,7 @@ class MoveCommandHandler:
                 move.last_progress_log_at = now
                 self._log.info(
                     f"[NavigationProgress] commandId={move.command_id} distanceRemaining="
-                    f"{_fmt(feedback.distance_remaining)} recoveries={feedback.number_of_recoveries}"
+                    f"{_fmt(dist)} recoveries={feedback.number_of_recoveries}"
                 )
 
     def _on_result(self, move: _ActiveMove, result: NavResult) -> None:
@@ -503,8 +571,12 @@ class MoveCommandHandler:
             nav2_detail = f"nav2ErrorCode={result.error_code} nav2ErrorMsg={result.error_message!r}"
 
             if status == STATUS_SUCCEEDED:
-                self._log.info(f"[NavigationSucceeded] commandId={move.command_id}{self._arrival_error_text(move)}")
-                self._finish(move, OUTCOME_SUCCEEDED, None, None, status, "SUCCEEDED", result)
+                move.succeeded_result = result
+                if self._arrival_settle_sec > 0.0:
+                    move.phase = _SETTLING
+                    move.settle_until = self._clock() + self._arrival_settle_sec
+                else:
+                    self._finish_succeeded(move)
             elif status == STATUS_CANCELED and move.cancel_reason == _CANCEL_BY_TIMEOUT:
                 self._log.warning(f"[NavigationTimeout] commandId={move.command_id} goal canceled by Nav2")
                 self._finish(
@@ -536,6 +608,8 @@ class MoveCommandHandler:
                     "GRANT_LOSS",
                     result,
                 )
+            elif status == STATUS_CANCELED and move.cancel_reason == _CANCEL_BY_OBSTACLE:
+                self._finish_blocked(move, result, nav2_detail)
             elif status == STATUS_CANCELED:
                 by = "backend CANCEL" if move.cancel_reason == _CANCEL_BY_BACKEND else "outside fleet (RViz/preempt)"
                 self._log.info(f"[NavigationCanceled] commandId={move.command_id} by {by}")
@@ -548,11 +622,12 @@ class MoveCommandHandler:
                     "CANCELED",
                     result,
                 )
-            elif (
-                status == STATUS_ABORTED
-                and result.error_code not in _NAV2_PLANNER_ERROR_CODES
-                and self._held_for_traffic(move)
-            ):
+            elif status == STATUS_ABORTED and move.cancel_reason == _CANCEL_BY_OBSTACLE:
+                self._finish_blocked(move, result, nav2_detail)
+            elif status == STATUS_ABORTED and result.error_code in _NAV2_PLANNER_ERROR_CODES:
+                # No path: the gate cannot cause this, so it is checked before the traffic hold.
+                self._on_obstacle_abort(move, result, nav2_detail)
+            elif status == STATUS_ABORTED and self._held_for_traffic(move):
                 move.traffic_retries += 1
                 self._log.warning(
                     f"[NavigationHeldForTraffic] commandId={move.command_id} Nav2 aborted while the authority gate "
@@ -561,6 +636,12 @@ class MoveCommandHandler:
                 move.ticket = GoalTicket()
                 move.phase = _SENDING
                 self._send_goal(move)
+            elif (
+                status == STATUS_ABORTED
+                and self._is_obstacle_block_code(result.error_code)
+                and not self._traffic_hold_is_active()
+            ):
+                self._on_obstacle_abort(move, result, nav2_detail)
             elif status == STATUS_ABORTED:
                 self._log.warning(f"[NavigationFailed] commandId={move.command_id} aborted {nav2_detail}")
                 self._finish(
@@ -584,18 +665,113 @@ class MoveCommandHandler:
                     result,
                 )
 
-    def _arrival_error_text(self, move: _ActiveMove) -> str:
-        """Measured data for the goal tolerance decision: Nav2 accepts 0.15 m and any heading, endpoints ask for less."""
+    @staticmethod
+    def _is_obstacle_block_code(error_code: Optional[int]) -> bool:
+        if error_code is None:
+            return False
+        return error_code in _NAV2_CONTROLLER_BLOCK_CODES or error_code in _NAV2_PLANNER_ERROR_CODES
+
+    def _finish_succeeded(self, move: _ActiveMove) -> None:
+        self._log.info(f"[NavigationSucceeded] commandId={move.command_id}{self._arrival_error_text(move)}")
+        self._finish(move, OUTCOME_SUCCEEDED, None, None, STATUS_SUCCEEDED, "SUCCEEDED", move.succeeded_result)
+
+    def _mark_progress(self, move: _ActiveMove, now: float) -> None:
+        move.last_progress_at = now
+        move.planner_failing_since = None
+        move.progress_pose = None
+
+    def _traffic_hold_is_active(self) -> bool:
+        if self._traffic_mode != "semantic_active":
+            return False
+        try:
+            return bool(self._traffic_hold_active())
+        except Exception:  # noqa: BLE001 — unknown → not a hold
+            return False
+
+    def _obstacle_window_expired(self, move: _ActiveMove, now: float) -> bool:
+        """Tick-driven, so the limit holds however long Nav2 spends in its own recovery tree before it aborts."""
+        since_tick = now - move.last_tick_at if move.last_tick_at is not None else 0.0
+        move.last_tick_at = now
+        if move.last_progress_at is None:
+            return False
+        if self._traffic_hold_is_active():
+            move.last_progress_at = min(now, move.last_progress_at + since_tick)
+            return False
         try:
             pose = self._arrival_pose()
-        except Exception:  # noqa: BLE001 - a log line must never affect the result of the command
+        except Exception:  # noqa: BLE001 — no pose: only distance_remaining counts
             pose = None
+        if pose is not None:
+            if move.progress_pose is None:
+                move.progress_pose = (pose[0], pose[1])
+            elif math.hypot(pose[0] - move.progress_pose[0], pose[1] - move.progress_pose[1]) >= _OBSTACLE_PROGRESS_MOVE_M:
+                self._mark_progress(move, now)
+                return False
+        return (
+            move.started
+            and move.phase == _ACTIVE
+            and move.cancel_reason is None
+            and now - move.last_progress_at >= self._obstacle_wait_sec
+        )
+
+    def _on_obstacle_abort(self, move: _ActiveMove, result: NavResult, nav2_detail: str) -> None:
+        now = self._clock()
+        anchor = move.last_progress_at if move.last_progress_at is not None else now
+        waited = now - anchor
+        if result.error_code in _NAV2_PLANNER_ERROR_CODES:
+            if move.planner_failing_since is None:
+                move.planner_failing_since = now
+            waited = max(waited, now - move.planner_failing_since)
+        if waited < self._obstacle_wait_sec and (
+            move.deadline is None or now < move.deadline
+        ):
+            move.obstacle_retries += 1
+            self._log.warning(
+                f"[NavigationBlockedByObstacle] commandId={move.command_id} waited={waited:.1f}s/"
+                f"{self._obstacle_wait_sec:.0f}s; replan retry={move.obstacle_retries} {nav2_detail}"
+            )
+            move.ticket = GoalTicket()
+            move.phase = _SENDING
+            self._send_goal(move)
+            return
+        self._finish_blocked(move, result, nav2_detail)
+
+    def _finish_blocked(self, move: _ActiveMove, result: NavResult, nav2_detail: str) -> None:
+        self._log.warning(
+            f"[NavigationBlockedByObstacle] commandId={move.command_id} reporting NAVIGATION_BLOCKED after "
+            f"{self._obstacle_wait_sec:.0f}s without progress {nav2_detail}"
+        )
+        self._finish(
+            move,
+            OUTCOME_FAILED,
+            ERROR_NAVIGATION_BLOCKED,
+            f"blocked by obstacle for ≥{self._obstacle_wait_sec:.0f}s ({nav2_detail})",
+            result.status,
+            "NAVIGATION_BLOCKED",
+            result,
+        )
+
+    def _arrival_error_fields(self, move: _ActiveMove) -> dict[str, float]:
+        try:
+            pose = self._arrival_pose()
+        except Exception:  # noqa: BLE001
+            return {}
         if pose is None:
-            return " arrivalError=unknown"
+            return {}
         t = move.target
         xy = math.hypot(pose[0] - t.x, pose[1] - t.y)
         yaw = abs(math.atan2(math.sin(pose[2] - t.yaw), math.cos(pose[2] - t.yaw)))
-        return f" arrivalErrorXy={xy:.3f}m arrivalErrorYaw={yaw:.3f}rad"
+        return {"arrivalErrorXyM": round(xy, 4), "arrivalErrorYawRad": round(yaw, 4)}
+
+    def _arrival_error_text(self, move: _ActiveMove) -> str:
+        """Measured data for the goal tolerance decision (lab uses RESULT fields too)."""
+        fields = self._arrival_error_fields(move)
+        if not fields:
+            return " arrivalError=unknown"
+        return (
+            f" arrivalErrorXy={fields['arrivalErrorXyM']:.3f}m "
+            f"arrivalErrorYaw={fields['arrivalErrorYawRad']:.3f}rad"
+        )
 
     def _held_for_traffic(self, move: _ActiveMove) -> bool:
         if self._traffic_mode != "semantic_active" or move.cancel_reason is not None:
@@ -621,6 +797,8 @@ class MoveCommandHandler:
                 return
             if cancel_session is not None:
                 move.cancel_sessions.append(cancel_session)
+            if move.phase == _SETTLING:
+                return  # Nav2 already finished: _finish answers the CANCEL as ineffective
             if move.cancel_reason is not None:
                 self._log.info(
                     f"[Nav2CancelRequested] commandId={move.command_id} already canceling "
@@ -697,12 +875,16 @@ class MoveCommandHandler:
         elapsed = None
         if move.goal_sent_at is not None:
             elapsed = round(self._clock() - move.goal_sent_at, 3)
-        result = {
+        result: dict[str, Any] = {
             "navigationResult": navigation_result or ("FAILED" if outcome == OUTCOME_FAILED else outcome),
             "nav2Status": nav2_status,
             "nav2ErrorCode": nav_result.error_code if nav_result is not None else None,
             "elapsedSec": elapsed,
         }
+        # Pose error after stop — logged for lab tolerance decisions; not a hard reject yet.
+        arrival = self._arrival_error_fields(move)
+        if arrival:
+            result.update(arrival)
         move.session.complete(outcome, error_code=error_code, error_message=error_message, result=result)
 
         # CANCEL command chỉ SUCCEEDED khi Nav2 thực sự kết thúc goal ở trạng thái CANCELED.

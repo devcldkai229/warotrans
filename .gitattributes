@@ -1,0 +1,5 @@
+# Everything here runs on Linux (Pi, WSL): a CRLF script or launch file breaks there, whatever the checkout OS.
+* text=auto eol=lf
+*.pgm binary
+*.png binary
+*.ps1 text eol=crlf

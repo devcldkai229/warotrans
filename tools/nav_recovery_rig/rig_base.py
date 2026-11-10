@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 import time
 
@@ -57,14 +58,21 @@ class Base(Node):
         self.a = a
         self.x, self.y, self.yaw = a.x, a.y, a.yaw
         self.odom_x, self.odom_y, self.odom_yaw = a.x, a.y, a.yaw  # map->odom is identity
-        self.grid, self.ox, self.oy = load_grid(a.map, json.loads(a.obstacles))
+        self._base_obstacles = json.loads(a.obstacles)
+        self._timed = json.loads(getattr(a, "timed_obstacles", "[]") or "[]")
+        self._t0: float | None = None  # set when the goal is accepted: Nav2 needs a varying time to come up first
+        self._active_timed: list = []
+        self.grid, self.ox, self.oy = load_grid(a.map, self._base_obstacles)
         self.cmd = (0.0, 0.0)
         self.cmd_at = -1e9
         self.v, self.w = 0.0, 0.0
+        self.v_cmd, self.w_cmd = 0.0, 0.0
         self.collisions = 0
         self.travel, self.turned = 0.0, 0.0
         self.rng = np.random.default_rng(7)
         self.truth = open(a.truth, "a", encoding="utf-8", buffering=1)
+        # First-order lag toward cmd (lab-like inertia); tau=0 → instantaneous.
+        self.inertia_tau = float(getattr(a, "inertia_tau", 0.0) or 0.0)
         angles = -math.pi + np.arange(BEAMS) * (2 * math.pi / BEAMS)
         self.angles = angles
         self.steps = np.arange(RANGE_MIN, 8.0, FINE)
@@ -82,6 +90,28 @@ class Base(Node):
         self.create_timer(0.05, self._publish_state)
         self.create_timer(1.0 / SCAN_HZ, self._publish_scan)
         self.create_timer(0.1, self._log_truth)
+        self.create_timer(0.2, self._refresh_timed_obstacles)
+
+    def _refresh_timed_obstacles(self) -> None:
+        """Apply appear_at / disappear_at schedule: [xmin,ymin,xmax,ymax,appear,disappear]."""
+        if not self._timed:
+            return
+        if self._t0 is None:
+            if not os.path.exists(self.a.clock_file):
+                return
+            self._t0 = time.monotonic()
+        age = time.monotonic() - self._t0
+        active = []
+        for item in self._timed:
+            if len(item) < 6:
+                continue
+            xmin, ymin, xmax, ymax, appear, disappear = item[:6]
+            if age >= float(appear) and (float(disappear) < 0 or age < float(disappear)):
+                active.append([xmin, ymin, xmax, ymax])
+        if active != self._active_timed:
+            self._active_timed = active
+            self.grid, self.ox, self.oy = load_grid(self.a.map, self._base_obstacles + active)
+            self.get_logger().info(f"timed obstacles active={len(active)} age={age:.1f}s")
 
     def _tf(self, parent: str, child: str, x: float, y: float, z: float, yaw: float) -> TransformStamped:
         t = TransformStamped()
@@ -131,13 +161,25 @@ class Base(Node):
 
     def _step(self) -> None:
         # Same 300 ms watchdog as the ESP32 firmware.
-        v, w = self.cmd if time.monotonic() - self.cmd_at < 0.3 else (0.0, 0.0)
+        v_cmd, w_cmd = self.cmd if time.monotonic() - self.cmd_at < 0.3 else (0.0, 0.0)
         # Motor deadband is unmeasured on the real robot: configurable, reported with every result.
-        if abs(v) < self.a.deadband_v:
-            v = 0.0
-        if abs(w) < self.a.deadband_w:
-            w = 0.0
-        self.v, self.w = v, w
+        if abs(v_cmd) < self.a.deadband_v:
+            v_cmd = 0.0
+        if abs(w_cmd) < self.a.deadband_w:
+            w_cmd = 0.0
+        self.v_cmd, self.w_cmd = v_cmd, w_cmd
+        # First-order lag: dv/dt = (cmd - v) / tau
+        if self.inertia_tau > 1e-6:
+            alpha = self.dt / self.inertia_tau
+            self.v += (v_cmd - self.v) * alpha
+            self.w += (w_cmd - self.w) * alpha
+            if abs(self.v) < 1e-4 and v_cmd == 0.0:
+                self.v = 0.0
+            if abs(self.w) < 1e-4 and w_cmd == 0.0:
+                self.w = 0.0
+        else:
+            self.v, self.w = v_cmd, w_cmd
+        v, w = self.v, self.w
         if v == 0.0 and w == 0.0:
             return
         yaw = self.yaw + w * self.dt
@@ -205,12 +247,24 @@ def main() -> None:
     p.add_argument("--y", type=float, required=True)
     p.add_argument("--yaw", type=float, required=True)
     p.add_argument("--obstacles", default="[]")
+    p.add_argument(
+        "--timed-obstacles",
+        default="[]",
+        help='JSON list of [xmin,ymin,xmax,ymax,appear_s,disappear_s] after the goal; disappear<0 = stay',
+    )
+    p.add_argument("--clock-file", default="/nonexistent", help="timed obstacles count from when this file appears")
+    p.add_argument("--inertia-tau", type=float, default=0.0, help="cmd→velocity lag seconds (0=instant)")
     p.add_argument("--cmd-topic", default="/cmd_vel_motor")
     p.add_argument("--deadband-v", type=float, default=0.0)
     p.add_argument("--deadband-w", type=float, default=0.0)
     a = p.parse_args()
     rclpy.init()
-    rclpy.spin(Base(a))
+    node = Base(a)
+    try:
+        rclpy.spin(node)
+    finally:
+        node.destroy_node()
+        rclpy.try_shutdown()
 
 
 if __name__ == "__main__":

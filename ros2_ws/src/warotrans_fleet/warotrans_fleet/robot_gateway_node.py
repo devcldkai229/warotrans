@@ -176,6 +176,10 @@ class RobotGatewayNode(Node):
         self._topic_prefix = self._str_param("topic_prefix").strip().rstrip("/")
         self._map_version_code = _env_or(self._str_param("map_version_code"), "WARO_MAP_VERSION_CODE") or None
         self._map_frame = self._str_param("map_frame")
+        # RB-03: created before anything can publish authority_ok, which reads it.
+        from warotrans_fleet.control_command_handlers import MotionHold
+
+        self._motion_hold = MotionHold()
         self._base_frame = self._str_param("base_frame")
         self._max_transform_age = self._float_param("max_transform_age_sec")
         simulated_battery = self._float_param("simulated_battery_percent")
@@ -278,7 +282,9 @@ class RobotGatewayNode(Node):
             self.topic("interaction_request"),
             self.topic("interaction_result"),
         ] + ([self.topic("teleop")] if self._teleop_enabled else []) + (
-            [self._epoch_topic()] if self._traffic_mode == "semantic_active" else []
+            [self._epoch_topic(), self.topic("traffic_plan_reject")]
+            if self._traffic_mode == "semantic_active"
+            else []
         )
         self.mqtt = ReconnectingMqttPublisher(
             host=self._mqtt_host,
@@ -320,7 +326,10 @@ class RobotGatewayNode(Node):
             ),
             traffic_hold_active=lambda: self._semantic_client is not None and self._semantic_client.held_for_traffic(),
             arrival_pose=self._traffic_pose,
+            arrival_settle_sec=1.0,
+            motion_hold_active=lambda: self._motion_hold.held,
         )
+        self._register_control_commands()
 
         self._teleop: Optional[TeleopController] = None
         if self._teleop_enabled:
@@ -599,14 +608,105 @@ class RobotGatewayNode(Node):
     def _epoch_topic(self) -> str:
         return f"{self._topic_prefix.rstrip('/')}/traffic/epoch"
 
+    def _register_control_commands(self) -> None:
+        """STOP / RESUME / LOCALIZE from the backend (RB-03, operator re-localize)."""
+        from warotrans_fleet.control_command_handlers import (
+            LocalizeCommandHandler,
+            ResumeCommandHandler,
+            StopCommandHandler,
+        )
+
+        router = self._commands.router
+        router.register(
+            StopCommandHandler(self._motion_hold, self._commands.move.halt, self._on_motion_hold_changed, self.get_logger())
+        )
+        router.register(ResumeCommandHandler(self._motion_hold, self._on_motion_hold_changed, self.get_logger()))
+        router.register(
+            LocalizeCommandHandler(
+                self._publish_initial_pose,
+                busy=lambda: self._commands.move.active_command_id is not None or self._nav_tracker.has_active_goal,
+                log=self.get_logger(),
+                map_frame=self._map_frame,
+            )
+        )
+
+    def _on_motion_hold_changed(self, held: bool) -> None:
+        # Close the gate at once on STOP; on RESUME the traffic client opens it again on its next tick, only if
+        # there is a grant to drive on.
+        if held:
+            self._publish_authority_ok(False)
+
+    def _publish_initial_pose(self, x: float, y: float, yaw: float) -> None:
+        import math
+
+        from geometry_msgs.msg import PoseWithCovarianceStamped
+
+        pub = getattr(self, "_initial_pose_pub", None)
+        if pub is None:
+            pub = self.create_publisher(PoseWithCovarianceStamped, self._str_param("initial_pose_topic"), 10)
+            self._initial_pose_pub = pub
+        msg = PoseWithCovarianceStamped()
+        msg.header.frame_id = self._map_frame
+        # Stamp 0 = "latest": AMCL refuses a stamp ahead of its TF ("extrapolation into the future").
+        msg.pose.pose.position.x = float(x)
+        msg.pose.pose.position.y = float(y)
+        msg.pose.pose.orientation.z = math.sin(yaw / 2.0)
+        msg.pose.pose.orientation.w = math.cos(yaw / 2.0)
+        covariance = [0.0] * 36
+        covariance[0] = 0.05
+        covariance[7] = 0.05
+        covariance[35] = 0.03
+        msg.pose.covariance = covariance
+        pub.publish(msg)
+
     def _publish_authority_ok(self, ok: bool) -> None:
-        from std_msgs.msg import Bool
+        from std_msgs.msg import Bool, String
+
+        # RB-03: a STOP hold wins over any grant: the gate drops every velocity until RESUME.
+        if self._motion_hold.held:
+            ok = False
 
         pub = getattr(self, "_authority_ok_pub", None)
         if pub is None:
             topic = self._str_param("authority_ok_topic").strip() or "traffic/authority_ok"
             self._authority_ok_pub = self.create_publisher(Bool, topic, 10)
             pub = self._authority_ok_pub
+            reason_topic = topic.replace("authority_ok", "last_block_reason")
+            if reason_topic == topic:
+                reason_topic = "traffic/last_block_reason"
+            self._last_block_reason_pub = self.create_publisher(String, reason_topic, 10)
+            self._last_authority_ok: Optional[bool] = None
+            self._last_logged_block_reason: Optional[str] = None
+
+        reason = "OK"
+        if not ok and self._motion_hold.held:
+            reason = f"MOTION_HOLD_{self._motion_hold.mode or 'STOP'}"
+        elif not ok:
+            semantic = getattr(self, "_semantic_client", None)
+            if semantic is not None and getattr(semantic, "last_block_reason", None):
+                reason = str(semantic.last_block_reason)
+            elif self._amcl_block_reason:
+                reason = str(self._amcl_block_reason)
+            else:
+                reason = "NO_GRANT"
+
+        prev = getattr(self, "_last_authority_ok", None)
+        if prev is None or bool(prev) != bool(ok):
+            self.get_logger().info(
+                f"[AuthorityGate] authority_ok={bool(ok)} last_block_reason={reason}"
+            )
+            self._last_authority_ok = bool(ok)
+            self._last_logged_block_reason = reason
+        elif not ok and reason != self._last_logged_block_reason:
+            self.get_logger().info(f"[AuthorityGate] last_block_reason={reason}")
+            self._last_logged_block_reason = reason
+
+        reason_pub = getattr(self, "_last_block_reason_pub", None)
+        if reason_pub is not None:
+            rmsg = String()
+            rmsg.data = reason if not ok else "OK"
+            reason_pub.publish(rmsg)
+
         msg = Bool()
         msg.data = bool(ok)
         pub.publish(msg)
@@ -663,7 +763,8 @@ class RobotGatewayNode(Node):
             connected = self.mqtt.is_connected
             client.on_link(connected)
             if connected and not link_was_up[0]:
-                # (Re)connected: tell the backend what this robot holds so it can reconcile.
+                # (Re)connected: tell the backend what this robot holds. If it closed the running command meanwhile,
+                # it answers with a CANCEL: only the backend knows, a timer here would also cancel commands still open.
                 self._publish_authority_state()
             link_was_up[0] = connected
             if connected and client.state_report_due():
@@ -681,7 +782,6 @@ class RobotGatewayNode(Node):
             cleared = client.resources_cleared_at(x, y)
             if cleared:
                 client.publish_cleared_resources(cleared, x=x, y=y, yaw=yaw, localization_ok=True)
-
         plan_topic = self._str_param("plan_topic").strip() or "plan"
         self.create_subscription(NavPath, plan_topic, _on_plan, 10)
         self.create_timer(0.05, _semantic_tick)
@@ -836,6 +936,8 @@ class RobotGatewayNode(Node):
             self._inbox.put(("interaction_result", body))
         elif self._traffic_mode == "semantic_active" and topic == self._epoch_topic():
             self._inbox.put(("epoch", body))
+        elif self._traffic_mode == "semantic_active" and topic == self.topic("traffic_plan_reject"):
+            self._inbox.put(("plan_reject", body))
         else:
             return
         self._inbox_signal.trigger()
@@ -865,6 +967,15 @@ class RobotGatewayNode(Node):
                     )
                     # The new coordinator rebuilds occupancy from what this robot reports.
                     self._publish_authority_state()
+            elif kind == "plan_reject" and self._semantic_client is not None:
+                reason = body.get("reason")
+                waiting = body.get("waitingReason")
+                blocker = body.get("blocker")
+                self._semantic_client.on_plan_reject(reason, waiting=waiting, blocker=blocker)
+                self.get_logger().warning(
+                    f"[TrafficPlanRejected] rev={body.get('planRevision')} reason={reason} "
+                    f"wait={waiting} blocker={blocker}"
+                )
 
     def _handle_interaction_request(self, body: dict) -> None:
         try:
@@ -1027,6 +1138,7 @@ class RobotGatewayNode(Node):
             angular_velocity=self._ang_vel,
             current_command_id=self._commands.move.active_command_id,
             error_code=None,
+            motion_hold=self._motion_hold.held,
             battery=self._battery_fields(),
         )
         self.mqtt.publish(self.topic("telemetry"), payload)

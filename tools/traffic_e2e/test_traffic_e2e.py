@@ -4,13 +4,14 @@ Run with tools/traffic_e2e/run_traffic_e2e.ps1. Database: warotrans_test only. T
 (the live robot RBT-001 listens on warotrans/v1 and never sees any of this). Robot codes: E2E-*.
 
 Scenarios that need open floor use coordinates outside the drawn map, each in its own band, so they never share
-cells; the zone scenario uses the real SINGLE_OCCUPANCY polygons of MAP-ONE-V002.
+cells; the zone scenario uses the real SINGLE_OCCUPANCY polygons of MAP-ONE-V004.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import os
 import time
 import uuid
 from pathlib import Path
@@ -29,6 +30,11 @@ MAP_ID = MANIFEST["mapVersionId"]
 MAP_CODE = MANIFEST["mapCode"]
 RUN = uuid.uuid4().hex[:4].upper()
 ROBOTS: list[SimRobot] = []
+
+
+# As in the RealRobot profile: a robot is granted the road up to a conflict, drives there and waits, where otherwise it stays
+# put. The scenarios that differ assert what must hold either way: nobody enters space another robot holds.
+PREFIX_GRANT = os.environ.get("Traffic__SemanticPrefixGrant", "").lower() == "true"
 
 
 # ---------------------------------------------------------------------- fixtures
@@ -175,12 +181,12 @@ def test_B_independent_paths_are_granted_concurrently(api, warehouse_id):
 
 
 def test_C_single_occupancy_zone_one_robot_at_a_time_waiter_promoted(api, warehouse_id):
-    # Real zone ZONE-SINGLE-CENTER (x 0.25..1.73, y -0.71..0.35) of MAP-ONE-V002.
-    a, ra = robot(api, warehouse_id, "C1", 0.0, -0.2)
-    b, rb = robot(api, warehouse_id, "C2", 1.0, -1.3)
-    ca = navigate(api, ra, 2.2, -0.2)
+    # Real zone ZONE-SINGLE-CENTER of MAP-ONE-V004 (see bundle single_occupancy.json).
+    a, ra = robot(api, warehouse_id, "C1", -0.15, 1.9)
+    b, rb = robot(api, warehouse_id, "C2", 0.85, 0.5)
+    ca = navigate(api, ra, 2.05, 1.9)
     wait_for(lambda: view(api, ra).get("authority"), 10, what="C1 granted")
-    cb = navigate(api, rb, 1.0, 0.9)
+    cb = navigate(api, rb, 0.85, 3.0)
     seen_wait = []
 
     def done():
@@ -257,6 +263,19 @@ def test_F_replan_onto_reserved_space_loses_authority_and_never_enters_it(api, w
     # Nav2 replans through the space F2 stands in.
     a.replan_through((12.0, 92.0))
     rev = a.client.plan_revision
+    if PREFIX_GRANT:
+        # F1 may keep driving, up to the space of F2 and no further.
+        snaps = watch_exclusive(api, 6)
+        assert all(rb in holders(s).get(c, []) for s in snaps for c in held_b), "F2 lost what it stands on"
+        assert all(not (set(c for c, h in holders(s).items() if ra in h) & held_b) for s in snaps)
+        assert dist(a, b) > 2 * 0.2343
+        a.replan_through(None)
+        v = wait_for(lambda: view(api, ra).get("authority"), 10, what="grant after replanning away")
+        assert v["authorityId"] != old_authority
+        wait_for(lambda: result_of(a, cmd), 60, what="F1 done")
+        assert result_of(a, cmd)["outcome"] == "SUCCEEDED"
+        assert not a.moved_while_gate_closed()
+        return
     wait_for(lambda: sum(1 for m in a.authority_msgs if m["type"] == "REVOKE_AUTHORITY") > revokes_before, 5,
              what="old authority revoked")
     wait_for(lambda: not a.gate_log[-1][1], 2, what="gate closed")
@@ -460,6 +479,14 @@ def test_L_wait_for_cycle_is_refused_and_nobody_is_authorized(host, api, warehou
     ca = navigate(api, ra, 13.0, 100.0, timeout=8)
     wait_for(lambda: view(api, ra).get("blockingOwner") == rb, 8, what="L1 waits for L2")
     cb = navigate(api, rb, 10.0, 100.0, timeout=8)
+    if PREFIX_GRANT:
+        # Each may drive up to the other and stop there. Exclusive holds, no contact, and the commands end.
+        watch_exclusive(api, 3)
+        wait_for(lambda: result_of(a, ca) and result_of(b, cb), 30, what="both time out")
+        assert result_of(a, ca)["errorCode"] == result_of(b, cb)["errorCode"] == "NAVIGATION_TIMEOUT"
+        assert dist(a, b) > 2 * 0.2343
+        assert not a.moved_while_gate_closed() and not b.moved_while_gate_closed()
+        return
     snaps = watch_exclusive(api, 3)
     for s in snaps:
         for r in s["robots"]:
@@ -480,6 +507,16 @@ def test_L_earlier_waiter_goes_first_and_a_later_robot_cannot_barge_in(api, ware
     cw = navigate(api, rw, 21.0, 105.0, timeout=90)
     wait_for(lambda: view(api, rw).get("blockingOwner") == rh, 10, what="L4 queued behind L3")
     cl = navigate(api, rl, 25.0, 105.3, timeout=90)
+    if PREFIX_GRANT:
+        # L5 may drive towards the corridor but not into it ahead of L4, which is queued first.
+        def finished():
+            assert not (late.y < 105.0 + 2 * 0.2343 and w.x > 25.0), f"L5 at y={late.y:.2f} ahead of L4 at x={w.x:.2f}"
+            assert dist(w, late) > 2 * 0.2343 and dist(h, w) > 2 * 0.2343 and dist(h, late) > 2 * 0.2343
+            return result_of(h, ch) and result_of(w, cw) and result_of(late, cl)
+
+        watch_exclusive(api, 120, until=finished)
+        assert [result_of(h, ch)["outcome"], result_of(w, cw)["outcome"], result_of(late, cl)["outcome"]] == ["SUCCEEDED"] * 3
+        return
     v = wait_for(lambda: (lambda r: r if r.get("blockingOwner") == rw else None)(view(api, rl)), 10,
                  what="L5 queued behind the earlier waiter L4, not granted")
     assert v["authority"] is None

@@ -38,6 +38,10 @@ class SemanticGeometry:
     sample_step: float
     reserve_radius: float
     footprint_radius: float
+    # Above 0: straight stretches reserve a rectangle this wide per side, and the gate checks the body at its heading.
+    lane_half_width: float = 0.0
+    footprint_half_length: float = 0.0
+    footprint_half_width: float = 0.0
 
     @staticmethod
     def from_payload(raw: Any) -> Optional["SemanticGeometry"]:
@@ -50,11 +54,16 @@ class SemanticGeometry:
                 sample_step=float(raw["sampleStepMeters"]),
                 reserve_radius=float(raw["reserveRadiusMeters"]),
                 footprint_radius=float(raw["footprintRadiusMeters"]),
+                lane_half_width=float(raw.get("laneHalfWidthMeters") or 0.0),
+                footprint_half_length=float(raw.get("footprintHalfLengthMeters") or 0.0),
+                footprint_half_width=float(raw.get("footprintHalfWidthMeters") or 0.0),
             )
         except (KeyError, TypeError, ValueError):
             return None
         if min(geom.cell_size, geom.horizon, geom.sample_step, geom.reserve_radius, geom.footprint_radius) <= 0:
             return None
+        if geom.lane_half_width > 0 and min(geom.footprint_half_length, geom.footprint_half_width) <= 0:
+            return None  # cannot check the body at its heading: fail closed, as for any unusable geometry
         return geom
 
 
@@ -86,8 +95,12 @@ class SemanticTrafficClient:
     authority_loss_timeout_sec: float = 3.0
     # Extra radius checked around the footprint: distance the robot covers while the gate closes and it brakes.
     stop_margin_m: float = 0.05
+    # With lane rectangles the body is checked at its heading: braking runs along it, sideways only drift remains.
+    side_margin_m: float = 0.02
     # Margin used before a resource is reported left (backend re-checks with its own localization margin).
     exit_margin_m: float = 0.05
+    # Pose noise at the cell boundary must not publish RESOURCES_CLEARED: require continuous exit this long.
+    clear_confirm_sec: float = 0.4
     propose_retry_sec: float = 2.0
 
     plan_revision: int = 0
@@ -108,6 +121,8 @@ class SemanticTrafficClient:
     _last_state_report_mono: float = -1e9
     _was_localized: bool = False
     _allowed_cache: Optional[tuple[tuple[int, str, str], frozenset[str]]] = None
+    # resource_id → mono when footprint first left it (cleared only after clear_confirm_sec).
+    _pending_clear: dict[str, float] = field(default_factory=dict)
 
     # ------------------------------------------------------------------ downlink: plan / command lifecycle
 
@@ -134,7 +149,8 @@ class SemanticTrafficClient:
             self._drop_grant("NEW_COMMAND")
         path_hash = plan_hash(poses)
         if path_hash == self.plan_hash:
-            # Same path: re-propose only on a cooldown while no valid grant covers it (lost uplink / queued).
+            # Same path: Nav2 may re-echo /plan; do not spam while a grant for this revision still exists.
+            # Lost EXTEND / silent grant is retried from tick via _maybe_repropose (force=True).
             if self.grant is not None and self.grant.plan_revision == self.plan_revision:
                 return
             if self.monotonic() - self._last_propose_mono < self.propose_retry_sec:
@@ -144,7 +160,18 @@ class SemanticTrafficClient:
             self.plan_hash = path_hash
             self.plan_poses = [tuple(map(float, p)) for p in poses]  # type: ignore[misc]
             self._allowed_cache = None
+        self._publish_plan_proposal(goal=goal, command_id=command_id, job_step_id=job_step_id, job_id=job_id)
+
+    def _publish_plan_proposal(
+        self,
+        *,
+        goal: Optional[Pose],
+        command_id: Optional[str],
+        job_step_id: Optional[str] = None,
+        job_id: Optional[str] = None,
+    ) -> None:
         self._last_propose_mono = self.monotonic()
+        poses = self.plan_poses
         payload = {
             "schemaVersion": 1,
             "messageId": str(uuid.uuid4()),
@@ -351,8 +378,7 @@ class SemanticTrafficClient:
         g = self.grant
         assert g is not None
         allowed = self.allowed_resources()
-        radius = g.geometry.footprint_radius + max(0.0, self.stop_margin_m)
-        if not footprint_resources(pose[0], pose[1], radius, self.zones, g.geometry.cell_size) <= allowed:
+        if not self._body_resources(pose, g.geometry) <= allowed:
             return "OUTSIDE_RESERVATION"
         # Bare footprint, no margin: a released cell was left with exit_margin_m to spare, so localization jitter at
         # the boundary does not latch the gate shut; actually driving back into it does.
@@ -374,20 +400,42 @@ class SemanticTrafficClient:
         if reason is not None:
             return reason
         if kind == "spin":
+            # Any heading, so the full disc, whatever the gate checks while driving straight.
+            g = self.grant
+            assert pose is not None and g is not None
+            radius = g.geometry.footprint_radius + max(0.0, self.stop_margin_m)
+            if not footprint_resources(pose[0], pose[1], radius, self.zones, g.geometry.cell_size) <= self.allowed_resources():
+                return "SPIN_OUTSIDE_RESERVATION"
             return None
         if kind != "backup" or distance_m < 0.0:
             return "UNKNOWN_RECOVERY"
         assert pose is not None and self.grant is not None
         g = self.grant
         allowed = self.allowed_resources() - self.released_resources
-        radius = g.geometry.footprint_radius + max(0.0, self.stop_margin_m)
         steps = max(1, math.ceil(distance_m / 0.02))
         for i in range(1, steps + 1):
             d = distance_m * i / steps
             x, y = pose[0] - d * math.cos(pose[2]), pose[1] - d * math.sin(pose[2])
-            if not footprint_resources(x, y, radius, self.zones, g.geometry.cell_size) <= allowed:
+            if not self._body_resources((x, y, pose[2]), g.geometry) <= allowed:
                 return "REVERSE_OUTSIDE_RESERVATION"
         return None
+
+    def _body_resources(self, pose: Pose, geometry: SemanticGeometry) -> frozenset[str]:
+        """What the robot touches now, with its stopping margin: at any heading, or at its heading with lane rectangles."""
+        radius = geometry.footprint_radius + max(0.0, self.stop_margin_m)
+        if geometry.lane_half_width <= 0:
+            return footprint_resources(pose[0], pose[1], radius, self.zones, geometry.cell_size)
+        out: set[str] = set()
+        rect_cells(
+            pose[0], pose[1], pose[2],
+            geometry.footprint_half_length + max(0.0, self.stop_margin_m),
+            geometry.footprint_half_width + max(0.0, self.side_margin_m),
+            geometry.cell_size, out,
+        )
+        for code, ring in _zone_rings(self.zones):
+            if disc_hits_ring(pose[0], pose[1], radius, ring):
+                out.add(f"zone:{code}")
+        return frozenset(out)
 
     def tick(self, pose: Optional[Pose]) -> bool:
         """≥20 Hz: publish authority_ok for cmd_vel_authority_gate. Returns the decision."""
@@ -395,8 +443,30 @@ class SemanticTrafficClient:
         if reason is not None:
             self.last_block_reason = reason
             self._last_blocked_mono = self.monotonic()
+            # No grant (the EXTEND was lost, or it was revoked) or a lapsed one: propose again so the backend can answer.
+            # The reason text of a missing grant is whatever dropped it last, so it cannot be matched by name. The
+            # backend ignores a proposal for a NAVIGATE that is no longer open, so this cannot revive a finished command.
+            if self.link_up and (self.grant is None or reason in ("EXPIRED", "AUTHORITY_SILENT")):
+                self._maybe_repropose()
         self._set_ok(reason is None)
         return reason is None
+
+    def _maybe_repropose(self) -> None:
+        if self.monotonic() - self._last_propose_mono < self.propose_retry_sec:
+            return
+        if not self.plan_poses or not self.command_id:
+            return
+        goal = self.plan_poses[-1]
+        self._publish_plan_proposal(goal=goal, command_id=self.command_id)
+
+    def on_plan_reject(self, reason: Optional[str], *, waiting: Optional[str] = None, blocker: Optional[str] = None) -> None:
+        """Downlink from backend when a traffic_plan was not granted — log-facing state only."""
+        text = reason or "PLAN_REJECTED"
+        if waiting:
+            text = f"{text}/{waiting}"
+        if blocker:
+            text = f"{text} blocker={blocker}"
+        self.last_block_reason = text
 
     def localization_regained(self, localized: bool) -> bool:
         """True once on not-localized → localized. The gateway reports its state at boot, before the operator has set
@@ -407,9 +477,10 @@ class SemanticTrafficClient:
         return regained
 
     def state_report_due(self, period_sec: float = 5.0) -> bool:
-        """Executing a command without a grant: the backend may hold this robot quarantined until it reports in (a
-        single report at reconnect can be lost), so repeat it. True at most once per period."""
-        if self.command_id is None or self.grant is not None:
+        """Executing a command without a working grant: the backend may hold this robot quarantined until it reports
+        in, or have closed the command (a single report at reconnect can be lost), so repeat it. True at most once per
+        period."""
+        if self.command_id is None or self.is_grant_valid():
             return False
         if self.monotonic() - self._last_state_report_mono < period_sec:
             return False
@@ -423,18 +494,52 @@ class SemanticTrafficClient:
     # ------------------------------------------------------------------ uplink: verified exits
 
     def resources_cleared_at(self, x: float, y: float) -> list[str]:
-        """Granted resources the footprint entered and has now left (plus margin). Never reports ahead-only ones."""
+        """Granted resources the footprint entered and has now left (plus margin). Never reports ahead-only ones.
+
+        A single noisy pose sample must not clear: the footprint must stay outside for ``clear_confirm_sec``.
+        """
         g = self.grant
         if g is None:
+            self._pending_clear.clear()
             return []
         under = footprint_resources(
             x, y, g.geometry.footprint_radius + max(0.0, self.exit_margin_m), self.zones, g.geometry.cell_size
         ) & g.resource_ids
         self.entered_resources |= under
-        cleared = sorted(self.entered_resources - under)
-        self.entered_resources -= set(cleared)
+        candidates = self.entered_resources - under
+        # The path may come back: a turn near a shelf re-enters the cell it just left. Releasing that one would close
+        # the gate on the robot's own path once it gets there, until Nav2 gives up and replans.
+        if candidates:
+            candidates = candidates - self._needed_by_path_ahead(x, y, g.geometry)
+        now = self.monotonic()
+        # Footprint returned → cancel any pending clear for those cells.
+        for rid in list(self._pending_clear):
+            if rid in under or rid not in candidates:
+                del self._pending_clear[rid]
+        for rid in candidates:
+            if rid not in self._pending_clear:
+                self._pending_clear[rid] = now
+        confirm = max(0.0, self.clear_confirm_sec)
+        cleared = sorted(
+            rid for rid, since in self._pending_clear.items() if now - since + 1e-9 >= confirm
+        )
+        for rid in cleared:
+            self._pending_clear.pop(rid, None)
+            self.entered_resources.discard(rid)
         self.released_resources |= set(cleared)
         return cleared
+
+    def _needed_by_path_ahead(self, x: float, y: float, geometry: SemanticGeometry) -> frozenset[str]:
+        """Resources the footprint touches on what is left of the current plan (from the pose nearest the robot)."""
+        poses = self.plan_poses
+        if len(poses) < 2:
+            return frozenset()
+        nearest = min(range(len(poses)), key=lambda i: (poses[i][0] - x) ** 2 + (poses[i][1] - y) ** 2)
+        radius = geometry.footprint_radius + max(0.0, self.stop_margin_m)
+        out: set[str] = set()
+        for px, py in sample_path(poses[nearest:], geometry.sample_step, geometry.horizon):
+            out |= footprint_resources(px, py, radius, self.zones, geometry.cell_size)
+        return frozenset(out)
 
     def publish_cleared_resources(self, cleared: list[str], *, x: float, y: float, yaw: float, localization_ok: bool) -> None:
         if not cleared or self.grant is None:
@@ -477,6 +582,7 @@ class SemanticTrafficClient:
         self.grant = None
         self.entered_resources.clear()
         self.released_resources.clear()
+        self._pending_clear.clear()
         self._allowed_cache = None
         self.last_block_reason = reason
 
@@ -575,12 +681,70 @@ def collect_resources(poses: Sequence[Sequence[float]], zones: list[dict[str, An
     """Same zones/cells the backend reserves for this path (first ``horizon`` metres)."""
     out: set[str] = set()
     rings = list(_zone_rings(zones))
-    for x, y in sample_path(poses, geometry.sample_step, max(geometry.cell_size, geometry.horizon)):
+    samples = sample_path(poses, geometry.sample_step, max(geometry.cell_size, geometry.horizon))
+    reached_end = bool(samples) and samples[-1][0] == float(poses[-1][0]) and samples[-1][1] == float(poses[-1][1])
+    for i, (x, y) in enumerate(samples):
         for code, ring in rings:
             if disc_hits_ring(x, y, geometry.reserve_radius, ring):
                 out.add(f"zone:{code}")
-        disc_cells(x, y, geometry.reserve_radius, geometry.cell_size, out)
+        heading = _straight_heading_at(geometry, samples, i, poses, reached_end) if geometry.lane_half_width > 0 else None
+        if heading is None:
+            disc_cells(x, y, geometry.reserve_radius, geometry.cell_size, out)
+        else:
+            # Lengthwise as much room as the disc gives: the body with its braking margin stays inside at the plan's
+            # start, where the robot stands, and at its end.
+            along = geometry.reserve_radius - geometry.footprint_radius + geometry.footprint_half_length
+            rect_cells(x, y, heading, along, geometry.lane_half_width, geometry.cell_size, out)
     return frozenset(out)
+
+
+_STRAIGHT_WINDOW_M = 0.25
+_STRAIGHT_MAX_TURN_RAD = 15.0 * math.pi / 180.0
+
+
+def _angle_between(a: float, b: float) -> float:
+    return abs(math.atan2(math.sin(a - b), math.cos(a - b)))
+
+
+def _straight_heading_at(
+    geometry: SemanticGeometry,
+    samples: list[tuple[float, float]],
+    i: int,
+    poses: Sequence[Sequence[float]],
+    reached_end: bool,
+) -> Optional[float]:
+    """Mirror of StraightHeadingAt: None where the robot may turn on the spot and needs the full disc."""
+    n = len(samples)
+    if n < 2:
+        return None
+    k = math.ceil(_STRAIGHT_WINDOW_M / geometry.sample_step)
+    before, after, here = samples[max(0, i - k)], samples[min(n - 1, i + k)], samples[i]
+    incoming = math.atan2(here[1] - before[1], here[0] - before[0]) if i > 0 else None
+    outgoing = math.atan2(after[1] - here[1], after[0] - here[0]) if i < n - 1 else None
+    if incoming is not None and outgoing is not None and _angle_between(incoming, outgoing) > _STRAIGHT_MAX_TURN_RAD:
+        return None
+    heading = outgoing if outgoing is not None else incoming
+    assert heading is not None
+    if i <= k and _angle_between(float(poses[0][2]), heading) > _STRAIGHT_MAX_TURN_RAD:
+        return None
+    if reached_end and i >= n - 1 - k and _angle_between(float(poses[-1][2]), heading) > _STRAIGHT_MAX_TURN_RAD:
+        return None
+    return heading
+
+
+def rect_cells(x: float, y: float, heading: float, half_length: float, half_width: float, cell_size: float,
+               into: set[str]) -> None:
+    """Every grid cell an oriented rectangle overlaps. Mirror of SemanticReservation.RectCells."""
+    c, s = math.cos(heading), math.sin(heading)
+    extent_x = abs(c) * half_length + abs(s) * half_width
+    extent_y = abs(s) * half_length + abs(c) * half_width
+    cell_along = cell_size / 2.0 * (abs(c) + abs(s))
+    for ix in range(math.floor((x - extent_x) / cell_size), math.floor((x + extent_x) / cell_size) + 1):
+        for iy in range(math.floor((y - extent_y) / cell_size), math.floor((y + extent_y) / cell_size) + 1):
+            dx = (ix + 0.5) * cell_size - x
+            dy = (iy + 0.5) * cell_size - y
+            if abs(dx * c + dy * s) <= half_length + cell_along and abs(-dx * s + dy * c) <= half_width + cell_along:
+                into.add(cell_id(ix, iy))
 
 
 def footprint_resources(x: float, y: float, radius: float, zones: list[dict[str, Any]], cell_size: float) -> frozenset[str]:

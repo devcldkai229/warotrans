@@ -13,6 +13,9 @@ SRC="$HOME/ros2_ws/src"
 LOGS="$HOME/wt_logs"
 MOTORS="${MOTORS:-false}"
 EKF="${EKF:-false}"
+# Dual-robot lab: ROBOT_CODE=RBT-002 ROS_DOMAIN_ID=31 (and a second Pi / namespace).
+ROBOT_CODE="${ROBOT_CODE:-RBT-001}"
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 
 case "$ACTION" in
   start)
@@ -30,18 +33,19 @@ case "$ACTION" in
       false) AMCL_PARAMS="$SRC/warotrans_localization/config/amcl_wheel_only.yaml" ;;
       *) echo "EKF must be true or false"; exit 2 ;;
     esac
-    echo "motors_enabled=$MOTORS ekf=$EKF bundle=$BUNDLE broker=$BROKER"
+    echo "robot_code=$ROBOT_CODE domain=$ROS_DOMAIN_ID motors_enabled=$MOTORS ekf=$EKF bundle=$BUNDLE broker=$BROKER"
     setsid nohup ros2 launch warotrans_bringup navigation.launch.py \
       map:="$BUNDLE/map.yaml" lanes_json:="$BUNDLE/lanes.json" \
       extra_params_file:="$SRC/warotrans_navigation/config/nav2_params_lane_aware.yaml" \
       enable_costmap_filters:=true keepout_mask:="$BUNDLE/keepout.yaml" speed_mask:="$BUNDLE/speed.yaml" \
       enable_authority_gate:=true motors_enabled:="$MOTORS" start_foxglove:=false \
       enable_ekf:="$EKF" amcl_params_file:="$AMCL_PARAMS" \
-      > "$LOGS/bringup.log" 2>&1 < /dev/null &
+      > "$LOGS/bringup_${ROBOT_CODE}.log" 2>&1 < /dev/null &
     setsid nohup ros2 launch warotrans_fleet fleet.launch.py \
       params_file:="$SRC/warotrans_fleet/config/robot_gateway_semantic.yaml" \
       semantic_manifest:="$BUNDLE/semantic_manifest.json" mqtt_host:="$BROKER" \
-      > "$LOGS/gateway.log" 2>&1 < /dev/null &
+      robot_code:="$ROBOT_CODE" \
+      > "$LOGS/gateway_${ROBOT_CODE}.log" 2>&1 < /dev/null &
     echo started
     ;;
   stop)

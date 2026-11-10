@@ -6,7 +6,7 @@ never touches /cmd_vel. Each check prints PASS / FAIL; the exit code is 0 only w
 
     source /opt/ros/jazzy/setup.bash && source ~/ros2_ws/install/setup.bash
     python3 ~/ros2_ws/../tools/real_robot_readiness.py \
-        --manifest $(ros2 pkg prefix warotrans_navigation)/share/warotrans_navigation/maps/map_one_v002/semantic_manifest.json \
+        --manifest $(ros2 pkg prefix warotrans_navigation)/share/warotrans_navigation/maps/map_one_v004/semantic_manifest.json \
         --mqtt-host <broker LAN IP>
 
 A robot is only ready for supervised motion when every line passes, INCLUDING the emergency stop, which no
@@ -30,6 +30,7 @@ from dataclasses import dataclass
 
 import rclpy
 from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
+from nav_msgs.msg import OccupancyGrid
 from rcl_interfaces.srv import GetParameters
 from rclpy.duration import Duration
 from rclpy.node import Node
@@ -86,6 +87,25 @@ class Probe(Node):
                          4: value.string_value}.get(value.type)
         return out
 
+    def publisher_count(self, topic: str) -> int:
+        return len(self.get_publishers_info_by_topic(topic))
+
+    def mask_cells(self, seconds: float) -> dict[str, int]:
+        """Marked cells per filter mask. The masks are latched: a late subscriber still gets them."""
+        latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        found: dict[str, int] = {}
+        subs = [
+            self.create_subscription(
+                OccupancyGrid, topic, lambda m, t=topic: found.__setitem__(t, sum(1 for v in m.data if v > 0)), latched)
+            for topic in MASK_TOPICS
+        ]
+        end = time.monotonic() + max(2.0, seconds)
+        while time.monotonic() < end and len(found) < len(MASK_TOPICS):
+            rclpy.spin_once(self, timeout_sec=0.05)
+        for sub in subs:
+            self.destroy_subscription(sub)
+        return found
+
     def lifecycle_active(self, manager: str, timeout: float = 3.0) -> bool | None:
         client = self.create_client(Trigger, f"{manager}/is_active")
         if not client.wait_for_service(timeout_sec=timeout):
@@ -93,6 +113,33 @@ class Probe(Node):
         future = client.call_async(Trigger.Request())
         rclpy.spin_until_future_complete(self, future, timeout_sec=timeout)
         return None if future.result() is None else bool(future.result().success)
+
+
+FILTER_TOPICS = {
+    "/keepout_costmap_filter_info": "keepout filter info (controller)",
+    "/keepout_planning_costmap_filter_info": "keepout filter info (planner)",
+    "/speed_costmap_filter_info": "speed filter info",
+    "/speed_limit": "SpeedFilter output (zone ceiling)",
+}
+MASK_TOPICS = {
+    "/keepout_filter_mask": "keepout mask",
+    "/keepout_planning_filter_mask": "keepout planning mask",
+    "/speed_filter_mask": "speed mask",
+}
+
+
+def costmap_filter_checks(publisher_count, masks: dict) -> list[tuple[str, bool, str]]:
+    """The stack drives without its filters, so a dead filter must fail here. Counts PUBLISHERS: a topic also shows up
+    because something subscribes to it (the controller always subscribes to /speed_limit)."""
+    out = []
+    for topic, label in FILTER_TOPICS.items():
+        count = publisher_count(topic)
+        out.append((f"{label}: {topic} has a publisher", count > 0, f"{count} publishers"))
+    for topic, label in MASK_TOPICS.items():
+        cells = masks.get(topic)
+        out.append((f"{label}: {topic} received with marked cells", bool(cells),
+                    "no message" if cells is None else f"{cells} marked cells"))
+    return out
 
 
 def run(args: argparse.Namespace) -> list[Check]:
@@ -218,6 +265,9 @@ def run(args: argparse.Namespace) -> list[Check]:
             f"{len(probe.authority_ok)} samples, any True={any(probe.authority_ok)}")
         moving = [t for t in probe.cmd_vel if abs(t.linear.x) > 1e-6 or abs(t.angular.z) > 1e-6]
         add("/cmd_vel_motor carries no motion", not moving, f"{len(probe.cmd_vel)} msgs, {len(moving)} non-zero")
+
+        for name, ok, detail in costmap_filter_checks(probe.publisher_count, probe.mask_cells(args.window)):
+            add(name, ok, detail)
     finally:
         probe.destroy_node()
         rclpy.shutdown()

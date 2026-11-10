@@ -130,8 +130,10 @@ def test_grant_opens_the_gate_inside_the_reservation_and_renew_keeps_it_open():
 
 
 def test_verified_exit_reports_only_resources_entered_and_left():
-    client, _, _, _ = granted()
+    client, _, _, clock = granted()
     assert client.resources_cleared_at(0.0, 0.0) == []
+    assert client.resources_cleared_at(2.0, 0.0) == []  # pending until clear_confirm_sec
+    clock.advance(client.clear_confirm_sec + 0.05)
     cleared = client.resources_cleared_at(2.0, 0.0)
     assert cleared and all(c in client.grant.resource_ids for c in cleared)
     near_end = stc.footprint_resources(2.0, 0.0, GEOMETRY["footprintRadiusMeters"] + 0.05, ZONES, 0.25)
@@ -326,8 +328,10 @@ def test_state_report_repeats_only_while_executing_without_a_grant():
     clock.advance(5.1)
     assert client.state_report_due() is True
     assert client.on_authority_payload(grant_for(client, clock), target_command_id=CMD)
-    clock.advance(5.1)
-    assert client.state_report_due() is False  # granted
+    clock.advance(2.6)
+    assert client.on_renew({"authorityId": "auth-1", "epoch": 100, "seq": 2, "expiresAt": _iso(clock.wall + 30)})
+    clock.advance(2.6)
+    assert client.state_report_due() is False  # a working grant
 
 
 def test_localization_regained_fires_once_on_the_rising_edge():
@@ -393,10 +397,13 @@ def test_unknown_recovery_kind_refused():
     assert client.recovery_block_reason(_at_x(1.0), "backup", -0.1) == "UNKNOWN_RECOVERY"
 
 
-def _drive_until_something_is_released(client, start=0.0, stop=3.0):
+def _drive_until_something_is_released(client, clock=None, start=0.0, stop=3.0):
     x = start
     while x < stop:
         cleared = client.resources_cleared_at(x, 0.0)
+        if not cleared and clock is not None and client._pending_clear:
+            clock.advance(client.clear_confirm_sec + 0.05)
+            cleared = client.resources_cleared_at(x, 0.0)
         if cleared:
             return x, cleared
         x += 0.02
@@ -404,15 +411,15 @@ def _drive_until_something_is_released(client, start=0.0, stop=3.0):
 
 
 def test_backup_into_what_the_robot_released_is_refused():
-    client, _, _, _ = granted()
-    x, cleared = _drive_until_something_is_released(client)
+    client, _, _, clock = granted()
+    x, cleared = _drive_until_something_is_released(client, clock)
     assert set(cleared) <= set(client.grant.resource_ids), "the grant still lists it: that is the trap"
     assert client.recovery_block_reason(_at_x(x), "backup", 0.12) == "REVERSE_OUTSIDE_RESERVATION"
 
 
 def test_gate_closes_when_the_footprint_is_back_in_a_released_resource():
-    client, _, gate, _ = granted()
-    x, _ = _drive_until_something_is_released(client)
+    client, _, gate, clock = granted()
+    x, _ = _drive_until_something_is_released(client, clock)
     assert client.tick(_at_x(x)) is True
     assert client.tick(_at_x(x - 0.15)) is False
     assert client.last_block_reason == "IN_RELEASED_RESOURCE"
@@ -420,14 +427,162 @@ def test_gate_closes_when_the_footprint_is_back_in_a_released_resource():
 
 
 def test_jitter_at_the_release_boundary_does_not_shut_the_gate():
-    client, _, _, _ = granted()
-    x, _ = _drive_until_something_is_released(client)
+    client, _, _, clock = granted()
+    x, _ = _drive_until_something_is_released(client, clock)
     assert client.tick(_at_x(x - 0.02)) is True
+
+
+def test_a_lost_first_grant_is_proposed_again_whatever_dropped_the_old_one():
+    """The reason text is NEW_COMMAND here: matching on NO_GRANT left the robot waiting forever."""
+    client, published, _, clock = make()
+    client.on_plan(PATH, goal=PATH[-1], command_id=CMD)
+    assert len(published) == 1
+    client.tick(_at_x(0.0))
+    assert len(published) == 1  # within the cooldown
+    clock.advance(client.propose_retry_sec + 0.1)
+    client.tick(_at_x(0.0))
+    assert len(published) == 2 and published[-1][1]["planRevision"] == published[0][1]["planRevision"]
+
+
+def test_no_proposal_while_the_link_is_down():
+    client, published, _, clock = make()
+    client.on_plan(PATH, goal=PATH[-1], command_id=CMD)
+    client.on_link(False)
+    clock.advance(client.propose_retry_sec + 0.1)
+    client.tick(_at_x(0.0))
+    assert len(published) == 1
+
+
+def test_a_lapsed_grant_is_reported_so_the_backend_can_cancel_a_closed_command():
+    client, _, _, clock = granted()
+    assert client.state_report_due() is False
+    clock.advance(client.authority_loss_timeout_sec + 0.1)
+    assert client.state_report_due() is True
+
+
+# ---------------------------------------------------------------------- lane rectangles
+
+
+ORIENTED = json.loads((Path(__file__).parent / "data" / "semantic_oriented_vectors.json").read_text(encoding="utf-8"))
+LANE_GEOMETRY = ORIENTED["geometry"]
+ALONG_X = [(x / 10.0, 0.0, 0.0) for x in range(0, 31)]
+
+
+def test_lane_rectangles_match_backend_vectors():
+    geom = stc.SemanticGeometry.from_payload(LANE_GEOMETRY)
+    assert geom.lane_half_width == 0.26
+    for case in ORIENTED["cases"]:
+        got = sorted(stc.collect_resources(case["poses"], ORIENTED["zones"], geom))
+        assert got == case["resources"], case["name"]
+
+
+def test_body_rectangles_match_backend_vectors():
+    for b in ORIENTED["bodies"]:
+        got: set[str] = set()
+        stc.rect_cells(b["x"], b["y"], b["heading"], b["halfLength"], b["halfWidth"], LANE_GEOMETRY["cellSizeMeters"], got)
+        assert sorted(got) == b["resources"]
+
+
+def test_geometry_without_the_body_size_is_refused_with_lane_rectangles():
+    assert stc.SemanticGeometry.from_payload({**LANE_GEOMETRY, "footprintHalfWidthMeters": 0}) is None
+
+
+def _lane_grant():
+    client, _, gate, clock = make()
+    client.zones = []
+    client.on_plan(ALONG_X, goal=ALONG_X[-1], command_id=CMD)
+    geom = stc.SemanticGeometry.from_payload(LANE_GEOMETRY)
+    assert client.on_authority_payload(
+        grant_for(client, clock, geometry=LANE_GEOMETRY, resources=sorted(stc.collect_resources(ALONG_X, [], geom))),
+        target_command_id=CMD,
+    )
+    return client, gate
+
+
+def test_body_on_the_lane_keeps_the_gate_open():
+    client, _ = _lane_grant()
+    for dy in (0.0, 0.05, -0.05):
+        assert client.tick((1.5, dy, 0.0)) is True, dy
+
+
+def test_drifting_out_of_the_lane_rectangle_closes_the_gate():
+    client, gate = _lane_grant()
+    assert client.tick((1.5, 0.15, 0.0)) is False
+    assert client.last_block_reason == "OUTSIDE_RESERVATION"
+    assert gate[-1] is False
+
+
+def test_body_with_its_braking_margin_fits_at_the_start_of_a_plan():
+    """Found by the two-robot harness: at each replan the robot stands at the first sample, its rear inside the grant."""
+    geom = stc.SemanticGeometry.from_payload(LANE_GEOMETRY)
+    for offset in (0.0, 0.03, 0.07, 0.11):
+        path = [(offset + x / 10.0, 0.0, 0.0) for x in range(0, 31)]
+        client, _, _, clock = make()
+        client.zones = []
+        client.on_plan(path, goal=path[-1], command_id=CMD)
+        assert client.on_authority_payload(
+            grant_for(client, clock, geometry=LANE_GEOMETRY, resources=sorted(stc.collect_resources(path, [], geom))),
+            target_command_id=CMD,
+        )
+        assert client.tick((offset, 0.0, 0.0)) is True, offset
+
+
+def test_turning_across_the_lane_rectangle_closes_the_gate():
+    client, _ = _lane_grant()
+    assert client.tick((1.5, 0.08, 0.0)) is True
+    assert client.tick((1.5, 0.08, 1.57)) is False
+
+
+def test_a_spin_in_the_middle_of_a_lane_is_refused_but_allowed_at_a_disc():
+    client, _ = _lane_grant()
+    assert client.recovery_block_reason((1.5, 0.08, 0.0), "spin") == "SPIN_OUTSIDE_RESERVATION"
+    assert client.recovery_block_reason((1.5, 0.08, 0.0), "backup", 0.10) is None
+    assert client.recovery_block_reason((0.0, 0.0, 0.0), "spin") is None
+
+
+def test_a_cell_the_path_comes_back_to_is_not_released():
+    """Seen on the rig, turning at SHELF-B-01: the robot left a cell, its path re-entered it, the gate closed for 20 s."""
+    out = [(x / 10.0, 0.0, 0.0) for x in range(0, 16)]
+    back = [(1.5 - x / 10.0, 0.05, math.pi) for x in range(1, 16)]
+    client, _, gate, clock = make()
+    client.authority_loss_timeout_sec = 1e6  # this test is about the cells, and the clock runs fast here
+    client.on_plan(out + back, goal=back[-1], command_id=CMD)
+    assert client.on_authority_payload(grant_for(client, clock), target_command_id=CMD)
+    start_cells = stc.footprint_resources(0.0, 0.0, GEOMETRY["footprintRadiusMeters"], ZONES, GEOMETRY["cellSizeMeters"])
+    for x in [i / 10.0 for i in range(0, 16)]:
+        client.resources_cleared_at(x, 0.0)
+        clock.advance(client.clear_confirm_sec + 0.05)
+        client.resources_cleared_at(x, 0.0)
+    assert not (start_cells & client.released_resources)
+    for x in [1.5 - i / 10.0 for i in range(1, 16)]:
+        assert client.tick((x, 0.05, math.pi)) is True, x
+        client.resources_cleared_at(x, 0.05)
+
+
+def test_pose_noise_does_not_prematurely_clear_resources():
+    """One sample outside a cell then back inside before clear_confirm_sec must not clear it."""
+    client, _, _, clock = granted()
+    client.resources_cleared_at(0.0, 0.0)
+    x = 0.0
+    while x < 3.0:
+        client.resources_cleared_at(x, 0.0)
+        if client._pending_clear:
+            pending = set(client._pending_clear)
+            x_back = max(0.0, x - 0.08)
+            assert client.resources_cleared_at(x_back, 0.0) == []
+            # Noise cancelled the pending set (footprint returned).
+            assert not (pending & set(client._pending_clear))
+            clock.advance(client.clear_confirm_sec + 0.1)
+            assert client.resources_cleared_at(x_back, 0.0) == []
+            assert not (pending & client.released_resources)
+            return
+        x += 0.02
+    raise AssertionError("never pending")
 
 
 def test_a_newer_grant_listing_a_resource_makes_it_usable_again():
     client, _, _, clock = granted()
-    x, cleared = _drive_until_something_is_released(client)
+    x, cleared = _drive_until_something_is_released(client, clock)
     assert client.released_resources == set(cleared)
     assert client.on_authority_payload(grant_for(client, clock, authority="auth-2"), target_command_id=CMD)
     assert client.released_resources == set()
@@ -436,14 +591,14 @@ def test_a_newer_grant_listing_a_resource_makes_it_usable_again():
 
 def test_a_newer_grant_without_the_resource_keeps_it_released():
     client, _, _, clock = granted()
-    x, cleared = _drive_until_something_is_released(client)
+    x, cleared = _drive_until_something_is_released(client, clock)
     remaining = sorted(set(client.grant.resource_ids) - set(cleared))
     assert client.on_authority_payload(grant_for(client, clock, authority="auth-2", resources=remaining), target_command_id=CMD)
     assert client.released_resources == set(cleared)
 
 
 def test_finishing_the_command_forgets_released_resources():
-    client, _, _, _ = granted()
-    _drive_until_something_is_released(client)
+    client, _, _, clock = granted()
+    _drive_until_something_is_released(client, clock)
     client.on_command_finished(CMD)
     assert client.released_resources == set()

@@ -47,6 +47,10 @@ double distPointSeg(double px, double py, double ax, double ay, double bx, doubl
 
 // A shortcut may cost this much more than the grid cells it replaces, so rounding does not keep staircases alive.
 constexpr double kShortcutCostSlack = 1.02;
+// Near either end of a shortcut the path may be joining or leaving the lane centre.
+constexpr double kShortcutEndAllowance = 0.30;
+// Shortcut heading within about 25 degrees of the lane: it runs along the lane rather than across it.
+constexpr double kAlongLaneMinCos = 0.9;
 
 }  // namespace
 
@@ -81,6 +85,10 @@ void LaneAwareNavfn::configure(
     node, name_ + ".lane_prefer_factor", rclcpp::ParameterValue(0.15));
   nav2_util::declare_parameter_if_not_declared(
     node, name_ + ".lane_center_weight", rclcpp::ParameterValue(3.0));
+  nav2_util::declare_parameter_if_not_declared(
+    node, name_ + ".start_escape_radius", rclcpp::ParameterValue(0.30));
+  nav2_util::declare_parameter_if_not_declared(
+    node, name_ + ".lane_shortcut_max_offset", rclcpp::ParameterValue(0.035));
 
   std::string lanes_path;
   node->get_parameter(name_ + ".lanes_json", lanes_path);
@@ -89,6 +97,8 @@ void LaneAwareNavfn::configure(
   node->get_parameter(name_ + ".start_goal_lethal_cost", start_goal_lethal_cost_);
   node->get_parameter(name_ + ".lane_prefer_factor", lane_prefer_factor_);
   node->get_parameter(name_ + ".lane_center_weight", lane_center_weight_);
+  node->get_parameter(name_ + ".start_escape_radius", start_escape_radius_);
+  node->get_parameter(name_ + ".lane_shortcut_max_offset", lane_shortcut_max_offset_);
 
   if (!lanes_path.empty()) {
     bool loaded = false;
@@ -201,20 +211,21 @@ const LaneSeg * LaneAwareNavfn::nearestLane(double wx, double wy, double & dista
 
 double LaneAwareNavfn::stepCost(double wx, double wy, unsigned char cell_cost, double dist_cells) const
 {
-  // Strongly prefer free cells so the search does not graze INSCRIBED corridors that
-  // later become disconnected pockets under live inflation + ONE_WAY.
-  // Evidence: leave EXIT still plan_min_y≈-0.89 with prefer=0.35 — inflated east aisle
-  // step≈8.7 still beat free south step=1. On mapped lanes use weak inflation weight.
+  // Prefer free cells. Off-lane: strong inflation weight. On-lane: centre pull + elevated
+  // INSCRIBED soft-cost so the planner does not squeeze through inflated pockets when a clear
+  // lane centre exists (do NOT hard-block 253 — that historically erased mid-aisle routes).
   const double cost_pen = static_cast<double>(cell_cost) / 255.0;
   double distance = 0.0;
   const LaneSeg * lane = nearestLane(wx, wy, distance);
   if (!lane) {
     return dist_cells * (1.0 + 12.0 * cost_pen * cost_pen);
   }
-  // Without a pull to the centre line every corridor cell costs the same, so a goal to one side
-  // makes the path ride the corridor edge: the boundary with the opposite lane on a two-lane aisle.
   const double off_center = distance / lane->half_width;
-  return dist_cells * (1.0 + 2.0 * cost_pen * cost_pen) * lane_prefer_factor_ *
+  // INSCRIBED(253) and near-inscribed: heavier soft penalty inside mapped lanes.
+  const double inscribed_boost =
+    (cell_cost >= nav2_costmap_2d::INSCRIBED_INFLATED_OBSTACLE) ? 6.0 :
+    (cell_cost >= 200) ? 3.0 : 1.0;
+  return dist_cells * (1.0 + 2.0 * cost_pen * cost_pen * inscribed_boost) * lane_prefer_factor_ *
          (1.0 + lane_center_weight_ * off_center * off_center);
 }
 
@@ -243,6 +254,30 @@ bool LaneAwareNavfn::segmentCost(
     prev = q;
   }
   return true;
+}
+
+bool LaneAwareNavfn::shortcutLeavesLaneCentre(const WorldPoint & a, const WorldPoint & b) const
+{
+  const double length = std::hypot(b.x - a.x, b.y - a.y);
+  if (length <= 2.0 * kShortcutEndAllowance) {
+    return false;
+  }
+  const double heading = std::atan2(b.y - a.y, b.x - a.x);
+  const int samples = static_cast<int>(std::ceil(length / costmap_->getResolution()));
+  for (int i = 1; i < samples; ++i) {
+    const double t = static_cast<double>(i) / samples;
+    if (std::min(t, 1.0 - t) * length < kShortcutEndAllowance) {
+      continue;
+    }
+    double distance = 0.0;
+    const LaneSeg * lane = nearestLane(a.x + t * (b.x - a.x), a.y + t * (b.y - a.y), distance);
+    if (lane && distance > lane_shortcut_max_offset_ &&
+      std::fabs(std::cos(normalizeAngle(heading - lane->tangent))) > kAlongLaneMinCos)
+    {
+      return true;
+    }
+  }
+  return false;
 }
 
 std::vector<WorldPoint> LaneAwareNavfn::simplifyPath(const std::vector<WorldPoint> & points) const
@@ -279,7 +314,8 @@ std::vector<WorldPoint> LaneAwareNavfn::simplifyPath(const std::vector<WorldPoin
     size_t next = i + 1;
     for (size_t j = n - 1; j > i + 1; --j) {
       double cost = 0.0;
-      if (segmentCost(points[i], points[j], max_cell[j], cost) &&
+      if (!shortcutLeavesLaneCentre(points[i], points[j]) &&
+        segmentCost(points[i], points[j], max_cell[j], cost) &&
         cost <= (cost_to[j] - cost_to[i]) * kShortcutCostSlack)
       {
         next = j;
@@ -328,14 +364,23 @@ nav_msgs::msg::Path LaneAwareNavfn::createPlan(
       "LaneAwareNavfn: start/goal NO_INFORMATION (start=%u goal=%u)", sc, gc);
     return path;
   }
-  if (sc >= static_cast<unsigned char>(start_goal_lethal_cost_) ||
-    gc >= static_cast<unsigned char>(start_goal_lethal_cost_))
-  {
+  // The keep-out planning mask is wider than the keep-out itself and leaves only centimetres beside some lanes, so
+  // localization noise can put the robot inside it. That is no reason to have no path: plan out of the lethal blob
+  // the robot stands in, within start_escape_radius. The goal is never relaxed, and the footprint check of the
+  // controller still decides whether the robot may actually move.
+  const bool start_lethal = sc >= static_cast<unsigned char>(start_goal_lethal_cost_);
+  const bool escaping = start_lethal && start_escape_radius_ > 0.0;
+  if ((start_lethal && !escaping) || gc >= static_cast<unsigned char>(start_goal_lethal_cost_)) {
     RCLCPP_WARN(
       node_.lock()->get_logger(),
       "LaneAwareNavfn: start/goal LETHAL (start=%u goal=%u threshold=%d)",
       sc, gc, start_goal_lethal_cost_);
     return path;
+  }
+  if (escaping) {
+    RCLCPP_WARN(
+      node_.lock()->get_logger(),
+      "LaneAwareNavfn: start is LETHAL (cost %u): planning out of it within %.2f m", sc, start_escape_radius_);
   }
   if (sc >= static_cast<unsigned char>(lethal_cost_) ||
     gc >= static_cast<unsigned char>(lethal_cost_))
@@ -404,11 +449,19 @@ nav_msgs::msg::Path LaneAwareNavfn::createPlan(
       const unsigned int ux = static_cast<unsigned int>(nx);
       const unsigned int uy = static_cast<unsigned int>(ny);
       const unsigned char c = costmap_->getCost(ux, uy);
-      if (c >= static_cast<unsigned char>(lethal_cost_) || c == nav2_costmap_2d::NO_INFORMATION) {
+      if (c == nav2_costmap_2d::NO_INFORMATION) {
         continue;
       }
       double wx1, wy1;
       mapToWorld(ux, uy, wx1, wy1);
+      if (c >= static_cast<unsigned char>(lethal_cost_)) {
+        const bool leaving_start_blob =
+          escaping && costmap_->getCost(cx, cy) >= static_cast<unsigned char>(lethal_cost_) &&
+          std::hypot(wx1 - start.pose.position.x, wy1 - start.pose.position.y) <= start_escape_radius_;
+        if (!leaving_start_blob) {
+          continue;
+        }
+      }
       if (!moveAllowed(wx0, wy0, wx1, wy1)) {
         continue;
       }

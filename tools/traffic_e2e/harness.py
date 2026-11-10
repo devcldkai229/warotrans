@@ -14,7 +14,7 @@ from typing import Any, Optional
 ROBOT_REPO = Path(__file__).resolve().parents[2]
 SYSTEM_REPO = Path(os.environ.get("WAROTRANS_SYSTEM_REPO", ROBOT_REPO.parent / "warotrans-system"))
 HOST_DLL = SYSTEM_REPO / "backend" / "src" / "WaroTrans.Host" / "bin" / "Debug" / "net10.0" / "WaroTrans.Host.dll"
-BUNDLE = ROBOT_REPO / "ros2_ws" / "src" / "warotrans_navigation" / "maps" / "map_one_v002"
+BUNDLE = ROBOT_REPO / "ros2_ws" / "src" / "warotrans_navigation" / "maps" / "map_one_v004"
 
 TEST_DB = os.environ.get("WARO_E2E_DB", "warotrans_test")
 PREFIX = os.environ.get("WARO_E2E_PREFIX", "warotrans-e2e/v1")
