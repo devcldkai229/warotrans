@@ -54,3 +54,29 @@ def test_invalid_max_age():
 def test_module_importable_without_rclpy_and_main_exists():
     module = importlib.import_module("warotrans_fleet.cmd_vel_authority_gate")
     assert callable(module.main)
+
+
+# N: without authority no motor-bound velocity passes, whoever publishes.
+def test_only_the_required_node_may_publish_authority_ok():
+    from warotrans_fleet.cmd_vel_authority_gate import publishers_trusted
+
+    assert publishers_trusted(["robot_gateway"], "robot_gateway") is True
+    assert publishers_trusted(["/robot_gateway"], "robot_gateway") is True
+    assert publishers_trusted(["robot_gateway", "_ros2cli_1234"], "robot_gateway") is False  # spoofed True
+    assert publishers_trusted([], "robot_gateway") is False
+    assert publishers_trusted(["anything"], "") is True  # check disabled (sim)
+
+
+def test_untrusted_publishers_or_estop_block_a_fresh_true():
+    logic = AuthorityGateLogic(max_age_sec=0.3)
+    logic.on_authority_ok(True, 10.0)
+    assert logic.decide(10.1).forward is True
+    logic.publishers_ok = False
+    assert logic.decide(10.1).forward is False
+    logic.publishers_ok = True
+    logic.estop = True
+    decision = logic.decide(10.15)
+    assert decision.forward is False and decision.publish_zero is True
+    logic.estop = False
+    logic.on_authority_ok(True, 10.2)
+    assert logic.decide(10.25).forward is True

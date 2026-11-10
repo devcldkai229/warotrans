@@ -48,6 +48,8 @@ ultrasonic:
     z: 0.0045      # 4.5 mm
     yaw: 0.0       # facing +X
   rear:
+    # RE-MEASURE before use: front is (154.2 + 15.5) mm, so "15.42" looks like a typo, and -0.029 m would put the
+    # sensor near the centre of a 0.32 m chassis. Not wired into Nav2, so nothing depends on it today.
     x: -0.02892    # (15.42 + 13.5) mm rearward → negative X (all mm)
     y: 0.0
     z: 0.0045      # 4.5 mm

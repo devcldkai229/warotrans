@@ -379,6 +379,25 @@ def _setup(context, *args, **kwargs):
                 remappings=remappings,
             ),
         ]
+        # BackUp and Spin of the default tree go through this guard, and it never moves anything by itself: a refused
+        # manoeuvre is a failed BT action. If it is not running the tree cannot load, so no goal is accepted.
+        actions.append(
+            Node(
+                package="warotrans_fleet",
+                executable="recovery_guard",
+                name="recovery_guard",
+                output="screen",
+                respawn=True,
+                respawn_delay=2.0,
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "require_traffic_authorization": enable_authority_gate,
+                    }
+                ],
+                remappings=remappings,
+            )
+        )
         if enable_authority_gate:
             # Relative topics so PushRosNamespace(sim0N) isolates each robot's gate.
             # Absolute defaults (/cmd_vel_safe, /traffic/authority_ok) break multi_sim.
@@ -394,8 +413,12 @@ def _setup(context, *args, **kwargs):
                         {
                             "use_sim_time": use_sim_time,
                             "input_topic": "cmd_vel_safe",
-                            "output_topic": "cmd_vel",
+                            "output_topic": LaunchConfiguration("gate_output_topic").perform(context),
                             "authority_ok_topic": "traffic/authority_ok",
+                            # Only the gateway may open the gate; anyone else publishing authority_ok closes it.
+                            "required_authority_publisher": LaunchConfiguration(
+                                "required_authority_publisher"
+                            ).perform(context),
                         }
                     ],
                     remappings=remappings,
@@ -488,6 +511,19 @@ def generate_launch_description():
                     "Active Mode: insert cmd_vel_authority_gate between collision_monitor "
                     "(/cmd_vel_safe) and /cmd_vel. Default false (legacy)."
                 ),
+            ),
+            DeclareLaunchArgument(
+                "gate_output_topic",
+                default_value="cmd_vel",
+                description=(
+                    "Topic the authority gate forwards to. Real robot: cmd_vel_motor, the only topic the ESP32 "
+                    "bridge drives from, so no other /cmd_vel publisher (teleop, CLI) reaches the motors."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "required_authority_publisher",
+                default_value="",
+                description="Node name that alone may publish traffic/authority_ok (real robot: robot_gateway)",
             ),
             DeclareLaunchArgument(
                 "enable_cmd_vel_pipeline",

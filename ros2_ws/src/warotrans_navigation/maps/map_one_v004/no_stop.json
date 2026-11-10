@@ -1,0 +1,66 @@
+{
+  "zones": [
+    {
+      "id": "0fe33a61-cc8d-49a6-ab8a-9f5736fac885",
+      "code": "ZONE-NO-STOP-ZONE-A",
+      "name": "No Stop Zone A",
+      "zone_type": "NO_STOP",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            0.807,
+            3.914
+          ],
+          [
+            1.462,
+            3.914
+          ],
+          [
+            1.462,
+            3.252
+          ],
+          [
+            0.807,
+            3.244
+          ],
+          [
+            0.807,
+            3.914
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "0b56c912-df47-48cd-ae4d-be9f6652b1ce",
+      "code": "ZONE-NO-STOP-ZONE-B",
+      "name": "No Stop Zone B",
+      "zone_type": "NO_STOP",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            2.27,
+            2.822
+          ],
+          [
+            2.902,
+            2.819
+          ],
+          [
+            2.906,
+            1.484
+          ],
+          [
+            2.283,
+            1.479
+          ],
+          [
+            2.27,
+            2.822
+          ]
+        ]
+      ]
+    }
+  ]
+}

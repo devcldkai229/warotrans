@@ -45,3 +45,19 @@ def test_non_finite_covariance_blocks():
     r.on_initial_pose()
     r.on_amcl_pose(_cov(math.nan, 0.01))
     assert r.blocking_reason().startswith("AMCL_COVARIANCE_HIGH")
+
+
+def test_zero_covariance_boot_sample_is_not_an_estimate():
+    r = AmclReadiness()
+    r.on_initial_pose()
+    r.on_amcl_pose([0.0] * 36)            # latched boot pose: /initialpose has not reached AMCL
+    assert r.blocking_reason() == "NO_AMCL_POSE"
+
+
+def test_a_new_operator_pose_needs_a_new_amcl_pose():
+    r = AmclReadiness()
+    r.on_initial_pose()
+    r.on_amcl_pose(_cov(0.04, 0.01))
+    assert r.blocking_reason() is None
+    r.on_initial_pose()                   # robot placed somewhere else
+    assert r.blocking_reason() == "NO_AMCL_POSE"

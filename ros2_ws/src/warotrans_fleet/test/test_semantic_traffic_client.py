@@ -1,276 +1,449 @@
-"""Unit tests for Stage-3 SemanticTrafficClient (no ROS)."""
+"""semantic_active client: the robot moves only inside what the backend reserved for its current plan."""
 
 from __future__ import annotations
+
+import json
+import math
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from warotrans_fleet import semantic_traffic_client as stc
 from warotrans_fleet.semantic_traffic_client import SemanticTrafficClient
 
-PATH_A = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)]
+VECTORS = json.loads((Path(__file__).parent / "data" / "semantic_cells_vectors.json").read_text(encoding="utf-8"))
+GEOMETRY = VECTORS["geometry"]
+ZONES = VECTORS["zones"]
+CMD = "11111111-1111-1111-1111-111111111111"
+PATH = [(x / 10.0, 0.0, 0.0) for x in range(0, 31)]  # 0 → 3 m along x
 
 
-def _granted_client(ok_flags, *, now=None, seq=1):
-    kwargs = {} if now is None else {"now": now}
+class Clock:
+    def __init__(self) -> None:
+        self.wall = 1_800_000_000.0
+        self.mono = 1000.0
+
+    def advance(self, sec: float) -> None:
+        self.wall += sec
+        self.mono += sec
+
+
+def _iso(ts: float) -> str:
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def make(clock: Clock | None = None):
+    clock = clock or Clock()
+    published: list[tuple[str, dict]] = []
+    gate: list[bool] = []
     client = SemanticTrafficClient(
-        robot_code="RBT-001",
-        topic_prefix="warotrans/v1",
-        fingerprint="fp1",
-        publish_json=lambda *_: None,
-        set_authority_ok=lambda v: ok_flags.append(v),
-        **kwargs,
-    )
-    client.on_plan(PATH_A)
-    assert client.on_authority_payload(_grant(seq=seq)) is True
-    return client
-
-
-def _grant(*, seq=1, rev=1, epoch=1, authority_id="a1", expires_at=None):
-    body = {
-        "authorityId": authority_id,
-        "epoch": epoch,
-        "seq": seq,
-        "semanticMapFingerprint": "fp1",
-        "planRevision": rev,
-        "resourceIds": ["cell:0:0"],
-        "pathHash": "h",
-    }
-    if expires_at is not None:
-        body["expiresAt"] = expires_at
-    return body
-
-
-def test_revoke_closes_the_gate_immediately():
-    ok_flags = []
-    client = _granted_client(ok_flags)
-
-    client.on_revoke()
-    client.tick()
-
-    # Was: open for replan_grace_sec (3 s) after REVOKE. The backend only revokes from a quarantine (STOP_NOW).
-    assert ok_flags[-2:] == [False, False]
-    assert client.grant is None
-
-
-def test_grant_expired_on_arrival_never_opens_the_gate():
-    ok_flags = []
-    client = SemanticTrafficClient(
-        robot_code="RBT-001", topic_prefix="warotrans/v1", fingerprint="fp1",
-        publish_json=lambda *_: None, set_authority_ok=lambda v: ok_flags.append(v),
-        now=lambda: 2_000_000_000.0,
-    )
-    client.on_plan(PATH_A)
-
-    assert client.on_authority_payload(_grant(expires_at="2000-01-01T00:00:00Z")) is False
-    assert True not in ok_flags
-
-
-def test_grant_without_plan_revision_is_refused():
-    ok_flags = []
-    client = SemanticTrafficClient(
-        robot_code="RBT-001", topic_prefix="warotrans/v1", fingerprint="fp1",
-        publish_json=lambda *_: None, set_authority_ok=lambda v: ok_flags.append(v),
-    )
-    client.on_plan(PATH_A)
-
-    assert client.on_authority_payload(_grant(rev=0)) is False
-    assert True not in ok_flags
-
-
-def test_redelivered_or_older_grant_does_not_roll_the_grant_back():
-    ok_flags = []
-    client = _granted_client(ok_flags, seq=5)
-
-    assert client.on_authority_payload(_grant(seq=5)) is False      # QoS1 duplicate
-    assert client.on_authority_payload(_grant(seq=3)) is False      # older
-    assert client.on_authority_payload(_grant(seq=9, epoch=0, authority_id="old")) is False
-    assert client.grant.seq == 5
-    assert client.on_authority_payload(_grant(seq=6)) is True
-
-
-def test_old_grant_bridges_a_replan_only_for_the_grace_window(monkeypatch):
-    mono = {"t": 100.0}
-    monkeypatch.setattr(stc.time, "monotonic", lambda: mono["t"])
-    ok_flags = []
-    client = _granted_client(ok_flags)
-    client.replan_grace_sec = 3.0
-
-    # Robot replans (new path), backend has not granted revision 2 yet: old grant bridges the gap.
-    client.on_plan([(0.0, 0.0, 0.0), (0.0, 1.0, 1.57)])
-    client.tick()
-    assert ok_flags[-1] is True
-
-    # Keeps replanning while the backend refuses: later revisions must not extend the window.
-    for i in range(1, 6):
-        mono["t"] += 1.0
-        client.on_plan([(0.1 * i, 0.0, 0.0), (0.0, 2.0 + i, 1.57)])
-        client.tick()
-    # Was: the old 30 s grant stayed valid for every new path the backend never granted.
-    assert ok_flags[-1] is False
-    assert client.is_grant_valid() is False
-
-
-def test_grant_for_the_new_revision_ends_the_handoff(monkeypatch):
-    mono = {"t": 100.0}
-    monkeypatch.setattr(stc.time, "monotonic", lambda: mono["t"])
-    ok_flags = []
-    client = _granted_client(ok_flags)
-
-    client.on_plan([(0.0, 0.0, 0.0), (0.0, 1.0, 1.57)])
-    assert client.on_authority_payload(_grant(seq=2, rev=2)) is True
-    mono["t"] += 10.0
-    client.tick()
-    assert ok_flags[-1] is True
-
-
-def test_plan_propose_closes_gate_until_grant():
-    published = []
-    ok_flags = []
-
-    client = SemanticTrafficClient(
-        robot_code="RBT-SIM-01",
-        topic_prefix="warotrans/v1",
-        fingerprint="fp1",
+        robot_code="SIM-A",
+        topic_prefix="warotrans-e2e/v1",
+        fingerprint="fp-1",
         publish_json=lambda t, b: published.append((t, b)),
-        set_authority_ok=lambda v: ok_flags.append(v),
-    )
-    client.on_plan([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], goal=(1.0, 0.0, 0.0))
-    assert ok_flags[-1] is False
-    assert published and published[-1][1]["planRevision"] == 1
-    assert published[-1][0].endswith("/traffic_plan")
-
-    client.on_authority_payload(
-        {
-            "authorityId": "a1",
-            "epoch": 1,
-            "seq": 1,
-            "semanticMapFingerprint": "fp1",
-            "planRevision": 1,
-            "resourceIds": ["zone:Z1", "cell:0:0"],
-            "pathHash": "abc",
-        }
-    )
-    assert ok_flags[-1] is True
-    assert client.grant is not None
-    assert "zone:Z1" in client.held_resources
-
-
-def test_stale_plan_revision_rejected():
-    ok_flags = []
-    client = SemanticTrafficClient(
-        robot_code="RBT-X",
-        topic_prefix="warotrans/v1",
-        fingerprint="fp",
-        publish_json=lambda *_: None,
-        set_authority_ok=lambda v: ok_flags.append(v),
-    )
-    client.plan_revision = 2
-    assert client.on_authority_payload(
-        {
-            "authorityId": "a",
-            "epoch": 1,
-            "seq": 1,
-            "semanticMapFingerprint": "fp",
-            "planRevision": 1,
-            "resourceIds": [],
-            "pathHash": "",
-        }
-    ) is False
-    # The gate starts closed and a stale grant publishes nothing (ok_flags[-1] raised on the empty list).
-    assert True not in ok_flags
-    assert client.grant is None
-
-
-def test_identical_plan_debounced_does_not_bump_revision():
-    published = []
-    ok_flags = []
-    client = SemanticTrafficClient(
-        robot_code="RBT-SIM-01",
-        topic_prefix="warotrans/v1",
-        fingerprint="fp1",
-        publish_json=lambda t, b: published.append((t, b)),
-        set_authority_ok=lambda v: ok_flags.append(v),
-    )
-    poses = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)]
-    client.on_plan(poses)
-    client.on_authority_payload(
-        {
-            "authorityId": "a1",
-            "epoch": 1,
-            "seq": 1,
-            "semanticMapFingerprint": "fp1",
-            "planRevision": 1,
-            "resourceIds": ["cell:0:0"],
-            "pathHash": "h",
-        }
-    )
-    n = len(published)
-    rev = client.plan_revision
-    client.on_plan(poses)  # identical path
-    assert client.plan_revision == rev
-    assert len(published) == n
-    assert ok_flags[-1] is True
-
-
-def test_tick_republishes_authority_ok_while_grant_valid():
-    ok_flags = []
-    now = {"t": 1000.0}
-    client = SemanticTrafficClient(
-        robot_code="RBT-SIM-01",
-        topic_prefix="warotrans/v1",
-        fingerprint="fp1",
-        publish_json=lambda *_: None,
-        set_authority_ok=lambda v: ok_flags.append(v),
-        now=lambda: now["t"],
+        set_authority_ok=gate.append,
+        zones=ZONES,
+        now=lambda: clock.wall,
+        monotonic=lambda: clock.mono,
         authority_loss_timeout_sec=3.0,
     )
-    client.on_plan([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)])
-    client.on_authority_payload(
-        {
-            "authorityId": "a1",
-            "epoch": 1,
-            "seq": 2,
-            "semanticMapFingerprint": "fp1",
-            "planRevision": 1,
-            "resourceIds": [],
-            "pathHash": "",
-            "expiresAt": "2000-01-01T00:00:03Z",
-        }
-    )
-    # Force known expiry relative to now
-    client.grant.expires_at = now["t"] + 3.0
-    ok_flags.clear()
-    client.tick()
-    client.tick()
-    assert ok_flags == [True, True]
-    now["t"] += 4.0
-    client.tick()
-    assert ok_flags[-1] is False
+    return client, published, gate, clock
 
 
-def test_publish_cleared_resources_emits_progress():
-    published = []
-    client = SemanticTrafficClient(
-        robot_code="RBT-SIM-01",
-        topic_prefix="warotrans/v1",
-        fingerprint="fp1",
-        publish_json=lambda t, b: published.append((t, b)),
-        set_authority_ok=lambda *_: None,
-    )
-    client.on_plan([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)])
-    client.on_authority_payload(
-        {
-            "authorityId": "a1",
-            "epoch": 5,
-            "seq": 7,
-            "semanticMapFingerprint": "fp1",
-            "planRevision": 1,
-            "resourceIds": ["cell:0:0", "cell:1:0"],
-            "pathHash": "",
-        }
-    )
-    client.publish_cleared_resources(["cell:0:0"], x=1.0, y=0.0, yaw=0.0, localization_ok=True)
-    assert published[-1][0].endswith("/traffic_progress")
-    body = published[-1][1]
-    assert body["event"] == "RESOURCES_CLEARED"
-    assert body["clearedResourceIds"] == ["cell:0:0"]
-    assert body["epoch"] == 5
-    assert body["seq"] == 8
+def grant_for(client: SemanticTrafficClient, clock: Clock, *, rev=None, plan_hash=None, epoch=100, seq=1,
+              authority="auth-1", resources=None, ttl=30.0, fingerprint="fp-1", geometry=GEOMETRY) -> dict:
+    geom = stc.SemanticGeometry.from_payload(GEOMETRY)
+    return {
+        "targetCommandId": CMD,
+        "authorityId": authority,
+        "epoch": epoch,
+        "seq": seq,
+        "semanticMapFingerprint": fingerprint,
+        "planRevision": client.plan_revision if rev is None else rev,
+        "planHash": client.plan_hash if plan_hash is None else plan_hash,
+        "resourceIds": sorted(resources if resources is not None else stc.collect_resources(client.plan_poses, ZONES, geom)),
+        "expiresAt": _iso(clock.wall + ttl),
+        "geometry": geometry,
+    }
+
+
+def granted(clock: Clock | None = None):
+    client, published, gate, clock = make(clock)
+    client.on_plan(PATH, goal=PATH[-1], command_id=CMD)
+    assert client.on_authority_payload(grant_for(client, clock), target_command_id=CMD)
+    return client, published, gate, clock
+
+
+# ---------------------------------------------------------------------- geometry parity with the backend
+
+
+def test_cells_match_backend_vectors():
+    geom = stc.SemanticGeometry.from_payload(GEOMETRY)
+    for case in VECTORS["cases"]:
+        got = sorted(stc.collect_resources(case["poses"], ZONES, geom))
+        assert got == case["resources"], case["name"]
+
+
+def test_footprint_cells_match_backend_vectors():
+    for fp in VECTORS["footprints"]:
+        got = sorted(stc.footprint_resources(fp["x"], fp["y"], fp["radius"], ZONES, GEOMETRY["cellSizeMeters"]))
+        assert got == fp["resources"]
+
+
+# ---------------------------------------------------------------------- proposing
+
+
+def test_plan_without_backend_command_is_never_proposed():
+    client, published, gate, _ = make()
+    client.on_plan(PATH, command_id=None)  # RViz / CLI goal
+    assert published == []
+    assert client.tick((0.0, 0.0, 0.0)) is False
+
+
+def test_plan_proposal_carries_revision_hash_and_command():
+    client, published, _, _ = make()
+    client.on_plan(PATH, goal=PATH[-1], command_id=CMD)
+    topic, body = published[-1]
+    assert topic == "warotrans-e2e/v1/robots/SIM-A/traffic_plan"
+    assert body["planRevision"] == 1 and body["commandId"] == CMD and body["planHash"] == client.plan_hash
+
+
+def test_identical_plan_is_not_re_proposed_while_granted():
+    client, published, _, clock = granted()
+    n = len(published)
+    clock.advance(10)
+    client.on_plan(PATH, goal=PATH[-1], command_id=CMD)
+    assert len(published) == n
+    assert client.plan_revision == 1
+
+
+# ---------------------------------------------------------------------- A: grant → renew → exit
+
+
+def test_grant_opens_the_gate_inside_the_reservation_and_renew_keeps_it_open():
+    client, _, gate, clock = granted()
+    assert client.tick((0.0, 0.0, 0.0)) is True and gate[-1] is True
+    for _ in range(5):
+        clock.advance(1.5)
+        assert client.on_renew({"authorityId": "auth-1", "epoch": 100, "seq": client.grant.seq + 1,
+                                "expiresAt": _iso(clock.wall + 30)})
+        assert client.tick((0.5, 0.0, 0.0)) is True
+
+
+def test_verified_exit_reports_only_resources_entered_and_left():
+    client, _, _, _ = granted()
+    assert client.resources_cleared_at(0.0, 0.0) == []
+    cleared = client.resources_cleared_at(2.0, 0.0)
+    assert cleared and all(c in client.grant.resource_ids for c in cleared)
+    near_end = stc.footprint_resources(2.0, 0.0, GEOMETRY["footprintRadiusMeters"] + 0.05, ZONES, 0.25)
+    assert not set(cleared) & near_end
+
+
+# ---------------------------------------------------------------------- staying inside the reservation
+
+
+def test_gate_closes_when_the_robot_leaves_the_reserved_corridor():
+    client, _, gate, _ = granted()
+    assert client.tick((1.0, 0.0, 0.0)) is True
+    assert client.tick((1.0, 0.6, 0.0)) is False  # drifted 0.6 m sideways
+    assert client.last_block_reason == "OUTSIDE_RESERVATION" and gate[-1] is False
+
+
+def test_gate_closes_beyond_the_reserved_horizon():
+    client, published, _, clock = make()
+    long_path = [(x / 2.0, 0.0, 0.0) for x in range(0, 21)]  # 10 m, horizon 4 m
+    client.on_plan(long_path, command_id=CMD)
+    assert client.on_authority_payload(grant_for(client, clock), target_command_id=CMD)
+    assert client.tick((3.5, 0.0, 0.0)) is True
+    assert client.tick((5.5, 0.0, 0.0)) is False
+    assert client.last_block_reason == "OUTSIDE_RESERVATION"
+
+
+def test_unknown_pose_closes_the_gate():
+    client, _, _, _ = granted()
+    assert client.tick(None) is False
+    assert client.last_block_reason == "POSE_UNKNOWN"
+
+
+# ---------------------------------------------------------------------- F: replanning
+
+
+def test_replan_never_widens_where_the_robot_may_go():
+    client, _, _, clock = granted()
+    # New plan turns off the reserved corridor: until its own grant arrives only old∩new cells are usable.
+    detour = [(1.0, y / 10.0, 1.57) for y in range(0, 21)]
+    client.on_plan(detour, command_id=CMD)
+    assert client.plan_revision == 2
+    assert client.tick((1.0, 0.0, 1.57)) is True   # still on cells the backend holds for both paths
+    assert client.tick((1.0, 0.8, 1.57)) is False  # new path, not reserved yet
+    assert client.last_block_reason == "OUTSIDE_RESERVATION"
+    # Grant for the new revision: now allowed.
+    assert client.on_authority_payload(grant_for(client, clock, authority="auth-2", seq=2), target_command_id=CMD)
+    assert client.tick((1.0, 0.8, 1.57)) is True
+
+
+def test_grant_for_an_older_plan_revision_or_other_hash_is_refused():
+    client, _, _, clock = granted()
+    client.on_plan([(0.0, 0.0, 0.0), (0.0, 2.0, 1.57)], command_id=CMD)
+    assert not client.on_authority_payload(grant_for(client, clock, rev=1, authority="late", seq=9), target_command_id=CMD)
+    assert client.last_block_reason == "STALE_PLAN_REVISION"
+    assert not client.on_authority_payload(grant_for(client, clock, plan_hash="other", authority="x", seq=9), target_command_id=CMD)
+    assert client.last_block_reason == "PLAN_HASH_MISMATCH"
+
+
+# ---------------------------------------------------------------------- J: duplicate / expired / delayed / revoked
+
+
+def test_redelivered_grant_and_older_renew_change_nothing():
+    client, _, _, clock = granted()
+    seq = client.grant.seq
+    assert not client.on_authority_payload(grant_for(client, clock), target_command_id=CMD)  # same id + seq
+    assert client.last_block_reason == "DUPLICATE_OR_OLDER"
+    assert not client.on_renew({"authorityId": "auth-1", "epoch": 100, "seq": seq, "expiresAt": _iso(clock.wall + 30)})
+    assert not client.on_renew({"authorityId": "other", "epoch": 100, "seq": seq + 5, "expiresAt": _iso(clock.wall + 30)})
+    assert client.grant.seq == seq
+
+
+def test_expired_on_arrival_wrong_map_or_other_command_never_opens():
+    client, _, gate, clock = make()
+    client.on_plan(PATH, command_id=CMD)
+    assert not client.on_authority_payload(grant_for(client, clock, ttl=-1), target_command_id=CMD)
+    assert client.last_block_reason == "EXPIRED_ON_ARRIVAL"
+    assert not client.on_authority_payload(grant_for(client, clock, fingerprint="fp-other"), target_command_id=CMD)
+    assert not client.on_authority_payload(grant_for(client, clock), target_command_id="22222222-2222-2222-2222-222222222222")
+    assert not client.on_authority_payload(grant_for(client, clock, geometry=None), target_command_id=CMD)
+    assert client.tick((0.0, 0.0, 0.0)) is False and gate[-1] is False
+
+
+def test_backend_silence_stops_the_robot_within_the_loss_timeout_whatever_expiresAt_says():
+    client, _, _, clock = granted()
+    clock.advance(2.9)
+    assert client.tick((0.0, 0.0, 0.0)) is True
+    clock.advance(0.2)
+    assert client.tick((0.0, 0.0, 0.0)) is False
+    assert client.last_block_reason == "AUTHORITY_SILENT"
+
+
+def test_expires_at_reached_closes_the_gate_even_with_renews_heard():
+    client, _, _, clock = make()
+    client.on_plan(PATH, command_id=CMD)
+    assert client.on_authority_payload(grant_for(client, clock, ttl=2.0), target_command_id=CMD)
+    clock.advance(2.5)
+    assert client.tick((0.0, 0.0, 0.0)) is False
+    assert client.last_block_reason in ("EXPIRED", "AUTHORITY_SILENT")
+
+
+def test_revoke_closes_now_but_a_revoke_for_an_older_authority_is_ignored():
+    client, _, gate, _ = granted()
+    client.on_revoke({"authorityId": "older"})
+    assert client.tick((0.0, 0.0, 0.0)) is True
+    client.on_revoke({"authorityId": "auth-1"})
+    assert gate[-1] is False
+    assert client.tick((0.0, 0.0, 0.0)) is False
+    assert client.grant is None
+
+
+def test_link_loss_closes_the_gate():
+    client, _, gate, _ = granted()
+    client.on_link(False)
+    assert gate[-1] is False
+    assert client.tick((0.0, 0.0, 0.0)) is False and client.last_block_reason == "LINK_DOWN"
+    client.on_link(True)
+    assert client.tick((0.0, 0.0, 0.0)) is True
+
+
+# ---------------------------------------------------------------------- K: backend restart / new epoch
+
+
+def test_new_epoch_voids_older_grants_and_re_proposes():
+    client, published, gate, clock = granted()
+    n = len(published)
+    client.on_epoch({"epoch": 200})
+    assert gate[-1] is False and client.grant is None
+    assert client.tick((0.0, 0.0, 0.0)) is False
+    # A grant of the old epoch arriving late is refused.
+    assert not client.on_authority_payload(grant_for(client, clock, epoch=100, authority="late"), target_command_id=CMD)
+    assert client.last_block_reason == "STALE_EPOCH"
+    client.on_plan(PATH, command_id=CMD)  # same path, cooldown reset by the epoch change
+    assert len(published) == n + 1
+    assert client.on_authority_payload(grant_for(client, clock, epoch=200, authority="new"), target_command_id=CMD)
+    assert client.tick((0.0, 0.0, 0.0)) is True
+
+
+def test_same_or_older_epoch_announcement_changes_nothing():
+    client, _, _, _ = granted()
+    client.on_epoch({"epoch": 100})
+    client.on_epoch({"epoch": 50})
+    assert client.tick((0.0, 0.0, 0.0)) is True
+
+
+# ---------------------------------------------------------------------- command lifecycle
+
+
+def test_finished_command_drops_its_grant():
+    client, _, _, _ = granted()
+    client.on_command_finished(CMD)
+    assert client.grant is None and client.command_id is None
+    assert client.tick((0.0, 0.0, 0.0)) is False
+
+
+def test_held_for_traffic_reports_recent_gate_holds_of_the_command():
+    client, _, _, clock = make()
+    client.on_plan(PATH, command_id=CMD)
+    client.tick((0.0, 0.0, 0.0))  # no grant yet
+    assert client.held_for_traffic()
+    clock.advance(10)
+    assert not client.held_for_traffic()
+
+
+def test_expires_at_with_dotnet_seven_digit_fraction_parses():
+    ts = stc._parse_expires_at("2026-11-04T10:00:00.1234567+00:00")
+    assert abs(ts - datetime(2026, 11, 4, 10, 0, 0, 123456, tzinfo=timezone.utc).timestamp()) < 1e-6
+    assert stc._parse_expires_at(None) == 0.0
+    assert stc._parse_expires_at("garbage") == 0.0
+    _ = timedelta  # keep import for readability of ttl math above
+
+
+def test_authority_commands_are_acked_with_the_refusal_reason():
+    client, _, _, clock = make()
+    client.on_plan(PATH, command_id=CMD)
+    good = grant_for(client, clock)
+    ack = client.handle_authority_command({"type": "EXTEND_AUTHORITY", "commandId": "c-1", "payload": good})
+    assert ack["accepted"] is True and ack["commandId"] == "c-1" and ack["robotCode"] == "SIM-A"
+    dup = client.handle_authority_command({"type": "EXTEND_AUTHORITY", "commandId": "c-2", "payload": good})
+    assert dup["accepted"] is False and dup["reasonCode"] == "DUPLICATE_OR_OLDER"
+    assert client.handle_authority_command({"type": "NAVIGATE_TO_POSE", "payload": {}}) is None
+    revoke = client.handle_authority_command({"type": "REVOKE_AUTHORITY", "commandId": "c-3",
+                                              "payload": {"authorityId": "auth-1"}})
+    assert revoke["accepted"] is True and client.grant is None
+
+
+def test_state_report_repeats_only_while_executing_without_a_grant():
+    client, _, _, clock = make()
+    assert client.state_report_due() is False  # no command
+    client.on_plan(PATH, command_id=CMD)
+    assert client.state_report_due() is True
+    assert client.state_report_due() is False  # period
+    clock.advance(5.1)
+    assert client.state_report_due() is True
+    assert client.on_authority_payload(grant_for(client, clock), target_command_id=CMD)
+    clock.advance(5.1)
+    assert client.state_report_due() is False  # granted
+
+
+def test_localization_regained_fires_once_on_the_rising_edge():
+    client, _, _, _ = make()
+    assert client.localization_regained(False) is False
+    assert client.localization_regained(True) is True
+    assert client.localization_regained(True) is False
+    assert client.localization_regained(False) is False
+    assert client.localization_regained(True) is True
+
+
+# ---------------------------------------------------------------------- recovery inside the grant
+
+
+def _at_x(x: float) -> tuple[float, float, float]:
+    return (x, 0.0, 0.0)
+
+
+def test_spin_needs_only_a_valid_position_in_the_grant():
+    client, _, _, _ = granted()
+    assert client.recovery_block_reason(_at_x(1.0), "spin") is None
+
+
+def test_no_grant_no_recovery():
+    client, _, _, _ = make()
+    assert client.recovery_block_reason(_at_x(1.0), "spin") is not None
+    assert client.recovery_block_reason(_at_x(1.0), "backup", 0.10) is not None
+
+
+def test_no_pose_no_recovery():
+    client, _, _, _ = granted()
+    assert client.recovery_block_reason(None, "backup", 0.10) == "POSE_UNKNOWN"
+
+
+def test_authority_silence_blocks_recovery():
+    client, _, _, clock = granted()
+    clock.advance(4.0)
+    assert client.recovery_block_reason(_at_x(1.0), "backup", 0.10) == "AUTHORITY_SILENT"
+
+
+def test_backup_inside_the_grant_is_allowed_at_the_path_start():
+    # The reserve radius leaves ~0.13 m around every path sample, the path start included.
+    client, _, _, _ = granted()
+    assert client.recovery_block_reason(_at_x(0.0), "backup", 0.10) is None
+
+
+def test_backup_past_the_grant_is_refused():
+    client, _, _, _ = granted()
+    assert client.recovery_block_reason(_at_x(0.0), "backup", 1.0) == "REVERSE_OUTSIDE_RESERVATION"
+
+
+def test_backup_follows_the_robot_heading():
+    client, _, _, _ = granted()
+    # Facing -x, reversing goes along +x: down the granted path.
+    assert client.recovery_block_reason((1.0, 0.0, math.pi), "backup", 0.5) is None
+    # Facing +y, reversing goes to -y, away from the corridor.
+    assert client.recovery_block_reason((1.0, 0.0, math.pi / 2), "backup", 1.0) == "REVERSE_OUTSIDE_RESERVATION"
+
+
+def test_unknown_recovery_kind_refused():
+    client, _, _, _ = granted()
+    assert client.recovery_block_reason(_at_x(1.0), "strafe", 0.1) == "UNKNOWN_RECOVERY"
+    assert client.recovery_block_reason(_at_x(1.0), "backup", -0.1) == "UNKNOWN_RECOVERY"
+
+
+def _drive_until_something_is_released(client, start=0.0, stop=3.0):
+    x = start
+    while x < stop:
+        cleared = client.resources_cleared_at(x, 0.0)
+        if cleared:
+            return x, cleared
+        x += 0.02
+    raise AssertionError("nothing was cleared")
+
+
+def test_backup_into_what_the_robot_released_is_refused():
+    client, _, _, _ = granted()
+    x, cleared = _drive_until_something_is_released(client)
+    assert set(cleared) <= set(client.grant.resource_ids), "the grant still lists it: that is the trap"
+    assert client.recovery_block_reason(_at_x(x), "backup", 0.12) == "REVERSE_OUTSIDE_RESERVATION"
+
+
+def test_gate_closes_when_the_footprint_is_back_in_a_released_resource():
+    client, _, gate, _ = granted()
+    x, _ = _drive_until_something_is_released(client)
+    assert client.tick(_at_x(x)) is True
+    assert client.tick(_at_x(x - 0.15)) is False
+    assert client.last_block_reason == "IN_RELEASED_RESOURCE"
+    assert gate[-1] is False
+
+
+def test_jitter_at_the_release_boundary_does_not_shut_the_gate():
+    client, _, _, _ = granted()
+    x, _ = _drive_until_something_is_released(client)
+    assert client.tick(_at_x(x - 0.02)) is True
+
+
+def test_a_newer_grant_listing_a_resource_makes_it_usable_again():
+    client, _, _, clock = granted()
+    x, cleared = _drive_until_something_is_released(client)
+    assert client.released_resources == set(cleared)
+    assert client.on_authority_payload(grant_for(client, clock, authority="auth-2"), target_command_id=CMD)
+    assert client.released_resources == set()
+    assert client.tick(_at_x(x - 0.15)) is True
+
+
+def test_a_newer_grant_without_the_resource_keeps_it_released():
+    client, _, _, clock = granted()
+    x, cleared = _drive_until_something_is_released(client)
+    remaining = sorted(set(client.grant.resource_ids) - set(cleared))
+    assert client.on_authority_payload(grant_for(client, clock, authority="auth-2", resources=remaining), target_command_id=CMD)
+    assert client.released_resources == set(cleared)
+
+
+def test_finishing_the_command_forgets_released_resources():
+    client, _, _, _ = granted()
+    _drive_until_something_is_released(client)
+    client.on_command_finished(CMD)
+    assert client.released_resources == set()

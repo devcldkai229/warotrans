@@ -1,0 +1,20 @@
+# Candidate values measured by the rig (run_rig.py --nav-overlay). NOT part of the robot's config: obstacle_min_range
+# may only change after the stationary scan on the real robot shows no self-hits at or beyond 0.15 m.
+controller_server:
+  ros__parameters:
+    progress_checker:
+      movement_time_allowance: 10.0
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      obstacle_layer:
+        scan:
+          obstacle_min_range: 0.15
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      obstacle_layer:
+        scan:
+          obstacle_min_range: 0.15

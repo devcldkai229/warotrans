@@ -4,7 +4,10 @@ amcl.yaml boots with set_initial_pose (0, 0, 0) so map->odom exists for Nav2 act
 first scan and the gateway used to report LOCALIZED (and accept NAVIGATE) before anyone placed the robot.
 On the real robot this requires:
   - an operator pose (/initialpose: RViz / Foxglove "2D Pose Estimate") received since the gateway started, and
-  - the latest /amcl_pose covariance within limits (a diverged filter reports a wide covariance).
+  - an /amcl_pose published AFTER that operator pose, so AMCL has really taken it. The latched boot sample (0, 0, 0)
+    has an all-zero covariance, which is no estimate at all: it counted as "converged" and the robot reported LOCALIZED
+    at (0, 0) when /initialpose never reached AMCL, and
+  - its covariance within limits (a diverged filter reports a wide covariance).
 Simulation spawns at a known pose and keeps the TF-only behaviour (require_amcl_converged: false).
 """
 
@@ -25,6 +28,8 @@ class AmclReadiness:
 
     def on_initial_pose(self) -> None:
         self._operator_pose = True
+        # Whatever AMCL reported so far is from before this pose.
+        self._xy_std = self._yaw_std = None
 
     def on_amcl_pose(self, covariance: Sequence[float]) -> None:
         """Row-major 6x6 (x, y, z, roll, pitch, yaw) covariance of PoseWithCovariance."""
@@ -34,6 +39,8 @@ class AmclReadiness:
         if not all(math.isfinite(v) and v >= 0.0 for v in (var_x, var_y, var_yaw)):
             self._xy_std = self._yaw_std = math.inf
             return
+        if var_x == 0.0 and var_y == 0.0 and var_yaw == 0.0:
+            return  # provisional pose, not a filter estimate
         self._xy_std = math.sqrt(max(var_x, var_y))
         self._yaw_std = math.sqrt(var_yaw)
 

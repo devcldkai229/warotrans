@@ -10,6 +10,9 @@ planner_server:
       lanes_json: ""
       # Slightly wider soft corridor so parking leave prefers lane centre over wall clip.
       corridor_margin: 0.08
+      # Pull to the lane centre line: a cell at the corridor edge costs (1 + weight) times a centre cell.
+      # 0 restores the old behaviour, where paths ride the boundary between two opposite lanes.
+      lane_center_weight: 3.0
       # Traversal hard-block = true LETHAL only (254). INSCRIBED(253) stays high soft-cost
       # (same as NavFn). Treating 253 as impassable + ONE_WAY caused empty mid-route replans
       # in free aisles that offline occupancy A* could still solve.

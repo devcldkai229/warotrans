@@ -44,6 +44,41 @@ def test_valid_navigate_ack_then_goal_then_succeeded():
     assert h.move.navigation_status == "IDLE"
 
 
+class _Lines:
+    """Records log lines directly: ROS pytest plugins reconfigure logging, so caplog sees nothing under a sourced ROS."""
+
+    def __init__(self) -> None:
+        self.lines: list[str] = []
+
+    def info(self, msg, *_a, **_k) -> None:
+        self.lines.append(str(msg))
+
+    warning = error = debug = info
+
+
+def test_arrival_error_is_logged_and_does_not_change_the_result():
+    log = _Lines()
+    h = Harness(arrival_pose=lambda: (4.25 + 0.03, 2.10 + 0.04, 1.5708 + 0.5), log=log)
+    h.send(navigate(CMD))
+    h.nav.accept()
+    h.nav.finish(STATUS_SUCCEEDED)
+    assert any("arrivalErrorXy=0.050m arrivalErrorYaw=0.500rad" in x for x in log.lines)
+    assert h.recorder.results[0]["outcome"] == "SUCCEEDED"
+
+
+def test_arrival_pose_failure_never_affects_the_result():
+    def boom():
+        raise RuntimeError("tf down")
+
+    log = _Lines()
+    h = Harness(arrival_pose=boom, log=log)
+    h.send(navigate(CMD))
+    h.nav.accept()
+    h.nav.finish(STATUS_SUCCEEDED)
+    assert any("arrivalError=unknown" in x for x in log.lines)
+    assert h.recorder.results[0]["outcome"] == "SUCCEEDED"
+
+
 # 2. Nav2 goal rejected → RESULT FAILED
 def test_goal_rejected_by_nav2_results_failed():
     h = Harness()
@@ -339,3 +374,52 @@ def test_router_returns_immediately_and_snapshot_reflects_navigation():
     assert h.move.navigation_status == "NAVIGATING"
     assert h.move.active_command_id == CMD
     assert h.recorder.results == []
+
+
+# semantic_active: the authority gate held the robot for traffic → Nav2's progress checker aborts; not a failure.
+def test_semantic_abort_while_held_for_traffic_resends_the_goal_within_the_timeout():
+    held = {"value": True}
+    h = Harness(traffic_mode="semantic_active", traffic_hold_active=lambda: held["value"])
+    h.send(navigate(CMD, timeoutSeconds=100))
+    h.nav.accept()
+    h.tick(20.0)
+    h.nav.finish(STATUS_ABORTED, error_code=105, error_message="Failed to make progress")
+    assert h.recorder.results == []
+    assert len(h.nav.goals) == 2  # same goal re-sent
+    assert h.move.active_command_id == CMD
+
+    # Released by traffic, then Nav2 really fails: reported.
+    held["value"] = False
+    h.nav.accept()
+    h.nav.finish(STATUS_ABORTED, error_code=104, error_message="No valid path")
+    assert h.recorder.results[0]["errorCode"] == "NAVIGATION_FAILED"
+
+
+def test_semantic_planner_failure_is_reported_even_while_held_for_traffic():
+    h = Harness(traffic_mode="semantic_active", traffic_hold_active=lambda: True)
+    h.send(navigate(CMD, timeoutSeconds=100))
+    h.nav.accept()
+    h.nav.finish(STATUS_ABORTED, error_code=208, error_message="GridBased generated a empty path")
+    assert len(h.nav.goals) == 1  # not re-sent
+    result = h.recorder.results[0]
+    assert result["errorCode"] == "NAVIGATION_FAILED"
+    assert "208" in result["errorMessage"]
+
+
+def test_semantic_traffic_hold_keeps_the_original_timeout():
+    h = Harness(traffic_mode="semantic_active", traffic_hold_active=lambda: True)
+    h.send(navigate(CMD, timeoutSeconds=30))
+    h.nav.accept()
+    h.tick(25.0)
+    h.nav.finish(STATUS_ABORTED)
+    h.nav.accept()
+    h.tick(6.0)  # 31 s after the first goal: the command timeout still applies
+    assert len(h.nav.cancel_requests) == 1
+
+
+def test_legacy_mode_abort_is_reported_even_if_a_hold_is_signalled():
+    h = Harness(traffic_hold_active=lambda: True)
+    h.send(navigate(CMD))
+    h.nav.accept()
+    h.nav.finish(STATUS_ABORTED)
+    assert h.recorder.results[0]["errorCode"] == "NAVIGATION_FAILED"

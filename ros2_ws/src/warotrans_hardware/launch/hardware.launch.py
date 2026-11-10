@@ -14,6 +14,9 @@ def generate_launch_description():
     baud_rate = LaunchConfiguration("baud_rate")
     publish_tf = LaunchConfiguration("publish_tf")
     battery_monitor = LaunchConfiguration("battery_monitor")
+    cmd_vel_topic = LaunchConfiguration("cmd_vel_topic")
+    required_cmd_vel_publisher = LaunchConfiguration("required_cmd_vel_publisher")
+    motors_enabled = LaunchConfiguration("motors_enabled")
     hardware_config = PathJoinSubstitution(
         [
             FindPackageShare("warotrans_hardware"),
@@ -42,6 +45,24 @@ def generate_launch_description():
                 description="ESP32 serial baud rate",
             ),
             DeclareLaunchArgument(
+                "cmd_vel_topic",
+                default_value="/cmd_vel",
+                description="Velocity topic driving the motors (authority gate on: /cmd_vel_motor)",
+            ),
+            DeclareLaunchArgument(
+                "required_cmd_vel_publisher",
+                default_value="",
+                description=(
+                    "Node that alone may publish cmd_vel_topic (authority gate on: cmd_vel_authority_gate); "
+                    "any other publisher makes the bridge send zero"
+                ),
+            ),
+            DeclareLaunchArgument(
+                "motors_enabled",
+                default_value="true",
+                description="false: encoders/odometry only; the bridge never writes a velocity to the ESP32",
+            ),
+            DeclareLaunchArgument(
                 "publish_tf",
                 default_value="true",
                 description=(
@@ -66,6 +87,9 @@ def generate_launch_description():
                     hardware_config,
                     {
                         "serial_port": serial_port,
+                        "cmd_vel_topic": cmd_vel_topic,
+                        "required_cmd_vel_publisher": required_cmd_vel_publisher,
+                        "motors_enabled": ParameterValue(motors_enabled, value_type=bool),
                         "baud_rate": ParameterValue(
                             baud_rate,
                             value_type=int,
