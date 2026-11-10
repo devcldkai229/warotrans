@@ -5,6 +5,7 @@ import pytest
 from warotrans_hardware.serial_protocol import (
     format_config_command,
     format_velocity_command,
+    parse_battery_line,
     parse_config_ack,
     parse_encoder_line,
 )
@@ -71,3 +72,30 @@ def test_parse_config_ack():
 
 def test_encoder_parser_ignores_config_acks():
     assert parse_encoder_line(b"K kp 250.000\n") is None
+
+
+def test_parse_valid_battery_line():
+    assert parse_battery_line(b"B 2280 32 120345\n") == (2280, 32, 120345)
+    assert parse_battery_line("  B 0 1 0 \r\n") == (0, 1, 0)
+
+
+def test_rejects_malformed_battery_lines():
+    malformed = (
+        b"",
+        b"B 2280 32\n",
+        b"B 2280 32 1 2\n",
+        b"B -1 32 1\n",
+        b"B 3301 32 1\n",
+        b"B 2280 0 1\n",
+        b"B 2280 65536 1\n",
+        b"B 2280 32 4294967296\n",
+        b"B x 32 1\n",
+        b"O 1 2 3\n",
+        b"B \xff 1 1\n",
+    )
+    for line in malformed:
+        assert parse_battery_line(line) is None
+
+
+def test_battery_line_is_not_an_encoder_line():
+    assert parse_encoder_line(b"B 2280 32 120345\n") is None

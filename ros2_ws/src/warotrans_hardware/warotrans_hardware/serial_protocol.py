@@ -88,3 +88,43 @@ def parse_config_ack(line: bytes | str) -> Optional[tuple[str, str]]:
     if len(fields) != 3 or fields[0] != "K":
         return None
     return fields[1], fields[2]
+
+
+# Battery voltage sample from the 0-25 V divider module on ESP32 ADC1 (firmware BATTERY_ADC_ENABLED):
+#   "B <avg_pin_millivolts> <sample_count> <mcu_millis>"
+BATTERY_PIN_MV_MAX = 3300  # ESP32-S3 ADC pin can never exceed its 3.3 V rail
+
+
+def parse_battery_line(line: bytes | str) -> Optional[tuple[int, int, int]]:
+    """Parse one ``B`` battery line.
+
+    Returns ``(pin_millivolts, sample_count, mcu_millis)`` or ``None`` for any other or malformed line.
+    """
+
+    if isinstance(line, bytes):
+        try:
+            text = line.decode("ascii").strip()
+        except UnicodeDecodeError:
+            return None
+    else:
+        text = line.strip()
+
+    fields = text.split()
+    if len(fields) != 4 or fields[0] != "B":
+        return None
+
+    try:
+        pin_mv = int(fields[1], 10)
+        samples = int(fields[2], 10)
+        mcu_millis = int(fields[3], 10)
+    except ValueError:
+        return None
+
+    if not 0 <= pin_mv <= BATTERY_PIN_MV_MAX:
+        return None
+    if not 1 <= samples <= 65535:
+        return None
+    if not 0 <= mcu_millis <= UINT32_MAX:
+        return None
+
+    return pin_mv, samples, mcu_millis

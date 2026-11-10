@@ -1,0 +1,48 @@
+# Battery SOC (voltage-only) — 3S2P Samsung INR21700-50S, 0-25 V divider module on ESP32-S3 GPIO1 (ADC1_CH0).
+# ⚠ CHƯA HIỆU CHUẨN: every value below is the uncalibrated starting point. The sensor is not installed yet.
+# Calibration procedure: docs/hardware/battery-voltage-sensor.md (steps V1-V6). Firmware must be built with
+# BATTERY_ADC_ENABLED 1, otherwise no /battery/adc_sample arrives and the estimate stays UNAVAILABLE.
+battery_monitor_node:
+  ros__parameters:
+    cells_in_series: 3
+    design_capacity_ah: 10.0
+    # pack_V = divider_gain * pin_V + offset_v. Nominal 30k/7.5k module = 5.0 (V1: measure the real ratio).
+    divider_gain: 5.0
+    offset_v: 0.0
+    # Optional multi-point calibration from V3 (pin volts -> pack volts, >= 2 points, overrides gain/offset).
+    # [0.0] / [0.0] = none.
+    calibration_pin_volts: [0.0]
+    calibration_pack_volts: [0.0]
+    # Resting cell voltage -> SOC %. Starting curve for INR21700-50S; replace with the V5 measurement.
+    ocv_cell_voltages: [3.00, 3.20, 3.30, 3.40, 3.45, 3.50, 3.55, 3.60, 3.65, 3.70, 3.75, 3.80, 3.85, 3.90, 3.95, 4.00, 4.05, 4.10, 4.15, 4.20]
+    ocv_soc_percent:   [0.0, 2.0, 4.0, 8.0, 11.0, 15.0, 20.0, 26.0, 33.0, 41.0, 48.0, 55.0, 61.0, 67.0, 73.0, 79.0, 85.0, 90.0, 95.0, 100.0]
+    # Sensor fault limits: pin below = module disconnected, pin above = ADC saturated, pack outside = implausible.
+    adc_disconnected_pin_mv: 100.0
+    adc_saturated_pin_mv: 3050.0
+    plausible_min_v: 8.0
+    plausible_max_v: 13.5
+    # No valid sample for this long -> UNAVAILABLE (firmware sends one every 200 ms).
+    stale_after_s: 2.0
+    median_window: 5
+    ema_tau_s: 5.0
+    # Load sag compensation, 0 until measured in V6: idle_sag_v = pack(robot off) - pack(robot on, still);
+    # sag_v_per_mps / sag_v_per_radps = extra drop per m/s and per rad/s while driving.
+    idle_sag_v: 0.0
+    sag_v_per_mps: 0.0
+    sag_v_per_radps: 0.0
+    motion_linear_threshold_mps: 0.01
+    motion_angular_threshold_radps: 0.02
+    motion_timeout_s: 0.5
+    # Still for this long -> voltage treated as OCV (confidence MEDIUM). V6 measures the real recovery time.
+    rest_settle_s: 120.0
+    max_drop_pct_per_min: 3.0
+    rest_slew_pct_per_min: 2.0
+    rest_hysteresis_pct: 3.0
+    restore_max_age_s: 43200.0
+    restore_tolerance_pct: 15.0
+    publish_rate_hz: 2.0
+    state_file: "~/.local/state/warotrans/battery_soc.json"
+    persist_interval_s: 30.0
+    persist_delta_pct: 1.0
+    location: base
+    serial_number: ""
