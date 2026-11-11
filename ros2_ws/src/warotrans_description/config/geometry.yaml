@@ -18,7 +18,9 @@ chassis:
 
 base_footprint_to_base_link:
   # metres / radians, REP-103 (+X front, +Y left, +Z up)
-  x: 0.0
+  # 2026-11-11 lab: base_footprint = turning centre, measured ~0.05 m behind the chassis centre (4 wheels, 4 motors;
+  # wheelbase 0.184 m, lidar over the front axle). docs/LAB_CALIBRATION_2026-11-11.md Part 3.
+  x: 0.05
   y: 0.0
   z: 0.0325  # wheel axle height above ground
   roll: 0.0
@@ -27,7 +29,8 @@ base_footprint_to_base_link:
 
 laser:
   # metres / radians, relative to base_link, REP-103
-  x: 0.01
+  # x: operator tape 2026-11-11: lidar centre over the front axle, 0.10 m ahead of the chassis centre (was 0.01).
+  x: 0.10
   y: 0.0017
   z: 0.142
   # +pi/2: mount rotated 90 deg LEFT vs vehicle forward (operator 2026-09-07).

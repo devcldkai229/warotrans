@@ -158,3 +158,55 @@ The robot's real turning geometry does not fit the current endpoint and lane lay
 3. **Map V007.** Move endpoints away from walls where a single 90° turn has room, for example QUEUE-POINT, SHELF-C-01, OUTBOUND, INSPECTION.
 
 Proposed coordinates come from `calib_epclear.py` / `calib_arc.py` and wait for the operator's approval.
+
+---
+
+# Part 3 (15:00–16:00): operator geometry, ticks, turning centre
+
+## Operator measurements (tape)
+- **Drive.** 4 wheels, 4 motors (one per corner). Encoders only on the two front wheels.
+- **Track and wheelbase.** Track (centre to centre), front and rear: 0.214 m. Wheelbase (front to rear axle): 0.184 m.
+- **Lidar position.** Over the front axle (0 m), 0.18 m ahead of the rear axle, 0.10 m ahead of the chassis centre, no lateral offset.
+- **Ticks per wheel turn.** Robot pushed on the floor, 10 turns of the watched front wheel counted:
+
+  | Wheel | Measured | Was |
+  |---|---|---|
+  | Left | 2481.9 | 2478.1 |
+  | Right | 2468.6 | 2478.1 |
+
+## What this explains
+- `geometry.yaml` had the lidar 0.01 m ahead of `base_link`, but it is 0.10 m ahead of the chassis centre. Every pose the stack used was the lidar point, about 10 cm ahead of the body.
+- That is most of the "turning centre 12 cm behind" from Parts 1 and 2.
+- The Part 2 endpoint blocker assumed a 0.335 m swept radius, which came from that error. It no longer holds as stated.
+
+## Adopted (geometry.yaml, nav2_params.yaml, hardware.yaml)
+- **Lidar.** Laser x = 0.10 in base_link.
+- **Turning centre.** `base_footprint_to_base_link.x = 0.05`: base_footprint is the measured turning centre. CCW turns put it 0.13–0.17 m behind the lidar over three sessions, near the rear axle; weight sits on the rear axle.
+- **Footprint.** Centred on the chassis, `[[0.21, 0.13], [0.21, -0.13], [-0.11, -0.13], [-0.11, 0.13]]` around base_footprint. Swept radius with padding is 0.28 m.
+- **Ticks per turn.** As measured above. Wheel radii are unchanged; straight-line odometry/true was 0.99–1.03.
+- **Gateway goal offset.** Read from TF it is now 0.05 m. Goals are moved back, and proposed plans forward, by that much, so endpoints stay the chassis centre.
+
+## Validation turns, x = 0.02 trial (before the final 0.05)
+CCW turns, +90° and +180°:
+- Fixed point (−0.057, +0.022) and (−0.034, +0.004) m.
+- Base moved 0.067–0.083 m.
+- IMU/true ratio 1.02 and 0.994.
+
+CW turns: the fixed point is 0.11–0.13 m to the left and the robot turns 64–147° for 90–180° of wheel odometry. Uneven traction left/right (mechanical); the IMU keeps the heading right.
+
+## Final validation, x = 0.05 (CCW +90° twice)
+
+| | Turn 1 | Turn 2 |
+|---|---|---|
+| Fixed point | (−0.020, +0.017) m | (−0.015, +0.018) m |
+| Base moved | 0.038 m | 0.033 m |
+| IMU/true | 0.994 | 0.994 |
+| Wheel odometry/true | 0.986 | 0.984 |
+| AMCL after nomotion | 0.054 m / 0.1° | 0.072 m / 2.4° |
+
+The turning centre is now within 2 cm of base_footprint. Before the correction the base moved 0.14–0.22 m per 90° turn.
+
+**Still open.**
+- **CW traction.** CW turns still pivot 0.11–0.13 m to the left. This is mechanical: check the left-side motors' reverse torque or the tyres.
+- **Nav2 and TR.** The full-map Nav2 route and the backend TR acceptance run were not done in this session (time).
+- **Snapshot.** The robot was left locked: `MOTORS=false`, EKF on, these files on the Pi.
