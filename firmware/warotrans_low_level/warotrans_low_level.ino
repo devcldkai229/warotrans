@@ -55,12 +55,12 @@ constexpr uint32_t report_period_ms = 20;
 constexpr uint32_t command_watchdog_ms = 300;
 
 // Battery voltage: 0-25 V divider module (nominal 30k/7.5k, ~1/5) -> 1 kOhm series -> GPIO 1 (ADC1_CH0),
-// 100 nF to GND at the pin. NOT INSTALLED YET: keep 0 until the module is wired, otherwise the floating pin
-// would be reported. Wiring / calibration: docs/hardware/battery-voltage-sensor.md.
+// 100 nF to GND at the pin. Wiring / calibration: docs/hardware/battery-voltage-sensor.md.
 // Output: "B <avg_pin_millivolts> <sample_count> <millis>" every 200 ms. Conversion to pack volts and SOC
 // is done on the Pi (warotrans_hardware battery_monitor_node), so calibration never needs a reflash.
+// Set to 0 if the divider is removed (floating GPIO1 would otherwise publish garbage millivolts).
 #ifndef BATTERY_ADC_ENABLED
-#define BATTERY_ADC_ENABLED 0
+#define BATTERY_ADC_ENABLED 1
 #endif
 constexpr uint8_t battery_adc_pin = 1;
 constexpr uint32_t battery_sample_period_ms = 5;
@@ -708,11 +708,20 @@ uint32_t next_battery_sample_ms = 0;
 uint32_t next_battery_report_ms = 0;
 
 void setup_battery_adc(uint32_t now) {
+  pinMode(battery_adc_pin, INPUT);
   analogReadResolution(12);
   // 11 dB (= 12 dB in IDF 5): ~0-3.1 V at the pin; a full 12.6 V pack reads ~2.52 V.
   analogSetPinAttenuation(battery_adc_pin, ADC_11db);
+  // Discard a few samples after mux/atten change; first reads can be 0 or stale.
+  for (uint8_t i = 0; i < 8; ++i) {
+    (void)analogReadMilliVolts(battery_adc_pin);
+  }
+  battery_mv_sum = 0;
+  battery_sample_count = 0;
   next_battery_sample_ms = now + battery_sample_period_ms;
   next_battery_report_ms = now + battery_report_period_ms;
+  // Visible on the Pi bridge as drive-config ack; confirms this flash has ADC enabled.
+  Serial.printf("K battery_adc %u\n", static_cast<unsigned>(battery_adc_pin));
 }
 
 // One eFuse-calibrated read per call at most every 5 ms: keeps loop() responsive for commands.
@@ -758,7 +767,11 @@ void setup() {
   pwm_ready = configure_pwm();
   stop_motors();
 
+  // App telemetry is always 921600 (Pi esp32_bridge). Serial Monitor MUST use 921600;
+  // any other baud looks like continuous mojibake. USB-CDC boot ROM may briefly
+  // print garbage at 115200 on reset; that is normal, then O/B lines appear.
   Serial.begin(serial_baud);
+  delay(300);  // let USB-CDC finish enumerating before first prints
   next_report_ms = millis() + report_period_ms;
 #if BATTERY_ADC_ENABLED
   setup_battery_adc(millis());
