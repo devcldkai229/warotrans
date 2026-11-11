@@ -347,7 +347,9 @@ PID gains là **tuning values**, không phải physical truth; vẫn phải có 
 
 | Date | Side | Kp | Ki | Kd | Target | Result | Battery/surface | Notes |
 |---|---|---:|---:|---:|---:|---|---|---|
-| | | | | | | | | |
+| 2026-11-11 | both | 0 (open loop) | 0 | — | 0.068 m/s (0.3 rad/s spin) | 0.13–0.15 m/s, forward wheel 17–44 % faster than reverse | lab floor | min_duty 35; robot crept forward while turning |
+| 2026-11-11 | both | 250 | 800 | — | 0.068 m/s | 0.11 → 0.08 m/s after 1 s, roughly symmetric | lab floor | too slow |
+| 2026-11-11 | both | 600 | 1500 | — | 0.068 m/s spin, 0.04 m/s straight | 0.068 ± 0.003 within ~1 s, symmetric, no oscillation; straight exact | lab floor | adopted in hardware.yaml; 6 Nav2 legs ok — docs/LAB_CALIBRATION_2026-11-11.md |
 
 ---
 
