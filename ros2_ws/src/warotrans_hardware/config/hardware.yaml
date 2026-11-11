@@ -22,8 +22,9 @@ esp32_bridge_node:
 wheel_odom_node:
   ros__parameters:
     # Operator re-measure 2026-09-07 — see docs/calibration.md
-    ticks_per_rev_left: 2478.1
-    ticks_per_rev_right: 2478.1
+    # Operator 2026-11-11: robot pushed on the floor, 10 turns of each front (encoder) wheel counted.
+    ticks_per_rev_left: 2481.9
+    ticks_per_rev_right: 2468.6
     wheel_radius_left: 0.03296
     wheel_radius_right: 0.03263
     # Effective separation (operator 2026-09-07): mean(0.4274, 0.4795) ≈ 0.4535 m

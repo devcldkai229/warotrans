@@ -42,7 +42,7 @@ def _body_offset() -> float:
 
 
 BODY_X = _body_offset()  # chassis centre in base_footprint
-LASER_X, LASER_Y, LASER_Z, LASER_YAW = BODY_X + 0.01, 0.0017, 0.1745, math.pi / 2  # geometry.yaml laser in base_link
+LASER_X, LASER_Y, LASER_Z, LASER_YAW = BODY_X + 0.10, 0.0017, 0.1745, math.pi / 2  # geometry.yaml laser x 0.10 in base_link
 RANGE_MIN, RANGE_MAX = 0.15, 12.0  # A1M8-R6 data sheet
 BEAMS, SCAN_HZ = 1000, 8.0  # 8 kHz samples / 8 Hz, 0.36 deg
 FINE = 0.01  # m, ray-march and collision grid
