@@ -21,7 +21,7 @@
           <ComputeAndTrackRoute goal="{goal}" use_poses="true" path="{path}" rerouted="{rerouted}"
             error_code_id="{compute_route_error_code}"/>
           <RecoveryNode number_of_retries="2" name="FollowPath">
-            <FollowPath path="{path}" controller_id="FollowPath"
+            <FollowPath path="{path}" controller_id="FollowPath" goal_checker_id="general_goal_checker"
               error_code_id="{follow_path_error_code}"/>
             <Sequence name="FollowPathRecovery">
               <ClearEntireCostmap name="ClearLocalCostmap-Context"

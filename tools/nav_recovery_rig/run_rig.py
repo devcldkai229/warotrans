@@ -251,6 +251,79 @@ else:
 """
 
 
+# Same contract as GOAL_SCRIPT, through the gateway's DockingNavigator (warotrans_fleet/docking_navigator.py): bays too
+# small to turn in are entered and left straight. Its straight moves are published on /plan like a Nav2 plan, so the
+# rig gateway proposes them to traffic as the real gateway does.
+DOCK_GOAL_SCRIPT = r"""
+import json, math, sys, time
+import rclpy
+from nav_msgs.msg import Path
+from geometry_msgs.msg import PoseStamped
+from rclpy.time import Time
+from tf2_ros import Buffer, TransformListener
+from warotrans_fleet.docking import DockingGeometry, OccupancyMap
+from warotrans_fleet.docking_navigator import DockingNavigator
+from warotrans_fleet.nav2_navigator import Nav2ActionNavigator, Nav2FollowPathClient
+from warotrans_fleet.navigator import GoalCallbacks, GoalTicket, NavGoal
+x, y, yaw, timeout = [float(v) for v in sys.argv[1:5]]
+map_yaml = sys.argv[7]
+rclpy.init(); n = rclpy.create_node("rig_goal")
+buf = Buffer(); TransformListener(buf, n)
+plan_pub = n.create_publisher(Path, "plan", 10)
+def pose():
+    try:
+        t = buf.lookup_transform("map", "base_footprint", Time()).transform
+    except Exception:
+        return None
+    q = t.rotation
+    return t.translation.x, t.translation.y, math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
+def propose(poses):
+    m = Path(); m.header.frame_id = "map"; m.header.stamp = n.get_clock().now().to_msg()
+    for px, py, pyaw in poses:
+        p = PoseStamped(); p.header = m.header; p.pose.position.x, p.pose.position.y = px, py
+        p.pose.orientation.z, p.pose.orientation.w = math.sin(pyaw / 2), math.cos(pyaw / 2); m.poses.append(p)
+    plan_pub.publish(m)
+log = open(sys.argv[5] + ".docking.log", "a")
+inner = Nav2ActionNavigator(n, "navigate_to_pose")
+geom = DockingGeometry(OccupancyMap.load(map_yaml), [(0.21, 0.13), (0.21, -0.13), (-0.11, -0.13), (-0.11, 0.13)], padding=0.03)
+nav = DockingNavigator(inner=inner, follow=Nav2FollowPathClient(n, "follow_path"), geometry=geom, pose_provider=pose,
+                       propose_path=propose, log=lambda t: (log.write(t + "\n"), log.flush()))
+deadline = time.time() + 90
+while not inner.is_ready() or pose() is None:
+    rclpy.spin_once(n, timeout_sec=0.5)
+    if time.time() > deadline: print(json.dumps({"status": "NAV2_NOT_READY"})); sys.exit(3)
+state = {}
+def send():
+    state.clear()
+    cb = GoalCallbacks(on_response=lambda a, e: state.__setitem__("accepted", a),
+                       on_feedback=lambda f: None, on_result=lambda r: state.__setitem__("result", r))
+    nav.send_goal(NavGoal("rig", "map", x, y, yaw), GoalTicket(), cb)
+for _ in range(45):
+    send()
+    end = time.time() + 10
+    while "accepted" not in state and time.time() < end:
+        rclpy.spin_once(n, timeout_sec=0.2)
+    if state.get("accepted"): break
+    time.sleep(2.0)
+if not state.get("accepted"): print(json.dumps({"status": "GOAL_REJECTED"})); sys.exit(3)
+open(sys.argv[5], "w").close()
+t0 = time.time(); aborts = []
+retry = float(sys.argv[6])
+while time.time() - t0 < timeout:
+    while "result" not in state and time.time() - t0 < timeout:
+        rclpy.spin_once(n, timeout_sec=0.2)
+    if "result" in state and state["result"].status == 6 and time.time() - t0 < retry:
+        aborts.append(state["result"].error_code); send(); continue
+    break
+names = {4: "SUCCEEDED", 5: "CANCELED", 6: "ABORTED"}
+if "result" in state:
+    r = state["result"]
+    print(json.dumps({"status": names.get(r.status, str(r.status)), "t0": t0, "t1": time.time(), "error_code": r.error_code, "aborts": aborts}))
+else:
+    print(json.dumps({"status": "STILL_RUNNING_AT_TIMEOUT", "t0": t0, "t1": time.time()}))
+"""
+
+
 def wait_for_truth(path: Path, timeout: float) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -317,8 +390,9 @@ def run_attempt(s: Scenario, domain: int, root: Path, args: argparse.Namespace) 
     stack = Stack(domain, out)
     map_yaml = BUNDLE / "map.yaml"
     try:
+        bx, by, _ = nav2_goal((s.x, s.y, s.yaw))  # the scenario start is a chassis-centre pose, like an endpoint
         base_argv = [sys.executable, str(HERE / "rig_base.py"), "--map", str(map_yaml), "--truth", str(truth),
-                     "--x", str(s.x), "--y", str(s.y), "--yaw", str(s.yaw), "--obstacles", json.dumps(s.obstacles),
+                     "--x", str(bx), "--y", str(by), "--yaw", str(s.yaw), "--obstacles", json.dumps(s.obstacles),
                      "--timed-obstacles", json.dumps(s.timed_obstacles), "--clock-file", str(out / "goal_accepted"),
                      "--inertia-tau", str(s.inertia_tau if s.inertia_tau else args.inertia_tau),
                      "--deadband-v", str(args.deadband_v), "--deadband-w", str(args.deadband_w)]
@@ -349,9 +423,9 @@ def run_attempt(s: Scenario, domain: int, root: Path, args: argparse.Namespace) 
         # Record /plan, /cmd_vel_motor, /odom for post-mortem (abort/keepout analysis).
         stack.start("recorder", [sys.executable, str(HERE / "rig_recorder.py"), str(out / "trace.jsonl")])
         goal_py = out / "goal.py"
-        goal_py.write_text(GOAL_SCRIPT, encoding="utf-8")
+        goal_py.write_text(DOCK_GOAL_SCRIPT if args.docking else GOAL_SCRIPT, encoding="utf-8")
         script = (f"source /opt/ros/jazzy/setup.bash; source {shlex.quote(str(WS))}/install/setup.bash; exec "
-                  + shlex.join([sys.executable, str(goal_py), *map(str, nav2_goal(s.goal)), str(s.timeout), str(out / "goal_accepted"), str(s.retry_abort_s)]))
+                  + shlex.join([sys.executable, str(goal_py), *map(str, nav2_goal(s.goal)), str(s.timeout), str(out / "goal_accepted"), str(s.retry_abort_s), str(map_yaml)]))
         done = subprocess.run(["bash", "-c", script], env=stack.env, capture_output=True, text=True, timeout=s.timeout + 200)
         lines = done.stdout.strip().splitlines()
         result = json.loads(lines[-1]) if lines else {"status": "NO_RESULT", "stderr": done.stderr[-400:]}
@@ -425,6 +499,7 @@ def main() -> int:
     ap.add_argument("--deadband-v", type=float, default=0.0)
     ap.add_argument("--deadband-w", type=float, default=0.0)
     ap.add_argument("--bt", default="")
+    ap.add_argument("--docking", action="store_true", help="goals through the gateway's DockingNavigator")
     ap.add_argument("--map", default="map_one_v004", help="bundle directory under warotrans_navigation/maps")
     ap.add_argument("--nav-overlay", default="", help="extra Nav2 params merged last (candidate values)")
     ap.add_argument("--lane-half-width", type=float, default=0.0, help="reserve lane rectangles, as in a two-robot run")
