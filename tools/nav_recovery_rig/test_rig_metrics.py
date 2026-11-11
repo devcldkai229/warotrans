@@ -6,6 +6,7 @@ import ast
 import math
 from pathlib import Path
 
+import pytest
 import rig_metrics as m
 
 RING = [[1.0, 1.0], [2.0, 1.0], [2.0, 1.05], [1.0, 1.05], [1.0, 1.0]]
@@ -84,3 +85,58 @@ def test_failures_name_each_criterion():
     assert "from the goal" in " ".join(m.failures({"result": "SUCCEEDED", "goal_dist_m": 0.09}))
     for word in ("collisions", "keep-out", "yaw", "gate", "offset", "wrong way", "speed"):
         assert word in text
+
+
+# ---------------------------------------------------------------------- 2026-11-11: opposite lane, speed zone
+
+def _lane(code, a, b, width=0.65):
+    tangent = math.atan2(b[1] - a[1], b[0] - a[0])
+    return {"code": code, "width_meters": width, "tangent_samples": [{"a": a, "b": b, "tangent": tangent}]}
+
+
+# MAP-ONE-V005/V006: TTB-BOUND goes south at x -0.507, BTT-BOUND north at x 0.154.
+TTB = _lane("EDGE-LANE-TTB-BOUND", [-0.507, -0.058], [-0.507, -1.085])
+BTT = _lane("EDGE-LANE-BTT-BOUND", [0.154, -1.085], [0.154, -0.063])
+
+
+def test_driving_down_the_centre_of_ttb_never_touches_btt():
+    truth = [{"x": -0.507, "y": -0.1 - i * 0.05, "yaw": -math.pi / 2, "v": 0.1} for i in range(18)]
+    assert m.opposite_lane_intrusion(truth, [TTB, BTT]) == {}
+
+
+def test_a_corner_cut_toward_btt_is_measured():
+    # Drifted 0.25 m east while heading south: the right-hand corners reach into BTT (its west edge is x -0.171).
+    truth = [{"x": -0.257, "y": -0.5, "yaw": -math.pi / 2 + 0.05, "v": 0.1}]
+    depth = m.opposite_lane_intrusion(truth, [TTB, BTT], stride=1)
+    assert depth.get("BTT-BOUND", 0.0) > 0.0
+
+
+def test_crossing_a_lane_at_right_angles_is_not_an_intrusion():
+    truth = [{"x": 0.154, "y": -1.0, "yaw": 0.0, "v": 0.1}]
+    assert m.opposite_lane_intrusion(truth, [BTT], stride=1) == {}
+
+
+def test_speed_zone_excess_only_counts_well_inside_the_zone():
+    def limit_at(x, y):
+        return 0.06 if 0.0 <= x <= 2.0 else 0.0
+
+    truth = [{"x": 0.05, "y": 0.0, "v": 0.10},  # just entered: the costmap has not updated yet
+             {"x": 1.0, "y": 0.0, "v": 0.058},
+             {"x": 3.0, "y": 0.0, "v": 0.10}]
+    z = m.speed_zone_excess(truth, limit_at)
+    assert z["samples"] == 1 and z["excess_mps"] <= 0.0
+    truth.append({"x": 1.2, "y": 0.0, "v": 0.09})
+    z = m.speed_zone_excess(truth, limit_at)
+    assert z["excess_mps"] == pytest.approx(0.03)
+    assert m.failures({"speed_zone": z}) == ["speed zone 0.09 > 0.06"]
+
+
+def test_speed_mask_reader_reads_the_v006_bundle():
+    import os
+    yaml = os.path.join(os.path.dirname(__file__), "..", "..", "ros2_ws", "src", "warotrans_navigation", "maps",
+                        "map_one_v006", "speed.yaml")
+    if not os.path.exists(yaml):
+        pytest.skip("V006 bundle not present")
+    limit_at = m.speed_mask_reader(yaml)
+    assert limit_at(0.2, -1.2) == pytest.approx(0.06)  # inside ZONE-SPEED-ZONE-BOUND
+    assert limit_at(0.2, 1.0) == 0.0

@@ -108,6 +108,26 @@ def v004_scenarios() -> list[Scenario]:
     return out
 
 
+# MAP-ONE-V006 = V005 geometry with ZONE-SPEED-ZONE-BOUND at 0.06 m/s (snapshot samples/maps/MAP-ONE-V006).
+V006 = {
+    "PARKING_A": (-0.541, 2.468, math.pi), "PARKING_B": (-0.52, 1.775, math.pi), "CHARGE": (-0.911, 3.098, 0.0),
+    "INBOUND": (1.459, -1.043, math.pi), "OUTBOUND": (-0.953, -1.048, 0.0), "QUEUE": (0.938, -0.751, -math.pi / 2),
+    "INSPECTION": (-0.953, 0.197, 0.0), "SHELF_A": (1.36, 1.994, math.pi / 2), "SHELF_B1": (1.573, -0.085, math.pi / 2),
+    "SHELF_B2": (1.219, -0.085, 0.0), "SHELF_C": (-0.953, -0.111, 0.0),
+}
+
+
+def v006_scenarios() -> list[Scenario]:
+    """The INBOUND run of the 2026-11-10 lab, leg by leg, then the ways back to rest (parking, else the queue point)."""
+    legs = [("PARKING_A", "INBOUND"), ("INBOUND", "SHELF_B1"), ("SHELF_B1", "SHELF_A"), ("SHELF_A", "SHELF_C"),
+            ("SHELF_C", "PARKING_A"), ("SHELF_C", "PARKING_B"), ("SHELF_C", "QUEUE")]
+    out = []
+    for a, b in legs:
+        x, y, yaw = V006[a]
+        out.append(Scenario(f"{a}__{b}".lower(), x, y, yaw, goal=V006[b], timeout=300.0, authority="semantic", note=f"{a} -> {b}, MAP-ONE-V006"))
+    return out
+
+
 def v004_all_pairs() -> list[Scenario]:
     """All directed endpoint pairs on MAP-ONE-V004 (10×9 = 90)."""
     names = list(V004.keys())
@@ -373,6 +393,9 @@ def analyse(s: Scenario, result: dict, out: Path, args: argparse.Namespace) -> d
         "lanes": rig_metrics.lane_offsets(run, lanes),
         "travel_gate_closed_m": rig_metrics.travel_while_gate_closed(run, events),
         "max_speed_mps": round(max((abs(t["v"]) for t in run), default=0.0), 3),
+        "opposite_lane_m": rig_metrics.opposite_lane_intrusion(run, lanes),
+        "speed_zone": rig_metrics.speed_zone_excess(run, rig_metrics.speed_mask_reader(str(BUNDLE / "speed.yaml")))
+        if (BUNDLE / "speed.yaml").exists() else {},
         "speed_ceiling_mps": SPEED_CEILING_MPS,
         "keepout_rejects": sum(1 for e in events if e.get("e") == "keepout_reject"),
         "gate_closed_reasons": sorted({e["reason"] for e in events if e.get("e") == "gate" and not e["ok"]}),
@@ -409,6 +432,8 @@ def main() -> int:
     if args.obstacle_suite:
         pool_of = obstacle_scenarios()
         BUNDLE = WS / "src/warotrans_navigation/maps/map_one_v004"
+    elif args.map == "map_one_v006":
+        pool_of = v006_scenarios()
     elif args.map == "map_one_v004":
         pool_of = v004_all_pairs() if args.all_pairs else v004_scenarios()
     else:
