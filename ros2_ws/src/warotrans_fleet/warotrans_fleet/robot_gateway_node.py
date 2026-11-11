@@ -103,6 +103,14 @@ class RobotGatewayNode(Node):
         # are moved back and proposed plans forward by the x offset between them: < 0 reads it from TF, else fixed.
         self.declare_parameter("nav2_base_frame", "base_footprint")
         self.declare_parameter("goal_base_offset_m", -1.0)
+        # Docking (docking.py): where the footprint cannot turn at the endpoint, turn on the bay axis and drive straight
+        # in / out. Footprint = Nav2 footprint around nav2_base_frame; the map is the bundle's (fleet.launch.py).
+        self.declare_parameter("docking_enabled", True)
+        self.declare_parameter("docking_map_yaml", "")
+        self.declare_parameter("docking_footprint", "[[0.21, 0.13], [0.21, -0.13], [-0.11, -0.13], [-0.11, 0.13]]")
+        self.declare_parameter("docking_padding", 0.03)
+        self.declare_parameter("docking_max_dist", 0.9)
+        self.declare_parameter("follow_path_action", "follow_path")
         self.declare_parameter("navigate_action", "navigate_to_pose")
         self.declare_parameter("heartbeat_hz", 1.0)
         self.declare_parameter("telemetry_hz", 5.0)
@@ -165,7 +173,6 @@ class RobotGatewayNode(Node):
         # (segment motion authority — TrafficClient). Chỉ là param; legacy giữ nguyên hành vi cũ.
         self.declare_parameter("traffic_mode", "legacy")
         self.declare_parameter("authority_loss_timeout_sec", 3.0)
-        self.declare_parameter("follow_path_action", "follow_path")
         self.declare_parameter("enable_authority_gate", False)  # gate is a separate launch node
         self.declare_parameter("authority_state_path", "")  # "" = file tạm mặc định của AuthorityStore
         # Stage-3 semantic_active
@@ -480,7 +487,57 @@ class RobotGatewayNode(Node):
         navigator = Nav2ActionNavigator(self, action_name)
         self.create_subscription(GoalStatusArray, f"{action_name}/_action/status", self._on_goal_status, 10)
         self.get_logger().info(f"Nav2 ActionClient on {action_name}")
-        return navigator
+        return self._wrap_docking(navigator)
+
+    def _wrap_docking(self, navigator: NavigatorPort) -> NavigatorPort:
+        """Bays too small to turn in: turn where there is room on the bay axis, then drive straight in or out."""
+        if not bool(self.get_parameter("docking_enabled").value):
+            return navigator
+        map_yaml = self._str_param("docking_map_yaml").strip()
+        if not map_yaml or not os.path.isfile(map_yaml):
+            self.get_logger().warning(f"[Docking] disabled: no map ({map_yaml or 'docking_map_yaml empty'})")
+            return navigator
+        try:
+            import json as _json
+
+            from warotrans_fleet.docking import DockingGeometry, OccupancyMap
+            from warotrans_fleet.docking_navigator import DockingNavigator
+            from warotrans_fleet.nav2_navigator import Nav2FollowPathClient
+
+            footprint = [tuple(map(float, p)) for p in _json.loads(self._str_param("docking_footprint"))]
+            geometry = DockingGeometry(
+                OccupancyMap.load(map_yaml), footprint, padding=self._float_param("docking_padding"),
+                max_dist=self._float_param("docking_max_dist"),
+            )
+            follow = Nav2FollowPathClient(self, self._str_param("follow_path_action"))
+        except Exception as exc:  # noqa: BLE001
+            self.get_logger().error(f"[Docking] disabled: {type(exc).__name__}: {exc}")
+            return navigator
+        self.get_logger().info(f"[Docking] enabled: map={map_yaml} footprint={footprint}")
+        return DockingNavigator(
+            inner=navigator, follow=follow, geometry=geometry, pose_provider=self._nav2_base_pose,
+            propose_path=self._propose_docking_path, log=lambda text: self.get_logger().info(text),
+        )
+
+    def _nav2_base_pose(self) -> Optional[tuple[float, float, float]]:
+        """Pose of the frame Nav2 drives (the turning centre) in the map frame."""
+        frame = self._str_param("nav2_base_frame").strip() or self._base_frame
+        try:
+            t = self._tf_buffer.lookup_transform(self._map_frame, frame, Time()).transform
+        except Exception:  # noqa: BLE001
+            return None
+        q = t.rotation
+        yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+        return float(t.translation.x), float(t.translation.y), yaw
+
+    def _propose_docking_path(self, poses) -> None:
+        """A docking FollowPath publishes no /plan: propose its straight path like Nav2's plan (chassis-centre poses)."""
+        client = self._semantic_client
+        if client is None or not hasattr(client, "on_plan"):
+            return
+        offset = self._goal_base_offset()
+        shifted = [(x + offset * math.cos(yaw), y + offset * math.sin(yaw), yaw) for x, y, yaw in poses]
+        client.on_plan(shifted, goal=shifted[-1], command_id=self._commands.move.active_command_id)
 
     def _setup_route_enforcer(self):
         from warotrans_fleet.route_enforcer import RouteEnforcer, RouteEnforcerConfig

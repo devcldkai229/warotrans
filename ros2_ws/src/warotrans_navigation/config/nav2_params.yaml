@@ -55,7 +55,7 @@ controller_server:
     min_theta_velocity_threshold: 0.001
     failure_tolerance: 1.0
     progress_checker_plugins: ["progress_checker"]
-    goal_checker_plugins: ["general_goal_checker"]
+    goal_checker_plugins: ["general_goal_checker", "docking_goal_checker"]
     # FollowPath = forward only. FollowPathReverse = dedicated RPP with allow_reversing
     # (never enable reverse on the primary Forward controller — Active Mode contract v10).
     controller_plugins: ["FollowPath", "FollowPathReverse"]
@@ -70,7 +70,8 @@ controller_server:
       plugin: "nav2_controller::SimpleProgressChecker"
       # 2026-10-16: 45 s hid a stalled robot for most of a minute per attempt (the T-junction
       # "hang"). With deadband compensation the robot moves 0.10 m in ~1-3 s, so 20 s is ample.
-      required_movement_radius: 0.10
+      # 0.10 → 0.05: a docking run in can be 0.05–0.15 m long in total.
+      required_movement_radius: 0.05
       movement_time_allowance: 20.0
 
     general_goal_checker:
@@ -84,6 +85,14 @@ controller_server:
       # tới heading giả, open-loop vọt lố + đảo chiều liên tục. π = bỏ qua heading khi đến đích.
       # Đặt lại 0.25 khi cần heading thật (docking) và nguồn goal gửi yaw đúng.
       yaw_goal_tolerance: 0.08      # radians (~4.6°); was 0.13, earlier 3.14 (any yaw "ok")
+
+    # Docking straight moves (warotrans_fleet/docking_navigator.py): position only. A straight run in a bay cannot
+    # correct the heading; the gateway's final align step (NavigateToPose, general checker) does that.
+    docking_goal_checker:
+      stateful: true
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.03
+      yaw_goal_tolerance: 6.28
 
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
@@ -450,7 +459,9 @@ collision_monitor:
       type: "polygon"
       action_type: "approach"
       footprint_topic: "/local_costmap/published_footprint"
-      time_before_collision: 1.2
+      # 1.2 → 0.7 (2026-11-12 docking): an endpoint may legally sit a few cm from a wall; backing onto it at
+      # 0.05 m/s, 1.2 s of projection reached the wall and slowed the robot to a stall short of the goal.
+      time_before_collision: 0.7
       simulation_time_step: 0.1
       min_points: 4               # ignore single noisy returns
       visualize: true

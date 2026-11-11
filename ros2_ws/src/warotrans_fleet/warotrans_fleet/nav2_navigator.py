@@ -122,3 +122,94 @@ class Nav2ActionNavigator:
         except Exception as exc:  # noqa: BLE001
             self._log.error(f"[Nav2CallbackError] {what} commandId={command_id} {type(exc).__name__}: {exc}")
 
+
+
+class Nav2FollowPathClient:
+    """FollowPathPort over nav2_msgs/action/FollowPath: a straight docking move with a chosen controller."""
+
+    def __init__(self, node: Node, action_name: str = "follow_path", goal_checker_id: str = "docking_goal_checker") -> None:
+        from nav2_msgs.action import FollowPath
+
+        self._FollowPath = FollowPath
+        self._node = node
+        self._log = node.get_logger()
+        self._client = ActionClient(node, FollowPath, action_name)
+        self._goal_checker_id = goal_checker_id
+
+    def is_ready(self) -> bool:
+        return bool(self._client.server_is_ready())
+
+    def send_path(self, command_id: str, frame_id: str, poses: Any, controller_id: str, ticket: GoalTicket,
+                  callbacks: GoalCallbacks) -> None:
+        from nav_msgs.msg import Path
+
+        path = Path()
+        path.header.frame_id = frame_id
+        path.header.stamp = self._node.get_clock().now().to_msg()
+        for x, y, yaw in poses:
+            p = PoseStamped()
+            p.header = path.header
+            p.pose.position.x = float(x)
+            p.pose.position.y = float(y)
+            qx, qy, qz, qw = yaw_to_quaternion(float(yaw))
+            p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w = qx, qy, qz, qw
+            path.poses.append(p)
+        msg = self._FollowPath.Goal()
+        msg.path = path
+        msg.controller_id = controller_id
+        msg.goal_checker_id = self._goal_checker_id
+
+        def _on_feedback(feedback_msg: Any) -> None:
+            fb = feedback_msg.feedback
+            self._safe("feedback", command_id, callbacks.on_feedback,
+                       NavFeedback(distance_remaining=float(getattr(fb, "distance_to_goal", 0.0))))
+
+        def _on_result(future: Any) -> None:
+            try:
+                wrapped = future.result()
+                res = wrapped.result
+                nav_result = NavResult(
+                    status=int(wrapped.status),
+                    error_code=int(getattr(res, "error_code", 0)) if hasattr(res, "error_code") else None,
+                    error_message=(getattr(res, "error_msg", "") or None),
+                )
+            except Exception as exc:  # noqa: BLE001
+                nav_result = NavResult(status=STATUS_UNKNOWN, error_message=f"get_result failed: {exc}")
+            self._safe("result", command_id, callbacks.on_result, nav_result)
+
+        def _on_goal_response(future: Any) -> None:
+            try:
+                handle = future.result()
+            except Exception as exc:  # noqa: BLE001
+                self._safe("response", command_id, callbacks.on_response, False, f"{type(exc).__name__}: {exc}")
+                return
+            if handle is None or not handle.accepted:
+                self._safe("response", command_id, callbacks.on_response, False, None)
+                return
+            ticket.handle = handle
+            self._safe("response", command_id, callbacks.on_response, True, None)
+            handle.get_result_async().add_done_callback(_on_result)
+
+        self._client.send_goal_async(msg, feedback_callback=_on_feedback).add_done_callback(_on_goal_response)
+
+    def cancel_goal(self, ticket: GoalTicket, on_response: Callable[[bool, str], None]) -> None:
+        handle = ticket.handle
+        if handle is None:
+            on_response(False, "goal not accepted yet")
+            return
+
+        def _done(future: Any) -> None:
+            try:
+                code = int(future.result().return_code)
+            except Exception as exc:  # noqa: BLE001
+                self._safe("cancel", "", on_response, False, f"cancel request failed: {exc}")
+                return
+            self._safe("cancel", "", on_response, code == 0, _CANCEL_RETURN_CODES.get(code, str(code)))
+
+        handle.cancel_goal_async().add_done_callback(_done)
+
+    def _safe(self, what: str, command_id: str, fn: Callable[..., None], *args: Any) -> None:
+        try:
+            fn(*args)
+        except Exception as exc:  # noqa: BLE001
+            self._log.error(f"[FollowPathCallbackError] {what} commandId={command_id} {type(exc).__name__}: {exc}")

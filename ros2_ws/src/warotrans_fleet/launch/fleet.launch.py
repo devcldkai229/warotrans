@@ -57,6 +57,8 @@ def gateway_overrides(arg, environ) -> tuple[dict, str]:
                 "no_stop_json": os.path.join(bundle, policies.get("no_stop", "no_stop.json")),
                 "keepout_json": os.path.join(bundle, policies.get("keepout_zones", "keepout.json")),
                 "lanes_json": os.path.join(bundle, policies.get("lanes", "lanes.json")),
+                # Docking (bays too small to turn in): the occupancy map the robot localizes on.
+                "docking_map_yaml": os.path.join(bundle, "map.yaml"),
             }
         )
         log = f"[warotrans_fleet] semantic bundle {map_code} fingerprint={fingerprint[:12]}… ({bundle})"
