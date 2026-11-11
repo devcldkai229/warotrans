@@ -6,6 +6,20 @@ import math
 import re
 from typing import Iterable, Sequence
 
+def geometry_body_offset(path: str | None = None) -> float:
+    """base_footprint -> base_link x in geometry.yaml (the turning centre is that far behind the chassis centre)."""
+    import os
+
+    path = path or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "ros2_ws", "src",
+                                "warotrans_description", "config", "geometry.yaml")
+    try:
+        text = open(path, encoding="utf-8").read()
+    except OSError:
+        return 0.0
+    m = re.search(r"base_footprint_to_base_link:\s*\n(?:\s*#.*\n)*\s*x:\s*([-\d.]+)", text)
+    return float(m.group(1)) if m else 0.0
+
+
 BODY_HALF_LENGTH_M = 0.18
 BODY_HALF_WIDTH_M = 0.15
 LANE_MAX_OFFSET_M = 0.10

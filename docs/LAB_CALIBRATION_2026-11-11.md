@@ -86,3 +86,75 @@ The truth of the arrival, in base_link versus the endpoint, over 6 legs:
 2. **BNO055:** fix the I2C connection, run the turn test, and enable EKF if it holds heading within 2 % over 360°.
 3. **AMCL:** a higher `alpha1` with fewer particles (e.g. 300–800) and `max_beams` 60, measured against the scan match. Or use a scan-to-map correction at rest.
 4. **Lidar yaw:** re-check the +1.6° on longer straight runs.
+
+---
+
+# Part 2 (afternoon): BNO055 reconnected, EKF, rotation centre, endpoint geometry
+
+Logs are on the Pi in `~/wt_logs/calib2/` (`motion.jsonl`, `nav.jsonl`, `nav_path.jsonl`). The ground truth is the scan match, as in Part 1.
+
+## IMU and EKF (adopted)
+- **BNO055 standing still.** It answers at 0x29 (IMUPLUS, about 42 Hz). Yaw drift over 300 s was 0.000°. Odometry drift was 0. AMCL was 1.4 mm / 0.09° off the truth.
+- **Turns with valid truth.** For the two turns whose scan match was trustworthy, the ratio to the truth was:
+
+  | Turn | IMU | Wheel odometry |
+  |---|---|---|
+  | −90° | 0.993 | 1.255 |
+  | +180° | 0.987 | 0.956 |
+
+  Two later EKF runs gave IMU ratios of 0.988 and 0.991. The IMU heading is within about 1 %; wheel heading is wrong by up to 25 %.
+- **EKF.** `ekf.yaml` now fuses yaw and yaw rate only from the IMU; odometry contributes vx and vy ("E2"). The wheel yaw rate was dropped because of the slip.
+- **AMCL.** `amcl.yaml` is the EKF variant: 300–800 particles and 60 beams, for the Pi CPU.
+- **Result.**
+  - After ±90° turns, AMCL was 0.023–0.043 m and ≤ 2.4° off the truth. In Part 1, without the IMU, it was 0.07–0.25 m and 5–18°.
+  - One Nav2 leg ended with a heading error of 4.8°; AMCL heading was 0.6° off the truth.
+- **Launch script.** `pi_run_semantic.sh` now defaults to `EKF=true`. Its stop step also kills `battery_monitor`, `recovery_guard`, `bno055` and `ekf`. Its pkill patterns are bracketed so an SSH command line that names them does not kill itself.
+
+## Turning centre in the shifted frame (base_footprint x = 0.12, tried on the Pi, not committed)
+- **CCW turns.** The base moved 0.032–0.036 m per 90°. The fixed point was (−0.02, −0.01) m in the new frame, so the 0.12 m offset is right.
+- **CW turns.** The base still moved 0.157 m, the fixed point was 0.14 m to the left, and the robot turned 69° for 90° of wheel odometry. Traction is uneven between the two sides; this is mechanical (tyres, weight, track). The IMU keeps the heading right anyway.
+
+## Endpoint geometry: the blocking finding
+Turning about a point 0.12 m behind the chassis centre, the padded footprint sweeps a radius of 0.335 m. Nav2 with the old frame assumed 0.21 m.
+
+The table checks the padded footprint along the turning arc. Each endpoint is approached at heading 0°, 90°, 180° or −90° and then turns to its own heading. ok means a gap of at least 2 cm.
+
+| Endpoint (yaw) | from 0° | from 90° | from 180° | from −90° |
+|---|---|---|---|---|
+| INBOUND (180) | HIT | ok | ok | ok |
+| QUEUE-POINT (−90) | HIT | HIT | HIT | ok |
+| SHELF-B-01 (90) | HIT | ok | ok 0.04 | HIT |
+| SHELF-B-02 (0) | ok | HIT | HIT | HIT |
+| SHELF-A-01 (90) | HIT | ok | HIT | HIT |
+| SHELF-C-01, OUTBOUND, INSPECTION (0) | ok (0.04–0.07) | HIT | HIT | HIT |
+| PARKING-A (180) | HIT | ok 0.03 | ok | ok 0.03 |
+| PARKING-B (180) | HIT | HIT | ok | HIT |
+
+**What it means.**
+- Most endpoints can be reached only by driving straight in, already at the endpoint heading.
+- Nav2 plans to the endpoint position and then turns in place.
+- With the true geometry, Nav2 refuses those turns: "collision ahead", recoveries, timeout. This happened on INBOUND when the robot arrived heading 0°: 8 recoveries, then a timeout.
+- With the old geometry, Nav2 believed the turns fit. The real robot then swung its nose or tail 12 cm wider than planned. This is the "cuts into the neighbouring lane" and "turns forever and does not get in" seen on 2026-11-10.
+
+A pre-pose with a full 360° turn does not fit anywhere either: the lanes are about 0.66 m wide, and the turning circle is 0.67 m across.
+
+## Pi CPU
+With the stack idle (Nav2, AMCL, EKF, IMU, no gateway), the Pi uses about 44 % CPU at a load average of about 10. Most nodes take 7–13 % each. Restricting DDS discovery to localhost made no difference, and there is no thermal throttling. Scan-match scripts on top of this caused the Wi-Fi lag.
+
+## State left on the robot
+- **Running config:** EKF E2, light AMCL and the wheel PI.
+- **Frame:** geometry restored to x = 0, footprint restored.
+- **Running now:** the stack, with `MOTORS=false`.
+- **Gateway:** has the goal offset (from TF, so 0 today). 371 tests pass on the Pi; the ROS integration test passes on its own domain and fails only while the real stack is running on domain 0.
+- **Backup:** `~/warotrans_backups/ros2_ws_src_20261111_140508_precalib2.tgz`.
+
+## Decision needed before the robot can be "100 %"
+The robot's real turning geometry does not fit the current endpoint and lane layout. Options:
+1. **Mechanical.** Make the robot turn about its chassis centre: balance the weight between the axles, or fix the uneven traction (CW vs CCW). Then the old frame becomes true and every endpoint above fits as Nav2 assumed.
+2. **Docking approach in software.**
+   - Give each endpoint an approach pose on its lane, reached at the endpoint heading. The robot then drives straight in, and backs out to leave.
+   - Adopt x = 0.12 (the gateway offset and the rig support are already in place).
+   - This needs approach poses per endpoint (map V007) and NavigateThroughPoses or a short straight-in controller.
+3. **Map V007.** Move endpoints away from walls where a single 90° turn has room, for example QUEUE-POINT, SHELF-C-01, OUTBOUND, INSPECTION.
+
+Proposed coordinates come from `calib_epclear.py` / `calib_arc.py` and wait for the operator's approval.

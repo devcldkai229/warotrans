@@ -48,6 +48,10 @@ robot_gateway:
     arrival_max_refines: 2
     arrival_refine_xy_m: 0.05
     arrival_refine_yaw_rad: 0.087
+    # Endpoints are for the chassis centre (base_frame); Nav2 drives nav2_base_frame, the turning centre. Goals move
+    # back, proposed plans forward, by base_footprint->base_link x (geometry.yaml). -1 = read it from TF (0 today).
+    nav2_base_frame: "base_footprint"
+    goal_base_offset_m: -1.0
     traffic_mode: "semantic_active"
     enable_authority_gate: true
     authority_ok_topic: "traffic/authority_ok"   # = cmd_vel_authority_gate input (navigation.launch.py)

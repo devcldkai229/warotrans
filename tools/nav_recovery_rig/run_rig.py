@@ -301,6 +301,13 @@ def run_one(s: Scenario, domain: int, root: Path, args: argparse.Namespace) -> d
     return row
 
 
+def nav2_goal(goal: tuple) -> tuple:
+    """The gateway's goal offset: Nav2 drives base_footprint, the endpoint is for the chassis centre."""
+    off = rig_metrics.geometry_body_offset()
+    x, y, yaw = goal
+    return (x - off * math.cos(yaw), y - off * math.sin(yaw), yaw)
+
+
 def run_attempt(s: Scenario, domain: int, root: Path, args: argparse.Namespace) -> dict:
     out = root / s.name
     out.mkdir(parents=True, exist_ok=True)
@@ -344,7 +351,7 @@ def run_attempt(s: Scenario, domain: int, root: Path, args: argparse.Namespace) 
         goal_py = out / "goal.py"
         goal_py.write_text(GOAL_SCRIPT, encoding="utf-8")
         script = (f"source /opt/ros/jazzy/setup.bash; source {shlex.quote(str(WS))}/install/setup.bash; exec "
-                  + shlex.join([sys.executable, str(goal_py), *map(str, s.goal), str(s.timeout), str(out / "goal_accepted"), str(s.retry_abort_s)]))
+                  + shlex.join([sys.executable, str(goal_py), *map(str, nav2_goal(s.goal)), str(s.timeout), str(out / "goal_accepted"), str(s.retry_abort_s)]))
         done = subprocess.run(["bash", "-c", script], env=stack.env, capture_output=True, text=True, timeout=s.timeout + 200)
         lines = done.stdout.strip().splitlines()
         result = json.loads(lines[-1]) if lines else {"status": "NO_RESULT", "stderr": done.stderr[-400:]}
@@ -357,7 +364,8 @@ def run_attempt(s: Scenario, domain: int, root: Path, args: argparse.Namespace) 
 def analyse(s: Scenario, result: dict, out: Path, args: argparse.Namespace) -> dict:
     truth = [json.loads(x) for x in (out / "truth.jsonl").read_text().splitlines() if x.strip()] if (out / "truth.jsonl").exists() else []
     t0 = result.get("t0") or (truth[0]["wall"] if truth else 0)
-    run = [t for t in truth if t["wall"] >= t0]
+    # Endpoints, lanes and the body metrics are about the chassis centre (cx, cy); the base turns about base_footprint.
+    run = [dict(t, x=t.get("cx", t["x"]), y=t.get("cy", t["y"])) for t in truth if t["wall"] >= t0]
     start = run[0] if run else None
     first_move = next((round(t["wall"] - t0, 1) for t in run if start and (t["travel"] - start["travel"] > 0.005 or t["turned"] - start["turned"] > 0.02)), None)
     probe_lines = []

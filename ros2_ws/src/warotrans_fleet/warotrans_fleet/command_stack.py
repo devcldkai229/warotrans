@@ -56,6 +56,7 @@ def build_command_stack(
     arrival_refine_xy_m: float = 0.05,
     arrival_refine_yaw_rad: float = 0.087,
     arrival_max_refines: int = 0,
+    goal_base_offset: Callable[[], float] = lambda: 0.0,
 ) -> CommandStack:
     lock = threading.RLock()
     router = CommandRouter(
@@ -91,6 +92,7 @@ def build_command_stack(
         arrival_refine_xy_m=arrival_refine_xy_m,
         arrival_refine_yaw_rad=arrival_refine_yaw_rad,
         arrival_max_refines=arrival_max_refines,
+        goal_base_offset=goal_base_offset,
     )
     router.register(move)
     router.register(CancelCommandHandler(move))

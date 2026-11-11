@@ -99,6 +99,10 @@ class RobotGatewayNode(Node):
         self.declare_parameter("arrival_max_refines", 0)
         self.declare_parameter("arrival_refine_xy_m", 0.05)
         self.declare_parameter("arrival_refine_yaw_rad", 0.087)
+        # Nav2 drives nav2_base_frame (the turning centre); endpoints are for base_frame (the chassis centre). Goals
+        # are moved back and proposed plans forward by the x offset between them: < 0 reads it from TF, else fixed.
+        self.declare_parameter("nav2_base_frame", "base_footprint")
+        self.declare_parameter("goal_base_offset_m", -1.0)
         self.declare_parameter("navigate_action", "navigate_to_pose")
         self.declare_parameter("heartbeat_hz", 1.0)
         self.declare_parameter("telemetry_hz", 5.0)
@@ -339,6 +343,7 @@ class RobotGatewayNode(Node):
             arrival_refine_xy_m=self._float_param("arrival_refine_xy_m"),
             arrival_refine_yaw_rad=self._float_param("arrival_refine_yaw_rad"),
             arrival_max_refines=int(self.get_parameter("arrival_max_refines").value),
+            goal_base_offset=self._goal_base_offset,
         )
         self._register_control_commands()
 
@@ -779,6 +784,10 @@ class RobotGatewayNode(Node):
                 cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
                 yaw = math.atan2(siny_cosp, cosy_cosp)
                 poses.append((float(p.pose.position.x), float(p.pose.position.y), float(yaw)))
+            # The plan is for the turning centre; the backend reserves for the chassis centre (the reported pose).
+            offset = self._goal_base_offset()
+            if offset:
+                poses = [(x + offset * math.cos(yaw), y + offset * math.sin(yaw), yaw) for x, y, yaw in poses]
             goal = poses[-1] if poses else None
             # Only plans of the backend NAVIGATE being executed are proposed (no command: never granted).
             client.on_plan(poses, goal=goal, command_id=self._commands.move.active_command_id)
@@ -881,6 +890,28 @@ class RobotGatewayNode(Node):
             return False
         self.get_logger().info(f"authority_state published state={body.get('state')} lastSeq={body.get('lastSeq')}")
         return True
+
+    def _goal_base_offset(self) -> float:
+        """x of base_frame in nav2_base_frame (m): fixed by goal_base_offset_m >= 0, else read once from TF."""
+        fixed = float(self.get_parameter("goal_base_offset_m").value)
+        if fixed >= 0.0:
+            return fixed
+        cached = getattr(self, "_goal_base_offset_cache", None)
+        if cached is not None:
+            return cached
+        nav2_frame = self._str_param("nav2_base_frame").strip()
+        if not nav2_frame or nav2_frame == self._base_frame:
+            self._goal_base_offset_cache = 0.0
+            return 0.0
+        try:
+            tf = self._tf_buffer.lookup_transform(nav2_frame, self._base_frame, Time()).transform
+        except Exception:  # noqa: BLE001  (TF not up yet: no offset this time, try again next call)
+            return 0.0
+        self._goal_base_offset_cache = float(tf.translation.x)
+        self.get_logger().info(
+            f"[GoalBaseOffset] {nav2_frame}->{self._base_frame} x={self._goal_base_offset_cache:.3f} m"
+        )
+        return self._goal_base_offset_cache
 
     def _traffic_pose(self) -> Optional[tuple[float, float, float]]:
         pose, status = self._lookup_map_pose()

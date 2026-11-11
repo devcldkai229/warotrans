@@ -28,7 +28,7 @@ amcl:
     scan_topic: "/scan"
     laser_max_range: 12.0      # RPLIDAR A1M8 max ~12m, matches slam_toolbox
     laser_min_range: 0.15      # A1M8 min ~0.15m
-    max_beams: 90              # TUNING: subsample for CPU; A1M8 has ~360 points (60 was sparse at corners)
+    max_beams: 60              # TUNING: subsample for CPU; A1M8 has ~360 points (60 was sparse at corners)
 
     # ----- Motion model (DifferentialMotionModel for skid-steer approx) -----
     robot_model_type: "nav2_amcl::DifferentialMotionModel"
@@ -44,8 +44,8 @@ amcl:
     alpha5: 0.1                # TUNING: translation→translation (strafe, usually 0 for diff)
 
     # ----- Particle filter -----
-    min_particles: 500
-    max_particles: 2000        # Limit for Pi 5 CPU
+    min_particles: 300
+    max_particles: 800        # Limit for Pi 5 CPU
     pf_err: 0.05               # KLD particle filter error
     pf_z: 0.99                 # KLD z-score
 
