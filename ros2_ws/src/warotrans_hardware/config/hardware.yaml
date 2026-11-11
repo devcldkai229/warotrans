@@ -11,9 +11,13 @@ esp32_bridge_node:
     #   w=0.15 rad/s bursts: duty 0 ~5° WEAK; 15 ~31°; 25 ~47°; 35 ~62°.
     #   Operator: go4 (35) visibly clearer/stronger than go2/go3 → use 35.
     wheel_min_start_duty: 35
-    wheel_velocity_closed_loop: false
-    wheel_velocity_kp: 0.0
-    wheel_velocity_ki: 0.0
+    # Lab 2026-11-11 (docs/LAB_CALIBRATION_2026-11-11.md): open loop drove both wheels at 0.13-0.15 m/s for a
+    # 0.068 m/s target (0.3 rad/s in place), the forward wheel 17-44 % faster than the reverse one. PI on the
+    # encoders, kp 600 / ki 1500: 0.068 +- 0.003 m/s within ~1 s, symmetric, no oscillation; straight 0.040 m/s
+    # exact. 6 Nav2 legs ran with it. kp 250 / ki 800 was too slow (still 0.08 m/s after 1 s).
+    wheel_velocity_closed_loop: true
+    wheel_velocity_kp: 600.0
+    wheel_velocity_ki: 1500.0
 
 wheel_odom_node:
   ros__parameters:
