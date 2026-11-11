@@ -124,6 +124,11 @@ class _ActiveMove:
     planner_failing_since: Optional[float] = None
     settle_until: Optional[float] = None
     succeeded_result: Optional[NavResult] = None
+    # Arrival refine: AMCL is asked to update in place while the robot settles; a goal missed by more than the
+    # refine thresholds is sent again (same target), at most arrival_max_refines times.
+    refine_count: int = 0
+    refreshes_left: int = 0
+    next_refresh_at: Optional[float] = None
 
     @property
     def command_id(self) -> str:
@@ -159,8 +164,18 @@ class MoveCommandHandler:
         arrival_settle_sec: float = 0.0,
         arrival_pose: Callable[[], Optional[tuple[float, float, float]]] = lambda: None,
         motion_hold_active: Callable[[], bool] = lambda: False,
+        localization_refresh: Callable[[], None] = lambda: None,
+        arrival_refine_xy_m: float = 0.05,
+        arrival_refine_yaw_rad: float = 0.087,
+        arrival_max_refines: int = 0,
     ) -> None:
         self._navigator = navigator
+        # 2026-11-10 lab: Nav2 passed its goal checker, then the next AMCL update moved the pose 0.16-0.28 m and
+        # 26-52 deg. Asking AMCL for an in-place update before measuring shows the real miss; a miss is driven again.
+        self._localization_refresh = localization_refresh
+        self._arrival_refine_xy_m = float(arrival_refine_xy_m)
+        self._arrival_refine_yaw_rad = float(arrival_refine_yaw_rad)
+        self._arrival_max_refines = max(0, int(arrival_max_refines))
         self._arrival_pose = arrival_pose
         # semantic_active: the authority gate held the robot for traffic (no grant / outside reservation). Nav2's
         # progress checker then aborts the goal although nothing failed; such an abort re-sends the goal instead.
@@ -326,8 +341,12 @@ class MoveCommandHandler:
             now = self._clock()
 
             if move.phase == _SETTLING:
+                if move.refreshes_left > 0 and move.next_refresh_at is not None and now >= move.next_refresh_at:
+                    move.refreshes_left -= 1
+                    move.next_refresh_at = now + self._arrival_settle_sec / 3.0
+                    self._refresh_localization()
                 if move.settle_until is not None and now >= move.settle_until:
-                    self._finish_succeeded(move)
+                    self._on_settled(move)
                 return
 
             if move.phase == _SENDING and move.goal_sent_at is not None:
@@ -572,11 +591,16 @@ class MoveCommandHandler:
 
             if status == STATUS_SUCCEEDED:
                 move.succeeded_result = result
+                self._refresh_localization()
                 if self._arrival_settle_sec > 0.0:
+                    now = self._clock()
                     move.phase = _SETTLING
-                    move.settle_until = self._clock() + self._arrival_settle_sec
+                    move.settle_until = now + self._arrival_settle_sec
+                    # Three in-place AMCL updates in all while the robot comes to rest (one now, two during settle).
+                    move.refreshes_left = 2
+                    move.next_refresh_at = now + self._arrival_settle_sec / 3.0
                 else:
-                    self._finish_succeeded(move)
+                    self._on_settled(move)
             elif status == STATUS_CANCELED and move.cancel_reason == _CANCEL_BY_TIMEOUT:
                 self._log.warning(f"[NavigationTimeout] commandId={move.command_id} goal canceled by Nav2")
                 self._finish(
@@ -670,6 +694,54 @@ class MoveCommandHandler:
         if error_code is None:
             return False
         return error_code in _NAV2_CONTROLLER_BLOCK_CODES or error_code in _NAV2_PLANNER_ERROR_CODES
+
+    def _refresh_localization(self) -> None:
+        try:
+            self._localization_refresh()
+        except Exception as exc:  # noqa: BLE001 — a missing AMCL service must not change the result
+            self._log.warning(f"[LocalizationRefreshFailed] {type(exc).__name__}: {exc}")
+
+    def _on_settled(self, move: _ActiveMove) -> None:
+        """Robot at rest after Nav2 SUCCEEDED: report, or drive the same goal again when it missed."""
+        if self._needs_refine(move):
+            now = self._clock()
+            move.refine_count += 1
+            self._log.warning(
+                f"[ArrivalRefine] commandId={move.command_id} attempt={move.refine_count}/{self._arrival_max_refines}"
+                f"{self._arrival_error_text(move)} limits xy={self._arrival_refine_xy_m:.3f}m "
+                f"yaw={self._arrival_refine_yaw_rad:.3f}rad; re-sending the goal"
+            )
+            move.settle_until = None
+            move.next_refresh_at = None
+            move.refreshes_left = 0
+            move.succeeded_result = None
+            self._mark_progress(move, now)
+            move.ticket = GoalTicket()
+            move.phase = _SENDING
+            self._send_goal(move)
+            return
+        self._finish_succeeded(move)
+
+    def _arrival_out_of_tolerance(self, move: _ActiveMove) -> Optional[bool]:
+        fields = self._arrival_error_fields(move)
+        if not fields:
+            return None
+        return (
+            fields["arrivalErrorXyM"] > self._arrival_refine_xy_m
+            or fields["arrivalErrorYawRad"] > self._arrival_refine_yaw_rad
+        )
+
+    def _needs_refine(self, move: _ActiveMove) -> bool:
+        if move.refine_count >= self._arrival_max_refines or move.cancel_reason is not None:
+            return False
+        if move.deadline is not None and self._clock() >= move.deadline:
+            return False
+        try:
+            if self._motion_hold_active():
+                return False
+        except Exception:  # noqa: BLE001 — unknown hold state: do not drive
+            return False
+        return bool(self._arrival_out_of_tolerance(move))
 
     def _finish_succeeded(self, move: _ActiveMove) -> None:
         self._log.info(f"[NavigationSucceeded] commandId={move.command_id}{self._arrival_error_text(move)}")
@@ -885,6 +957,11 @@ class MoveCommandHandler:
         arrival = self._arrival_error_fields(move)
         if arrival:
             result.update(arrival)
+        if self._arrival_max_refines > 0 and outcome == OUTCOME_SUCCEEDED:
+            result["refineCount"] = move.refine_count
+            out = self._arrival_out_of_tolerance(move)
+            if out is not None:
+                result["arrivalOutOfTolerance"] = out
         move.session.complete(outcome, error_code=error_code, error_message=error_message, result=result)
 
         # CANCEL command chỉ SUCCEEDED khi Nav2 thực sự kết thúc goal ở trạng thái CANCELED.

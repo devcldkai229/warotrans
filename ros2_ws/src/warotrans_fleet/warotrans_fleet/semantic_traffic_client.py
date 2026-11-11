@@ -98,7 +98,12 @@ class SemanticTrafficClient:
     # With lane rectangles the body is checked at its heading: braking runs along it, sideways only drift remains.
     side_margin_m: float = 0.02
     # Margin used before a resource is reported left (backend re-checks with its own localization margin).
-    exit_margin_m: float = 0.05
+    # 0.05 → 0.12 after the 2026-11-10 lab: AMCL corrections of 0.16-0.28 m put the pose back into cells released
+    # with 0.05 to spare, and the gate held the robot ~20 s each time. Releasing later costs the follower a few cm.
+    exit_margin_m: float = 0.12
+    # Cells this close to the goal (beyond the footprint) stay held until the command ends: the final turn and the
+    # arrival refine happen there, and a correction at the goal must not lock the robot out of its own spot.
+    goal_hold_margin_m: float = 0.15
     # Pose noise at the cell boundary must not publish RESOURCES_CLEARED: require continuous exit this long.
     clear_confirm_sec: float = 0.4
     propose_retry_sec: float = 2.0
@@ -448,6 +453,8 @@ class SemanticTrafficClient:
             # backend ignores a proposal for a NAVIGATE that is no longer open, so this cannot revive a finished command.
             if self.link_up and (self.grant is None or reason in ("EXPIRED", "AUTHORITY_SILENT")):
                 self._maybe_repropose()
+            elif self.link_up and reason == "IN_RELEASED_RESOURCE" and pose is not None:
+                self._maybe_reanchor(pose)
         self._set_ok(reason is None)
         return reason is None
 
@@ -458,6 +465,25 @@ class SemanticTrafficClient:
             return
         goal = self.plan_poses[-1]
         self._publish_plan_proposal(goal=goal, command_id=self.command_id)
+
+    def _maybe_reanchor(self, pose: Pose) -> None:
+        """The pose is back in a cell this robot released (a localization correction, not a drive back): propose the
+        rest of the plan from where the robot now is, as a new revision. The backend grants the cells under it only if
+        they are still free, so another robot that took them keeps them; the same revision would only get the old
+        grant again. Without this the gate stayed shut until Nav2 failed (20 s), recovered and replanned."""
+        if self.monotonic() - self._last_propose_mono < self.propose_retry_sec:
+            return
+        poses = self.plan_poses
+        if len(poses) < 2 or not self.command_id:
+            return
+        nearest = min(range(len(poses)), key=lambda i: (poses[i][0] - pose[0]) ** 2 + (poses[i][1] - pose[1]) ** 2)
+        rest = poses[nearest:] if nearest < len(poses) - 1 else poses[-1:]
+        anchored = [(float(pose[0]), float(pose[1]), float(pose[2]))] + [tuple(map(float, p)) for p in rest]
+        self.plan_revision += 1
+        self.plan_hash = plan_hash(anchored)
+        self.plan_poses = anchored  # type: ignore[assignment]
+        self._allowed_cache = None
+        self._publish_plan_proposal(goal=anchored[-1], command_id=self.command_id)
 
     def on_plan_reject(self, reason: Optional[str], *, waiting: Optional[str] = None, blocker: Optional[str] = None) -> None:
         """Downlink from backend when a traffic_plan was not granted — log-facing state only."""
@@ -511,6 +537,11 @@ class SemanticTrafficClient:
         # the gate on the robot's own path once it gets there, until Nav2 gives up and replans.
         if candidates:
             candidates = candidates - self._needed_by_path_ahead(x, y, g.geometry)
+        if candidates and self.plan_poses:
+            gx, gy = self.plan_poses[-1][0], self.plan_poses[-1][1]
+            candidates = candidates - footprint_resources(
+                gx, gy, g.geometry.footprint_radius + max(0.0, self.goal_hold_margin_m), self.zones, g.geometry.cell_size
+            )
         now = self.monotonic()
         # Footprint returned → cancel any pending clear for those cells.
         for rid in list(self._pending_clear):

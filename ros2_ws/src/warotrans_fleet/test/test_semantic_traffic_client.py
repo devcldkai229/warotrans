@@ -412,6 +412,7 @@ def _drive_until_something_is_released(client, clock=None, start=0.0, stop=3.0):
 
 def test_backup_into_what_the_robot_released_is_refused():
     client, _, _, clock = granted()
+    client.exit_margin_m = 0.05  # the mechanism, with the release distance this scenario was written for
     x, cleared = _drive_until_something_is_released(client, clock)
     assert set(cleared) <= set(client.grant.resource_ids), "the grant still lists it: that is the trap"
     assert client.recovery_block_reason(_at_x(x), "backup", 0.12) == "REVERSE_OUTSIDE_RESERVATION"
@@ -419,6 +420,7 @@ def test_backup_into_what_the_robot_released_is_refused():
 
 def test_gate_closes_when_the_footprint_is_back_in_a_released_resource():
     client, _, gate, clock = granted()
+    client.exit_margin_m = 0.05  # the mechanism, with the release distance this scenario was written for
     x, _ = _drive_until_something_is_released(client, clock)
     assert client.tick(_at_x(x)) is True
     assert client.tick(_at_x(x - 0.15)) is False
@@ -602,3 +604,75 @@ def test_finishing_the_command_forgets_released_resources():
     _drive_until_something_is_released(client, clock)
     client.on_command_finished(CMD)
     assert client.released_resources == set()
+
+
+# ---------------------------------------------------------------------- 2026-11-10 lab: localization jumps
+
+
+def _proposals(published):
+    return [b for t, b in published if t.endswith("/traffic_plan")]
+
+
+def test_a_jump_back_into_a_released_cell_reanchors_the_plan_and_a_new_grant_reopens_the_gate():
+    """INBOUND leg: AMCL moved the pose back into released cells; the gate stayed shut 18.6 s until Nav2 replanned."""
+    client, published, gate, clock = granted()
+    x, cleared = _drive_until_something_is_released(client, clock, start=0.6)
+    clock.advance(client.propose_retry_sec)  # the last proposal was the plan itself, just now
+    before = len(_proposals(published))
+    rev = client.plan_revision
+    jumped = _at_x(x - 0.2)
+    assert client.tick(jumped) is False
+    assert client.last_block_reason == "IN_RELEASED_RESOURCE"
+    proposals = _proposals(published)
+    assert len(proposals) == before + 1
+    assert proposals[-1]["planRevision"] == rev + 1
+    assert (proposals[-1]["poses"][0]["x"], proposals[-1]["poses"][0]["y"]) == (jumped[0], jumped[1])
+    assert proposals[-1]["goal"]["x"] == PATH[-1][0]
+    # The backend still had the cells free and grants the re-anchored plan.
+    clock.advance(0.2)
+    assert client.on_authority_payload(grant_for(client, clock, authority="auth-2", seq=2), target_command_id=CMD)
+    assert not (set(cleared) & client.released_resources)
+    assert client.tick(jumped) is True
+
+
+def test_reanchor_is_rate_limited_and_never_reuses_cells_the_backend_kept_from_it():
+    client, published, _, clock = granted()
+    x, cleared = _drive_until_something_is_released(client, clock, start=0.6)
+    clock.advance(client.propose_retry_sec)  # the last proposal was the plan itself, just now
+    jumped = _at_x(x - 0.2)
+    client.tick(jumped)
+    count = len(_proposals(published))
+    client.tick(jumped)
+    assert len(_proposals(published)) == count  # within propose_retry_sec
+    # Another robot took the cells: the new grant leaves them out, so the gate stays shut.
+    remaining = sorted(set(client.grant.resource_ids) - set(cleared))
+    assert client.on_authority_payload(
+        grant_for(client, clock, authority="auth-2", seq=2, resources=remaining), target_command_id=CMD
+    )
+    # Outside what it holds now: shut, and no new revision every 2 s (the end of a prefix grant looks the same).
+    assert client.tick(jumped) is False
+    assert client.last_block_reason == "OUTSIDE_RESERVATION"
+    clock.advance(client.propose_retry_sec + 0.1)
+    assert client.tick(jumped) is False
+    assert len(_proposals(published)) == count
+
+
+def test_cells_around_the_goal_are_held_until_the_command_ends():
+    """SHELF-A-01: the final turn and a correction at the goal must not lock the robot out of its own spot."""
+    client, _, _, clock = granted()
+    client.authority_loss_timeout_sec = 1e6  # this test is about the cells, and the clock runs fast here
+    assert client.on_authority_payload(grant_for(client, clock, authority="auth-2", seq=2, ttl=1e6), target_command_id=CMD)
+    geom = stc.SemanticGeometry.from_payload(GEOMETRY)
+    goal_cells = stc.footprint_resources(
+        PATH[-1][0], PATH[-1][1], geom.footprint_radius + client.goal_hold_margin_m, ZONES, geom.cell_size
+    ) & set(client.grant.resource_ids)
+    assert goal_cells
+    x = 0.0
+    while x <= PATH[-1][0] + 1e-9:
+        client.resources_cleared_at(x, 0.0)
+        clock.advance(client.clear_confirm_sec + 0.05)
+        client.resources_cleared_at(x, 0.0)
+        x += 0.02
+    # Corrected 0.18 m back from the goal (the SHELF-A arrival): still inside what it holds.
+    assert not (goal_cells & client.released_resources)
+    assert client.tick((PATH[-1][0] - 0.18, 0.0, 0.0)) is True
