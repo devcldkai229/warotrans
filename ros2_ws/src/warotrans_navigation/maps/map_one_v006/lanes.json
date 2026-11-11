@@ -1,0 +1,229 @@
+{
+  "lanes": [
+    {
+      "code": "EDGE-LANE-BTT-BOUND---2",
+      "direction": "ONE_WAY",
+      "width_meters": 0.65,
+      "coordinates": [
+        [
+          0.154,
+          -1.085
+        ],
+        [
+          0.154,
+          -0.063
+        ]
+      ],
+      "tangents_rad": [
+        1.5707963267948966,
+        1.5707963267948966
+      ],
+      "tangent_samples": [
+        {
+          "a": [
+            0.154,
+            -1.085
+          ],
+          "b": [
+            0.154,
+            -0.063
+          ],
+          "tangent": 1.5707963267948966
+        }
+      ]
+    },
+    {
+      "code": "EDGE-LANE-BTT-ZONE-A---2",
+      "direction": "ONE_WAY",
+      "width_meters": 0.65,
+      "coordinates": [
+        [
+          0.147,
+          1.503
+        ],
+        [
+          0.147,
+          2.223
+        ]
+      ],
+      "tangents_rad": [
+        1.5707963267948966,
+        1.5707963267948966
+      ],
+      "tangent_samples": [
+        {
+          "a": [
+            0.147,
+            1.503
+          ],
+          "b": [
+            0.147,
+            2.223
+          ],
+          "tangent": 1.5707963267948966
+        }
+      ]
+    },
+    {
+      "code": "EDGE-LANE-LTR-B---4",
+      "direction": "ONE_WAY",
+      "width_meters": 0.65,
+      "coordinates": [
+        [
+          0.318,
+          0.614
+        ],
+        [
+          1.433,
+          0.608
+        ]
+      ],
+      "tangents_rad": [
+        -0.005381113979473442,
+        -0.005381113979473442
+      ],
+      "tangent_samples": [
+        {
+          "a": [
+            0.318,
+            0.614
+          ],
+          "b": [
+            1.433,
+            0.608
+          ],
+          "tangent": -0.005381113979473442
+        }
+      ]
+    },
+    {
+      "code": "EDGE-LANE-LTR-ZONE-A---2",
+      "direction": "ONE_WAY",
+      "width_meters": 0.65,
+      "coordinates": [
+        [
+          0.313,
+          2.384
+        ],
+        [
+          1.032,
+          2.384
+        ]
+      ],
+      "tangents_rad": [
+        0.0,
+        0.0
+      ],
+      "tangent_samples": [
+        {
+          "a": [
+            0.313,
+            2.384
+          ],
+          "b": [
+            1.032,
+            2.384
+          ],
+          "tangent": 0.0
+        }
+      ]
+    },
+    {
+      "code": "EDGE-LANE-RTL---2",
+      "direction": "ONE_WAY",
+      "width_meters": 0.65,
+      "coordinates": [
+        [
+          1.438,
+          1.264
+        ],
+        [
+          0.321,
+          1.28
+        ]
+      ],
+      "tangents_rad": [
+        3.1272695507743,
+        3.1272695507743
+      ],
+      "tangent_samples": [
+        {
+          "a": [
+            1.438,
+            1.264
+          ],
+          "b": [
+            0.321,
+            1.28
+          ],
+          "tangent": 3.1272695507743
+        }
+      ]
+    },
+    {
+      "code": "EDGE-LANE-RTL-ZONE-A---2",
+      "direction": "ONE_WAY",
+      "width_meters": 0.65,
+      "coordinates": [
+        [
+          1.24,
+          3.093
+        ],
+        [
+          -0.515,
+          3.093
+        ]
+      ],
+      "tangents_rad": [
+        3.141592653589793,
+        3.141592653589793
+      ],
+      "tangent_samples": [
+        {
+          "a": [
+            1.24,
+            3.093
+          ],
+          "b": [
+            -0.515,
+            3.093
+          ],
+          "tangent": 3.141592653589793
+        }
+      ]
+    },
+    {
+      "code": "EDGE-LANE-TTB-BOUND---3",
+      "direction": "ONE_WAY",
+      "width_meters": 0.65,
+      "coordinates": [
+        [
+          -0.507,
+          -0.058
+        ],
+        [
+          -0.507,
+          -1.085
+        ]
+      ],
+      "tangents_rad": [
+        -1.5707963267948966,
+        -1.5707963267948966
+      ],
+      "tangent_samples": [
+        {
+          "a": [
+            -0.507,
+            -0.058
+          ],
+          "b": [
+            -0.507,
+            -1.085
+          ],
+          "tangent": -1.5707963267948966
+        }
+      ]
+    }
+  ],
+  "margin_meters": 0.05
+}

@@ -1,0 +1,35 @@
+{
+  "zones": [
+    {
+      "id": "a470a32f-e19f-4f75-9572-d1e50e49eee2",
+      "code": "ZONE-KEEP-OUT-ZONE-A",
+      "name": "Keep Out Zone A",
+      "zone_type": "KEEP_OUT",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            -0.177,
+            2.72
+          ],
+          [
+            0.948,
+            2.72
+          ],
+          [
+            0.923,
+            2.745
+          ],
+          [
+            -0.177,
+            2.745
+          ],
+          [
+            -0.177,
+            2.72
+          ]
+        ]
+      ]
+    }
+  ]
+}

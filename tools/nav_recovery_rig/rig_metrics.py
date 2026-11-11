@@ -18,6 +18,13 @@ LANE_FOLLOWING_MIN_COS = 0.985
 LANE_END_MARGIN = 0.15
 # The gate's stale-authority limit plus the firmware command watchdog: motion this soon after closing is the stop itself.
 GATE_CLOSE_GRACE_S = 0.8
+# A body corner this deep in a lane running the other way (heading > 120 deg off its direction) is a corner cut into the
+# opposite lane. Crossing a lane at right angles at a junction is not counted: there is no way round it.
+OPPOSITE_LANE_MIN_ANGLE_RAD = math.radians(120)
+OPPOSITE_LANE_MAX_DEPTH_M = 0.02
+# Speed zones: the SpeedFilter updates with the global costmap (1 Hz), so the limit is judged only this far inside.
+SPEED_ZONE_INSET_M = 0.10
+SPEED_ZONE_TOLERANCE_MPS = 0.005
 
 
 def _point_to_segment(px: float, py: float, a: Sequence[float], b: Sequence[float]) -> float:
@@ -117,6 +124,88 @@ def lane_offsets(truth: Sequence[dict], lanes: Iterable[dict], stride: int = 5) 
     }
 
 
+def opposite_lane_intrusion(truth: Sequence[dict], lanes: Iterable[dict], stride: int = 2) -> dict[str, float]:
+    """Per lane: deepest a body corner went into it while the robot was in another lane, heading against its direction."""
+    segs = []
+    for lane in lanes:
+        code = str(lane["code"]).split("---")[0].replace("EDGE-LANE-", "")
+        half = 0.5 * float(lane["width_meters"])
+        segs += [(s["a"], s["b"], s["tangent"], code, half) for s in lane["tangent_samples"]]
+    out: dict[str, float] = {}
+    for t in truth[::stride]:
+        for p, q, tangent, code, half in segs:
+            if abs(math.atan2(math.sin(t["yaw"] - tangent), math.cos(t["yaw"] - tangent))) < OPPOSITE_LANE_MIN_ANGLE_RAD:
+                continue
+            if _point_to_segment(t["x"], t["y"], p, q) <= half:
+                continue  # the robot is in that lane itself (wrong way is lane_offsets' job)
+            dx, dy = q[0] - p[0], q[1] - p[1]
+            c = dx * dx + dy * dy
+            for cx, cy in _body_corners(t["x"], t["y"], t["yaw"]):
+                u = ((cx - p[0]) * dx + (cy - p[1]) * dy) / c if c > 0 else -1.0
+                if not 0.0 <= u <= 1.0:
+                    continue
+                depth = half - _point_to_segment(cx, cy, p, q)
+                if depth > 0:
+                    out[code] = max(out.get(code, 0.0), round(depth, 3))
+    return out
+
+
+def speed_zone_excess(truth: Sequence[dict], limit_at) -> dict:
+    """Fastest speed well inside a speed zone versus its limit. limit_at(x, y) -> m/s, or 0/None outside every zone."""
+    worst = {"samples": 0, "max_speed_mps": 0.0, "limit_mps": None, "excess_mps": 0.0}
+    for t in truth:
+        lim = limit_at(t["x"], t["y"])
+        if not lim:
+            continue
+        r = SPEED_ZONE_INSET_M
+        if any(limit_at(t["x"] + ox, t["y"] + oy) != lim for ox, oy in ((r, 0), (-r, 0), (0, r), (0, -r))):
+            continue
+        worst["samples"] += 1
+        v = abs(t["v"])
+        if v - lim > worst["excess_mps"] or worst["limit_mps"] is None:
+            worst["limit_mps"] = lim
+        worst["max_speed_mps"] = round(max(worst["max_speed_mps"], v), 3)
+        worst["excess_mps"] = round(max(worst["excess_mps"], v - lim), 3)
+    return worst
+
+
+def speed_mask_reader(yaml_path: str):
+    """limit_at(x, y) from a warotrans speed mask (mode raw, limit = pixel * 0.01 m/s, 0 = none)."""
+    import os
+
+    meta = {}
+    for line in open(yaml_path, encoding="utf-8"):
+        if ":" in line and not line.startswith("-"):
+            k, v = line.split(":", 1)
+            meta[k.strip()] = v.strip()
+    origin = [float(x) for x in re.findall(r"-?\d+\.?\d*", open(yaml_path, encoding="utf-8").read().split("origin:")[1])[:2]]
+    res = float(meta["resolution"])
+    data = open(os.path.join(os.path.dirname(yaml_path), meta["image"]), "rb").read()
+    tokens, i = [], 0
+    while len(tokens) < 4:
+        while data[i:i + 1].isspace():
+            i += 1
+        if data[i:i + 1] == b"#":
+            while data[i:i + 1] not in (b"\n", b""):
+                i += 1
+            continue
+        start = i
+        while not data[i:i + 1].isspace():
+            i += 1
+        tokens.append(data[start:i])
+    width, height = int(tokens[1]), int(tokens[2])
+    pixels = data[i + 1:]
+
+    def limit_at(x: float, y: float) -> float:
+        col = int((x - origin[0]) / res)
+        row = height - 1 - int((y - origin[1]) / res)
+        if not (0 <= col < width and 0 <= row < height):
+            return 0.0
+        return pixels[row * width + col] * 0.01
+
+    return limit_at
+
+
 def log_lines_after(log: str, text: str, wall: float) -> int:
     """Lines containing text and stamped at or after wall. Masks arrive during bring-up: only a goal running without one counts."""
     count = 0
@@ -167,4 +256,10 @@ def failures(row: dict) -> list[str]:
             out.append(f"{code} wrong way x{lane['wrong_way']}")
     if (row.get("max_speed_mps") or 0.0) > row.get("speed_ceiling_mps", math.inf):
         out.append(f"speed {row['max_speed_mps']}")
+    for code, depth in (row.get("opposite_lane_m") or {}).items():
+        if depth > OPPOSITE_LANE_MAX_DEPTH_M:
+            out.append(f"corner {depth} m into opposite lane {code}")
+    zone = row.get("speed_zone") or {}
+    if zone.get("excess_mps", 0.0) > SPEED_ZONE_TOLERANCE_MPS:
+        out.append(f"speed zone {zone['max_speed_mps']} > {zone['limit_mps']}")
     return out

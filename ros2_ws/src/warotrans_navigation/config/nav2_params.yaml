@@ -77,11 +77,13 @@ controller_server:
       stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
       # Endpoints ask for 0.08 m: the checker passes at the first pose inside this, and rig runs stop right at its edge.
-      xy_goal_tolerance: 0.07       # metres — lab may retune; was 0.15
+      # 2026-11-11: 0.07 → 0.05 and yaw 0.13 → 0.08 (~4.6°). The gateway then asks AMCL for an in-place update and
+      # drives the goal again if the settled pose still misses by > 0.05 m / 0.087 rad (arrival refine).
+      xy_goal_tolerance: 0.05       # metres; was 0.07, earlier 0.15
       # 2026-10-16: RViz (WSL) gửi goal luôn có yaw = 0 (17/17 goal đo được) → robot quay tại chỗ
       # tới heading giả, open-loop vọt lố + đảo chiều liên tục. π = bỏ qua heading khi đến đích.
       # Đặt lại 0.25 khi cần heading thật (docking) và nguồn goal gửi yaw đúng.
-      yaw_goal_tolerance: 0.13      # radians (~7.4°) — below endpoint 0.14; was 3.14 (any yaw "ok")
+      yaw_goal_tolerance: 0.08      # radians (~4.6°); was 0.13, earlier 3.14 (any yaw "ok")
 
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
@@ -89,8 +91,10 @@ controller_server:
       desired_linear_vel: 0.10     # PROVISIONAL: 0.128 × 0.8 — keep; do not raise without measurement
       # Lookahead ~1 chassis length. With inflation now keeping the path centred in the aisle
       # (no corner hugging), 0.30 tracks 90° turns without oscillating.
-      lookahead_dist: 0.30
-      min_lookahead_dist: 0.20
+      # 2026-11-11: 0.30/0.20 → 0.22/0.15. A carrot 0.30 m ahead starts the turn early and the body cuts the corner
+      # toward the opposite lane (lane centres are 0.66 m apart on MAP-ONE).
+      lookahead_dist: 0.22
+      min_lookahead_dist: 0.15
       max_lookahead_dist: 0.45
       lookahead_time: 1.5
       # In-place turn rate. 0.35 rad/s (≈25 % PWM, open loop) stalled the skid-steer wheels at
@@ -116,7 +120,8 @@ controller_server:
       curvature_lookahead_dist: 0.25
       # Class A: stop-and-rotate when heading error large before translating (skid-steer 90° turns)
       use_rotate_to_heading: true
-      rotate_to_heading_min_angle: 0.785  # ~45°
+      # 0.785 → 0.5 (~29°): at a 90° corner the robot stops and pivots near the lane centre instead of arcing across.
+      rotate_to_heading_min_angle: 0.5
       max_angular_accel: 0.8       # TUNING
       # Slightly wider latch after enabling rotate-to-heading (in-place spin can leave path briefly)
       max_robot_pose_search_dist: 2.0

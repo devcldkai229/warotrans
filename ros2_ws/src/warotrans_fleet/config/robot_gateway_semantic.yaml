@@ -42,6 +42,12 @@ robot_gateway:
     human_confirm_debounce_ms: 50
     human_confirm_min_interval_ms: 300
     human_confirm_resend_sec: 5.0
+    # Arrival refine (2026-11-10 lab: after Nav2 SUCCEEDED the next AMCL update showed 0.16-0.28 m / 26-52 deg off).
+    # AMCL updates in place while the robot settles; a miss beyond these limits drives the same goal again.
+    amcl_nomotion_service: "/request_nomotion_update"
+    arrival_max_refines: 2
+    arrival_refine_xy_m: 0.05
+    arrival_refine_yaw_rad: 0.087
     traffic_mode: "semantic_active"
     enable_authority_gate: true
     authority_ok_topic: "traffic/authority_ok"   # = cmd_vel_authority_gate input (navigation.launch.py)

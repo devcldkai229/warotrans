@@ -43,6 +43,7 @@ from warotrans_fleet.interaction_controller import InteractionController
 from warotrans_fleet.amcl_readiness import AmclReadiness
 from warotrans_fleet.battery_telemetry import battery_fields
 from warotrans_fleet.localization_hysteresis import LocalizationHysteresis
+from warotrans_fleet.localization_jump import LocalizationJumpDetector
 from warotrans_fleet.mqtt_publisher import ReconnectingMqttPublisher, default_paho_factory
 from warotrans_fleet.nav2_status_tracker import Nav2StatusTracker
 from warotrans_fleet.navigator import NavigatorPort, UnavailableNavigator
@@ -92,6 +93,12 @@ class RobotGatewayNode(Node):
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("odom_topic", "/odom")
         self.declare_parameter("amcl_pose_topic", "/amcl_pose")
+        # Arrival refine (move_command_handler): AMCL updates in place while the robot settles; a goal missed by more
+        # than these limits is driven again, at most arrival_max_refines times (0 = measure and report only).
+        self.declare_parameter("amcl_nomotion_service", "/request_nomotion_update")
+        self.declare_parameter("arrival_max_refines", 0)
+        self.declare_parameter("arrival_refine_xy_m", 0.05)
+        self.declare_parameter("arrival_refine_yaw_rad", 0.087)
         self.declare_parameter("navigate_action", "navigate_to_pose")
         self.declare_parameter("heartbeat_hz", 1.0)
         self.declare_parameter("telemetry_hz", 5.0)
@@ -328,6 +335,10 @@ class RobotGatewayNode(Node):
             arrival_pose=self._traffic_pose,
             arrival_settle_sec=1.0,
             motion_hold_active=lambda: self._motion_hold.held,
+            localization_refresh=self._request_amcl_nomotion_update,
+            arrival_refine_xy_m=self._float_param("arrival_refine_xy_m"),
+            arrival_refine_yaw_rad=self._float_param("arrival_refine_yaw_rad"),
+            arrival_max_refines=int(self.get_parameter("arrival_max_refines").value),
         )
         self._register_control_commands()
 
@@ -431,6 +442,22 @@ class RobotGatewayNode(Node):
 
     def _str_param(self, name: str) -> str:
         return self.get_parameter(name).get_parameter_value().string_value
+
+    def _request_amcl_nomotion_update(self) -> None:
+        """Asks AMCL for a filter update without motion (std_srvs/Empty); fire and forget."""
+        client = getattr(self, "_amcl_nomotion_client", None)
+        if client is None:
+            from std_srvs.srv import Empty
+
+            client = self.create_client(Empty, self._str_param("amcl_nomotion_service"))
+            self._amcl_nomotion_client = client
+            self._amcl_nomotion_request = Empty.Request()
+        if not client.service_is_ready():
+            self.get_logger().warning(
+                f"[LocalizationRefreshSkipped] {self._str_param('amcl_nomotion_service')} not available"
+            )
+            return
+        client.call_async(self._amcl_nomotion_request)
 
     def _float_param(self, name: str) -> float:
         return float(self.get_parameter(name).get_parameter_value().double_value)
@@ -1091,10 +1118,22 @@ class RobotGatewayNode(Node):
                 if reason is not None:
                     # Fresh TF of an unconfirmed pose: report the pose, never LOCALIZED (MOVE is rejected).
                     return pose, "UNKNOWN"
+            self._log_localization_jump(pose)
             return self._loc_hysteresis.on_good(pose)
         except TransformException:
             self._last_pose_age_sec = None
             return self._loc_hysteresis.on_stale()
+
+    def _log_localization_jump(self, pose: dict[str, float]) -> None:
+        detector = getattr(self, "_jump_detector", None)
+        if detector is None:
+            detector = self._jump_detector = LocalizationJumpDetector()
+        jump = detector.observe(pose["x"], pose["y"], pose["yaw"])
+        if jump is not None:
+            self.get_logger().warning(
+                f"[LocalizationJump] {jump.text()} at x={pose['x']:.3f} y={pose['y']:.3f} yaw={pose['yaw']:.3f} "
+                f"count={detector.count} command={self._commands.move.active_command_id if hasattr(self, '_commands') else None}"
+            )
 
     def _navigation_status(self) -> str:
         status = self._commands.move.navigation_status

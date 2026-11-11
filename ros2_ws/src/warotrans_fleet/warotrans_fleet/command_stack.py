@@ -52,6 +52,10 @@ def build_command_stack(
     arrival_settle_sec: float = 0.0,
     arrival_pose: Callable[[], Optional[tuple[float, float, float]]] = lambda: None,
     motion_hold_active: Callable[[], bool] = lambda: False,
+    localization_refresh: Callable[[], None] = lambda: None,
+    arrival_refine_xy_m: float = 0.05,
+    arrival_refine_yaw_rad: float = 0.087,
+    arrival_max_refines: int = 0,
 ) -> CommandStack:
     lock = threading.RLock()
     router = CommandRouter(
@@ -83,6 +87,10 @@ def build_command_stack(
         arrival_settle_sec=arrival_settle_sec,
         arrival_pose=arrival_pose,
         motion_hold_active=motion_hold_active,
+        localization_refresh=localization_refresh,
+        arrival_refine_xy_m=arrival_refine_xy_m,
+        arrival_refine_yaw_rad=arrival_refine_yaw_rad,
+        arrival_max_refines=arrival_max_refines,
     )
     router.register(move)
     router.register(CancelCommandHandler(move))

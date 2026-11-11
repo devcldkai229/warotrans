@@ -1,0 +1,141 @@
+{
+  "zones": [
+    {
+      "id": "ae7f2166-7007-4089-a891-ece9281ce328",
+      "code": "ZONE-SINGLE-CENTER-ZONE",
+      "name": "Single Center Zone",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            0.469,
+            1.603
+          ],
+          [
+            -0.171,
+            1.603
+          ],
+          [
+            -0.171,
+            1.306
+          ],
+          [
+            -0.562,
+            1.306
+          ],
+          [
+            -0.697,
+            0.577
+          ],
+          [
+            -0.817,
+            -0.267
+          ],
+          [
+            0.48,
+            -0.267
+          ],
+          [
+            0.469,
+            1.603
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "eb1e538b-3651-451b-8295-d6c67608b933",
+      "code": "ZONE-SINGLE-QUEUE-ZONE",
+      "name": "Single Queue Zone",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            0.485,
+            -0.506
+          ],
+          [
+            0.485,
+            -0.889
+          ],
+          [
+            1.29,
+            -0.889
+          ],
+          [
+            1.29,
+            -0.501
+          ],
+          [
+            0.485,
+            -0.506
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "5ccd8c3d-8602-4d61-8032-bc8c54f31fee",
+      "code": "ZONE-SINGLE-ZONE-A",
+      "name": "Single Zone A",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            0.948,
+            2.072
+          ],
+          [
+            1.87,
+            2.061
+          ],
+          [
+            1.881,
+            3.389
+          ],
+          [
+            0.948,
+            3.395
+          ],
+          [
+            0.948,
+            2.072
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "f0e2de1b-46a9-40dd-8804-969e871d73b3",
+      "code": "ZONE-SINGLE-ZONE-B",
+      "name": "Single Zone B",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            1.235,
+            0.259
+          ],
+          [
+            1.875,
+            0.259
+          ],
+          [
+            1.868,
+            1.587
+          ],
+          [
+            1.261,
+            1.593
+          ],
+          [
+            1.235,
+            0.259
+          ]
+        ]
+      ]
+    }
+  ],
+  "enforcement": "NOT_SUPPORTED_STAGE2"
+}
