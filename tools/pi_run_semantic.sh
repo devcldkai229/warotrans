@@ -4,15 +4,16 @@
 #   ~/warotrans_tools/pi_run_semantic.sh status | stop
 # MOTORS defaults to false: odometry live, the ESP32 bridge writes no velocity. MOTORS=true is for a supervised run
 # only, with a tested hardware E-stop in reach. BUNDLE selects the map (semantic bundle directory).
-# EKF defaults to false until the BNO055 passes the turn test in docs/NAV2_STUCK_RECOVERY_EVIDENCE.md; AMCL's motion
-# noise follows it, so the odometry source and what AMCL assumes about it cannot disagree.
+# EKF defaults to true since the 2026-11-11 lab (docs/LAB_CALIBRATION_2026-11-11.md): the BNO055 yaw is within ~1 % of
+# the scan-match truth on ±90/180 deg turns, wheel yaw is off by up to 25 %. EKF=false falls back to wheel-only AMCL.
+# AMCL's motion noise follows it, so the odometry source and what AMCL assumes about it cannot disagree.
 set -uo pipefail
 ACTION="${1:-status}"
 BUNDLE="${BUNDLE:-$HOME/ros2_ws/src/warotrans_navigation/maps/map_one_v004}"
 SRC="$HOME/ros2_ws/src"
 LOGS="$HOME/wt_logs"
 MOTORS="${MOTORS:-false}"
-EKF="${EKF:-false}"
+EKF="${EKF:-true}"
 # Dual-robot lab: ROBOT_CODE=RBT-002 ROS_DOMAIN_ID=31 (and a second Pi / namespace).
 ROBOT_CODE="${ROBOT_CODE:-RBT-001}"
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
@@ -49,9 +50,10 @@ case "$ACTION" in
     echo started
     ;;
   stop)
-    pkill -INT -f 'ros2 launch warotrans_' 2>/dev/null
+    # Bracketed patterns: an SSH command line that mentions these names must not match (it would kill itself).
+    pkill -INT -f 'ros2 launch warotrans[_]' 2>/dev/null
     sleep 6
-    pkill -f 'esp32_bridge_node|wheel_odom_node|robot_gateway_node|cmd_vel_authority_gate|collision_monitor|velocity_smoother|controller_server|planner_server|behavior_server|bt_navigator|waypoint_follower|nav2_amcl|/amcl|map_server|lifecycle_manager|costmap_filter|rplidar|robot_state_publisher' 2>/dev/null
+    pkill -f 'esp32_bridge_nod[e]|wheel_odom_nod[e]|robot_gateway_nod[e]|cmd_vel_authority_gat[e]|collision_monito[r]|velocity_smoothe[r]|controller_serve[r]|planner_serve[r]|behavior_serve[r]|bt_navigato[r]|waypoint_followe[r]|nav2_amc[l]|/amc[l]|map_serve[r]|lifecycle_manage[r]|costmap_filte[r]|rplida[r]|robot_state_publishe[r]|battery_monitor_nod[e]|recovery_guar[d]|bno055_nod[e]|ekf_nod[e]' 2>/dev/null
     sleep 1
     pgrep -af 'warotrans|nav2|rplidar|amcl' | grep -v pi_run_semantic | grep -v pgrep | cut -c1-100 || true
     echo stopped

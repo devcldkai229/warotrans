@@ -168,8 +168,14 @@ class MoveCommandHandler:
         arrival_refine_xy_m: float = 0.05,
         arrival_refine_yaw_rad: float = 0.087,
         arrival_max_refines: int = 0,
+        goal_base_offset: Callable[[], float] = lambda: 0.0,
     ) -> None:
         self._navigator = navigator
+        # 2026-11-11 lab: the robot turns about a point behind the chassis centre. Nav2 drives base_footprint (that
+        # point); an endpoint is where the chassis centre (base_link) must stand. The goal sent to Nav2 is therefore
+        # the endpoint moved back along its heading by base_footprint→base_link x. Arrival error stays measured on
+        # base_link against the endpoint.
+        self._goal_base_offset = goal_base_offset
         # 2026-11-10 lab: Nav2 passed its goal checker, then the next AMCL update moved the pose 0.16-0.28 m and
         # 26-52 deg. Asking AMCL for an in-place update before measuring shows the real miss; a miss is driven again.
         self._localization_refresh = localization_refresh
@@ -491,10 +497,11 @@ class MoveCommandHandler:
                 # Once per command: a goal re-sent after a traffic hold keeps the original timeoutSeconds.
                 move.deadline = now + move.timeout_sec
             t = move.target
-            goal = NavGoal(command_id=move.command_id, frame_id=t.frame_id, x=t.x, y=t.y, yaw=t.yaw)
+            gx, gy = self._nav2_goal_xy(t.x, t.y, t.yaw)
+            goal = NavGoal(command_id=move.command_id, frame_id=t.frame_id, x=gx, y=gy, yaw=t.yaw)
             self._log.info(
-                f"[Nav2GoalSent] commandId={move.command_id} frame={t.frame_id} x={t.x:.3f} y={t.y:.3f} "
-                f"yaw={t.yaw:.4f} timeoutSec={move.timeout_sec}"
+                f"[Nav2GoalSent] commandId={move.command_id} frame={t.frame_id} x={gx:.3f} y={gy:.3f} "
+                f"yaw={t.yaw:.4f} endpoint=({t.x:.3f},{t.y:.3f}) timeoutSec={move.timeout_sec}"
             )
             callbacks = GoalCallbacks(
                 on_response=lambda accepted, error: self._on_goal_response(move, accepted, error),
@@ -512,6 +519,15 @@ class MoveCommandHandler:
                     f"send_goal failed: {type(exc).__name__}: {exc}",
                     nav2_status=None,
                 )
+
+    def _nav2_goal_xy(self, x: float, y: float, yaw: float) -> tuple[float, float]:
+        try:
+            offset = float(self._goal_base_offset())
+        except Exception:  # noqa: BLE001
+            offset = 0.0
+        if not math.isfinite(offset) or offset == 0.0:
+            return x, y
+        return x - offset * math.cos(yaw), y - offset * math.sin(yaw)
 
     def _on_goal_response(self, move: _ActiveMove, accepted: bool, error: Optional[str]) -> None:
         with self._lock:

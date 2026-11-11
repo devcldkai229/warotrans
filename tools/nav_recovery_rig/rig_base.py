@@ -26,7 +26,23 @@ from sensor_msgs.msg import LaserScan
 from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
 HALF_LENGTH, HALF_WIDTH = 0.16, 0.13  # chassis, geometry.yaml (no padding: this is the physical body)
-LASER_X, LASER_Y, LASER_Z, LASER_YAW = 0.01, 0.0017, 0.1745, math.pi / 2  # geometry.yaml, z incl. base_link 0.0325
+
+
+def _body_offset() -> float:
+    """base_footprint -> base_link x from geometry.yaml: the turning centre sits that far behind the chassis centre
+    (2026-11-11 lab). The simulated base turns about base_footprint, like the real one."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "ros2_ws", "src",
+                        "warotrans_description", "config", "geometry.yaml")
+    try:
+        m = re.search(r"base_footprint_to_base_link:\s*\n(?:\s*#.*\n)*\s*x:\s*([-\d.]+)",
+                      open(path, encoding="utf-8").read())
+        return float(m.group(1)) if m else 0.0
+    except OSError:
+        return 0.0
+
+
+BODY_X = _body_offset()  # chassis centre in base_footprint
+LASER_X, LASER_Y, LASER_Z, LASER_YAW = BODY_X + 0.01, 0.0017, 0.1745, math.pi / 2  # geometry.yaml laser in base_link
 RANGE_MIN, RANGE_MAX = 0.15, 12.0  # A1M8-R6 data sheet
 BEAMS, SCAN_HZ = 1000, 8.0  # 8 kHz samples / 8 Hz, 0.36 deg
 FINE = 0.01  # m, ray-march and collision grid
@@ -135,9 +151,9 @@ class Base(Node):
         return out
 
     def _body_hits(self, x: float, y: float, yaw: float) -> bool:
-        lx = np.arange(-HALF_LENGTH, HALF_LENGTH + FINE, FINE)
+        lx = np.arange(-HALF_LENGTH, HALF_LENGTH + FINE, FINE) + BODY_X
         ly = np.arange(-HALF_WIDTH, HALF_WIDTH + FINE, FINE)
-        px = np.concatenate([lx, lx, np.full_like(ly, -HALF_LENGTH), np.full_like(ly, HALF_LENGTH)])
+        px = np.concatenate([lx, lx, np.full_like(ly, BODY_X - HALF_LENGTH), np.full_like(ly, BODY_X + HALF_LENGTH)])
         py = np.concatenate([np.full_like(lx, -HALF_WIDTH), np.full_like(lx, HALF_WIDTH), ly, ly])
         c, s = math.cos(yaw), math.sin(yaw)
         return bool(self._occupied(x + c * px - s * py, y + s * px + c * py).any())
@@ -155,7 +171,7 @@ class Base(Node):
         wy = self.oy + (jj + j0 + 0.5) * FINE - self.y
         c, s = math.cos(self.yaw), math.sin(self.yaw)
         bx, by = c * wx + s * wy, -s * wx + c * wy
-        dx = np.maximum(np.abs(bx) - HALF_LENGTH, 0.0)
+        dx = np.maximum(np.abs(bx - BODY_X) - HALF_LENGTH, 0.0)
         dy = np.maximum(np.abs(by) - HALF_WIDTH, 0.0)
         return float(np.hypot(dx, dy).min())
 
@@ -233,6 +249,8 @@ class Base(Node):
     def _log_truth(self) -> None:
         self.truth.write(json.dumps({
             "wall": round(time.time(), 3), "x": round(self.x, 4), "y": round(self.y, 4), "yaw": round(self.yaw, 4),
+            # chassis centre: what an endpoint and the lane metrics are about
+            "cx": round(self.x + BODY_X * math.cos(self.yaw), 4), "cy": round(self.y + BODY_X * math.sin(self.yaw), 4),
             "v": round(self.v, 4), "w": round(self.w, 4), "cmd": [round(self.cmd[0], 4), round(self.cmd[1], 4)],
             "gap": round(self.gap(), 4), "collisions": self.collisions,
             "travel": round(self.travel, 4), "turned": round(self.turned, 4),
