@@ -69,6 +69,8 @@ def world_to_pixel(
 
 
 # More than the footprint radius (hypot(0.18, 0.15) = 0.234 m).
+# Usual cruise of the real robot (nav2_params FollowPath desired_linear_vel; 2026-11-13: 0.10 -> 0.40 m/s, operator).
+CRUISE_SPEED_MPS = 0.40
 KEEPOUT_PLANNING_INFLATE_M = 0.25
 
 
@@ -511,7 +513,7 @@ def export_from_snapshot(
         resolution=resolution,
         footprint_inflate_m=KEEPOUT_PLANNING_INFLATE_M,
     )
-    # Cap SPEED masks at usual cruise (0.10 m/s) so zone limits never raise Nav2 desired speed.
+    # Cap SPEED masks at usual cruise so zone limits never raise Nav2 desired speed.
     speed_px = rasterize_speed(
         zones,
         width=width,
@@ -519,7 +521,7 @@ def export_from_snapshot(
         origin_x=origin_x,
         origin_y=origin_y,
         resolution=resolution,
-        default_limit_mps=0.10,
+        default_limit_mps=CRUISE_SPEED_MPS,
     )
     keepout_pgm = out_dir / "keepout.pgm"
     speed_pgm = out_dir / "speed.pgm"
@@ -596,7 +598,7 @@ def export_from_snapshot(
             "keepoutPlanningMaskSha256": keepout_planning_mask_sha,
             "speedMaskSha256": speed_mask_sha,
             "keepoutPlanningInflateM": KEEPOUT_PLANNING_INFLATE_M,
-            "speedCeilingMps": 0.10,
+            "speedCeilingMps": CRUISE_SPEED_MPS,
             "speed": [
                 {"code": z["code"], "max_speed": z["max_speed"]} for z in export_zone_list(zones, "SPEED")
             ],

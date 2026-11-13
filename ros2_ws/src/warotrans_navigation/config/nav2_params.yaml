@@ -9,7 +9,7 @@
 #   - Footprint: [[0.16,0.13],[0.16,-0.13],[-0.16,-0.13],[-0.16,0.13]]
 #   - max_linear: 0.128 m/s @ 40% PWM (PROVISIONAL)
 #   - max_angular: 0.56 rad/s @ 40% PWM (PROVISIONAL)
-#   - Nav2 uses 80%: max_vel_x=0.10, max_vel_theta=0.45
+#   - 2026-11-13: cruise 0.40 m/s (operator), SPEED zones 0.20 m/s; max_vel_theta=0.6
 #
 # TUNING markers indicate values that may need adjustment
 # PROVISIONAL markers indicate values pending real measurement
@@ -80,24 +80,27 @@ controller_server:
       # Endpoints ask for 0.08 m: the checker passes at the first pose inside this, and rig runs stop right at its edge.
       # 2026-11-11: 0.07 → 0.05 and yaw 0.13 → 0.08 (~4.6°). The gateway then asks AMCL for an in-place update and
       # drives the goal again if the settled pose still misses by > 0.05 m / 0.087 rad (arrival refine).
-      xy_goal_tolerance: 0.05       # metres; was 0.07, earlier 0.15
+      # 2026-11-13 operator: 0.10 m / 0.15 rad. Tighter made the robot keep pivoting on the spot to fix the last
+      # centimetres and degrees, and each pivot slid it somewhere else (endpoints position_tolerance 0.10 in the DB).
+      xy_goal_tolerance: 0.10       # metres; was 0.05, 0.07, earlier 0.15
       # 2026-10-16: RViz (WSL) gửi goal luôn có yaw = 0 (17/17 goal đo được) → robot quay tại chỗ
       # tới heading giả, open-loop vọt lố + đảo chiều liên tục. π = bỏ qua heading khi đến đích.
       # Đặt lại 0.25 khi cần heading thật (docking) và nguồn goal gửi yaw đúng.
-      yaw_goal_tolerance: 0.08      # radians (~4.6°); was 0.13, earlier 3.14 (any yaw "ok")
+      yaw_goal_tolerance: 0.15      # radians (~8.6°); was 0.08, 0.13, earlier 3.14 (any yaw "ok")
 
     # Docking straight moves (warotrans_fleet/docking_navigator.py): position only. A straight run in a bay cannot
     # correct the heading; the gateway's final align step (NavigateToPose, general checker) does that.
     docking_goal_checker:
       stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.03
+      xy_goal_tolerance: 0.06       # was 0.03: the last centimetres of a run in were a crawl against the wall
       yaw_goal_tolerance: 6.28
 
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      # PROVISIONAL velocities: 80% of measured max (see calibration.yaml)
-      desired_linear_vel: 0.10     # PROVISIONAL: 0.128 × 0.8 — keep; do not raise without measurement
+      # 2026-11-13 operator: cruise 0.10 -> 0.40 m/s (at 0.10 the wheels slipped and the pose drifted from the UI).
+      # The SPEED zone mask caps it at 0.20 m/s there; approach scaling slows it before the goal.
+      desired_linear_vel: 0.40
       # Lookahead ~1 chassis length. With inflation now keeping the path centred in the aisle
       # (no corner hugging), 0.30 tracks 90° turns without oscillating.
       # 2026-11-11: 0.30/0.20 → 0.22/0.15. A carrot 0.30 m ahead starts the turn early and the body cuts the corner
@@ -105,12 +108,13 @@ controller_server:
       lookahead_dist: 0.22
       min_lookahead_dist: 0.15
       max_lookahead_dist: 0.45
-      lookahead_time: 1.5
+      lookahead_time: 0.8
       # In-place turn rate. 0.35 rad/s (≈25 % PWM, open loop) stalled the skid-steer wheels at
       # T-junctions; 0.5 rad/s + firmware min_start_duty / PI loop actually turns the chassis.
       rotate_to_heading_angular_vel: 0.5
       transform_tolerance: 0.3
-      use_velocity_scaled_lookahead_dist: false
+      # 0.40 m/s with a fixed 0.22 m carrot oscillates: scale it with speed (0.8 s ahead, 0.15..0.45 m).
+      use_velocity_scaled_lookahead_dist: true
       min_approach_linear_velocity: 0.05
       approach_velocity_scaling_dist: 0.6
       # Class D: abort FollowPath when carrot path intersects lethal/high cost (shelves)
@@ -140,7 +144,7 @@ controller_server:
 
     FollowPathReverse:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      desired_linear_vel: 0.08
+      desired_linear_vel: 0.20     # straight bay moves; was 0.08
       lookahead_dist: 0.30
       min_lookahead_dist: 0.20
       max_lookahead_dist: 0.45
@@ -240,8 +244,8 @@ velocity_smoother:
     feedback: "OPEN_LOOP"
     # In the cmd_vel pipeline since 2026-10-16: controller/behaviors -> cmd_vel_nav ->
     # velocity_smoother -> cmd_vel_smoothed -> collision_monitor -> cmd_vel -> esp32_bridge
-    max_velocity: [0.10, 0.0, 0.6]
-    min_velocity: [-0.10, 0.0, -0.6]
+    max_velocity: [0.40, 0.0, 0.6]     # 2026-11-13: cruise 0.40 m/s (was 0.10)
+    min_velocity: [-0.20, 0.0, -0.6]   # reverse bay moves 0.20 m/s
     max_accel: [0.5, 0.0, 1.2]
     max_decel: [-0.5, 0.0, -1.2]
     odom_topic: /odom

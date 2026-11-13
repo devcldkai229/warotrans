@@ -46,8 +46,9 @@ robot_gateway:
     # AMCL updates in place while the robot settles; a miss beyond these limits drives the same goal again.
     amcl_nomotion_service: "/request_nomotion_update"
     arrival_max_refines: 2
-    arrival_refine_xy_m: 0.05
-    arrival_refine_yaw_rad: 0.087
+    # 2026-11-13 operator: 0.10 m / 0.15 rad, like Nav2's goal checker and the endpoints' position_tolerance.
+    arrival_refine_xy_m: 0.10
+    arrival_refine_yaw_rad: 0.15
     # Endpoints are for the chassis centre (base_frame); Nav2 drives nav2_base_frame, the turning centre. Goals move
     # back, proposed plans forward, by base_footprint->base_link x (geometry.yaml). -1 = read it from TF (0 today).
     nav2_base_frame: "base_footprint"

@@ -113,6 +113,9 @@ class RobotGatewayNode(Node):
         # Getting unstuck: re-plan and dock again after a failed run in / align / exit, or after Nav2 gave up this
         # close to the endpoint (it could not turn there).
         self.declare_parameter("docking_max_redocks", 2)
+        # On the endpoint when this close: no run in / align. Same as Nav2's goal checker (2026-11-13: 0.10 m, 0.15 rad).
+        self.declare_parameter("docking_arrive_xy_m", 0.10)
+        self.declare_parameter("docking_align_yaw_rad", 0.15)
         self.declare_parameter("docking_redock_radius_m", 0.6)
         self.declare_parameter("follow_path_action", "follow_path")
         self.declare_parameter("navigate_action", "navigate_to_pose")
@@ -522,6 +525,8 @@ class RobotGatewayNode(Node):
             inner=navigator, follow=follow, geometry=geometry, pose_provider=self._nav2_base_pose,
             propose_path=self._propose_docking_path, log=lambda text: self.get_logger().info(text),
             max_redocks=int(self.get_parameter("docking_max_redocks").value),
+            arrive_xy_m=self._float_param("docking_arrive_xy_m"),
+            align_yaw_rad=self._float_param("docking_align_yaw_rad"),
             redock_radius_m=self._float_param("docking_redock_radius_m"),
         )
 
