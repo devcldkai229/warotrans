@@ -529,6 +529,19 @@ def render_from_source_map(layout: dict, layout_dir: Path) -> dict[Path, bytes]:
         raise ValueError("maps with a rotated origin (yaw != 0) are not supported")
     # map_server (trinary, negate 0): occupancy = (255 - value) / 255 > occupied_thresh
     threshold = math.ceil(255 * (1 - occupied_thresh))
+    # Optional `clear_cells` rectangles: scanned cells that are not there in the sim (e.g. a wall in front of
+    # a rack). They become free in BOTH the Gazebo world and the Nav2 map, so the two stay identical.
+    clear = layout.get("clear_cells", [])
+    if clear:
+        px = bytearray(pixels)
+        for row in range(height):
+            cy = oy + (height - row - 0.5) * res
+            for col in range(width):
+                cx = ox + (col + 0.5) * res
+                if any(c["x0"] <= cx <= c["x1"] and c["y0"] <= cy <= c["y1"] for c in clear):
+                    px[row * width + col] = FREE
+        pixels = bytes(px)
+        pgm_bytes = f"P5\n# {map_yaml_path.name} with clear_cells applied\n{width} {height}\n255\n".encode() + pixels
     wall_h = float(layout.get("wall_height", layout.get("obstacle_height", 1.0)))
     skirt_h = min(0.30, wall_h)  # dark skirting up to just above the lidar plane, light wall above
 
@@ -573,7 +586,9 @@ def render_from_source_map(layout: dict, layout_dir: Path) -> dict[Path, bytes]:
         models += map_obstacles_model(base, RACK_BASE, f"rack_base_{s['code']}")
         models += rack_model({"code": s["code"], "x": (s["x0"] + s["x1"]) / 2, "y": (s["y0"] + s["y1"]) / 2,
                               "sx": s["x1"] - s["x0"], "sy": s["y1"] - s["y0"], "sz": s.get("sz", 1.0),
-                              "levels": s.get("levels", 2), "solid_base": False})
+                              "levels": s.get("levels", 2),
+                              # solid_base true: a full rack from the floor, for racks outside the scanned area
+                              "solid_base": bool(s.get("solid_base", False))})
 
     size_x, size_y = width * res, height * res
     models += floor_model(ox, oy, size_x, size_y)

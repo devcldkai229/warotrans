@@ -43,6 +43,34 @@ def _flag(context: LaunchContext, name: str) -> bool:
     return LaunchConfiguration(name).perform(context).lower() in ("true", "1", "yes")
 
 
+def _semantic_gateway_params(gateway_yaml: str, map_dir: str) -> dict:
+    """Semantic bundle params for a semantic_active gateway whose YAML leaves them empty."""
+    import json
+
+    import yaml
+
+    try:
+        with open(gateway_yaml, encoding="utf-8") as fh:
+            params = (yaml.safe_load(fh) or {}).get("robot_gateway", {}).get("ros__parameters", {})
+    except OSError:
+        return {}
+    if not str(params.get("traffic_mode", "")).startswith("semantic"):
+        return {}
+    out: dict = {}
+    manifest = os.path.join(map_dir, "semantic_manifest.json")
+    if not params.get("semantic_map_fingerprint") and os.path.isfile(manifest):
+        with open(manifest, encoding="utf-8") as fh:
+            fingerprint = str(json.load(fh).get("semanticMapFingerprint") or "")
+        if fingerprint:
+            out["semantic_map_fingerprint"] = fingerprint
+    for key, name in (("lanes_json", "lanes.json"), ("no_stop_json", "no_stop.json"),
+                      ("keepout_json", "keepout.json"), ("single_occupancy_json", "single_occupancy.json")):
+        path = os.path.join(map_dir, name)
+        if not params.get(key) and os.path.isfile(path):
+            out[key] = path
+    return out
+
+
 def _setup(context: LaunchContext, *args, **kwargs):
     del args, kwargs
     sim_pkg = get_package_share_directory("warotrans_simulation")
@@ -270,6 +298,15 @@ def _setup(context: LaunchContext, *args, **kwargs):
             value = LaunchConfiguration(key).perform(context).strip()
             if value:
                 overrides[key] = value
+        # Docking into small bays (gateway docking.py) plans on the occupancy map the robot localizes on, like
+        # fleet.launch.py does with the bundle's map.yaml on the real robot.
+        sim_map_yaml = LaunchConfiguration("map").perform(context).strip()
+        if sim_map_yaml:
+            overrides["docking_map_yaml"] = sim_map_yaml
+            # traffic_mode semantic_active (backend Traffic:Mode=Semantic) needs the bundle the backend also loads:
+            # fingerprint from semantic_manifest.json + lane / zone files next to the map (multi_sim_map_one does
+            # the same). Left alone for legacy gateways and when a value is already set in the gateway YAML.
+            overrides.update(_semantic_gateway_params(gateway_yaml, os.path.dirname(os.path.abspath(sim_map_yaml))))
         if _flag(context, "battery_sim"):
             # Real voltage-only estimator fed by battery_sim_node: no fixed SIMULATED percentage.
             overrides["simulated_battery_percent"] = -1.0

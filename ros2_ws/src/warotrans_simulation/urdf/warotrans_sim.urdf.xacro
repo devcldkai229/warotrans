@@ -15,11 +15,17 @@
       - gz JointStatePublisher   : wheel joints -> /joint_states
       - gpu_lidar on frame laser : /scan (on the real robot: RPLIDAR)
 
-    Wheel geometry comes from warotrans_description/config/calibration.yaml (real robot):
+    Geometry is the real robot's (operator tape 2026-11-11, docs/LAB_CALIBRATION_2026-11-11.md Part 3):
+      base_link      = chassis centre; base_footprint = turning centre, 0.05 m behind (geometry.yaml)
+      laser          = 0.10 m ahead of base_link, over the front axle (geometry.yaml)
+      front axle     = calibration.yaml chassis.front_axle_x (0.10), rear axle = front - wheelbase (0.184)
+      wheel centres  = chassis.track (0.214) apart, under the plate
       wheel radius   = mean(radius_left, radius_right)
-      wheelbase      = chassis.wheelbase (front axle <-> rear axle)
       wheel_separation for DiffDrive = wheel.separation, the EFFECTIVE separation measured with the
       360 deg rotation test on the real skid-steer robot (it already accounts for wheel scrub).
+    The real robot carries its weight on the rear axle and turns in place about base_footprint, not about the
+    middle of the wheels. The body's centre of mass sits at sim_com_x (tuned so the simulated in-place turn
+    pivots on base_footprint too, docs/simulation/07-map-one-v006-va-hinh-hoc-robot.md).
     Nav2 only sees /cmd_vel, /odom, /scan and TF, which keep the same names and frames.
   -->
 
@@ -35,13 +41,22 @@
   <xacro:property name="wheel_radius" value="${(cal['wheel']['radius_left'] + cal['wheel']['radius_right']) / 2.0}"/>
   <xacro:property name="effective_separation" value="${cal['wheel']['separation']}"/>
   <xacro:property name="wheelbase" value="${cal['chassis']['wheelbase']}"/>
+  <xacro:property name="track" value="${cal['chassis']['track']}"/>
+  <xacro:property name="front_axle_x" value="${cal['chassis']['front_axle_x']}"/>
   <xacro:property name="chassis_length_sim" value="${cal['chassis']['length']}"/>
   <xacro:property name="chassis_width_sim" value="${cal['chassis']['width']}"/>
 
-  <!-- Physical wheel placement: just outside the chassis plate. -->
+  <!-- Physical wheel placement, as measured on the real robot (base_link = chassis centre). -->
   <xacro:property name="wheel_width" value="0.026"/>
-  <xacro:property name="wheel_y" value="${chassis_width_sim / 2.0 + wheel_width / 2.0 + 0.005}"/>
-  <xacro:property name="wheel_x" value="${wheelbase / 2.0}"/>
+  <xacro:property name="wheel_y" value="${track / 2.0}"/>
+  <xacro:property name="front_wheel_x" value="${front_axle_x}"/>
+  <xacro:property name="rear_wheel_x" value="${front_axle_x - wheelbase}"/>
+  <!-- Body centre of mass along base_link +X. On the real robot the weight sits on the rear axle. With Coulomb
+       friction a skid-steer pivots on the more loaded axle, so any COM behind the axle midpoint (+0.008) turns the
+       simulated robot about the rear axle: 0.034 m behind base_footprint (real robot: ~0.02 m, lab 2026-11-11).
+       -0.02 keeps a margin from the midpoint, where the pivot would jump to the middle / front axle. -->
+  <xacro:arg name="sim_com_x" default="-0.02"/>
+  <xacro:property name="sim_com_x" value="$(arg sim_com_x)"/>
   <xacro:property name="wheel_mass" value="0.12"/>
   <xacro:property name="body_mass" value="3.0"/>
   <xacro:property name="body_height" value="0.12"/>
@@ -50,7 +65,7 @@
        this fixed child gives the merged chassis its mass. -->
   <link name="sim_body">
     <inertial>
-      <origin xyz="0 0 ${body_height / 2.0}" rpy="0 0 0"/>
+      <origin xyz="${sim_com_x} 0 ${body_height / 2.0}" rpy="0 0 0"/>
       <mass value="${body_mass}"/>
       <inertia ixx="${body_mass * (chassis_width_sim ** 2 + body_height ** 2) / 12.0}" ixy="0" ixz="0"
                iyy="${body_mass * (chassis_length_sim ** 2 + body_height ** 2) / 12.0}" iyz="0"
@@ -100,10 +115,10 @@
     </gazebo>
   </xacro:macro>
 
-  <xacro:drive_wheel name="front_left" x="${wheel_x}" y="${wheel_y}"/>
-  <xacro:drive_wheel name="rear_left" x="${-wheel_x}" y="${wheel_y}"/>
-  <xacro:drive_wheel name="front_right" x="${wheel_x}" y="${-wheel_y}"/>
-  <xacro:drive_wheel name="rear_right" x="${-wheel_x}" y="${-wheel_y}"/>
+  <xacro:drive_wheel name="front_left" x="${front_wheel_x}" y="${wheel_y}"/>
+  <xacro:drive_wheel name="rear_left" x="${rear_wheel_x}" y="${wheel_y}"/>
+  <xacro:drive_wheel name="front_right" x="${front_wheel_x}" y="${-wheel_y}"/>
+  <xacro:drive_wheel name="rear_right" x="${rear_wheel_x}" y="${-wheel_y}"/>
 
   <!-- 360 deg lidar on the real "laser" frame (yaw from geometry.yaml is kept).
        gz_frame_id must match robot_state_publisher frame_prefix (e.g. sim01/laser). -->
