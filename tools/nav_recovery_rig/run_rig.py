@@ -284,10 +284,11 @@ def propose(poses):
         p.pose.orientation.z, p.pose.orientation.w = math.sin(pyaw / 2), math.cos(pyaw / 2); m.poses.append(p)
     plan_pub.publish(m)
 log = open(sys.argv[5] + ".docking.log", "a")
+T0 = time.time()
 inner = Nav2ActionNavigator(n, "navigate_to_pose")
 geom = DockingGeometry(OccupancyMap.load(map_yaml), [(0.21, 0.13), (0.21, -0.13), (-0.11, -0.13), (-0.11, 0.13)], padding=0.03)
 nav = DockingNavigator(inner=inner, follow=Nav2FollowPathClient(n, "follow_path"), geometry=geom, pose_provider=pose,
-                       propose_path=propose, log=lambda t: (log.write(t + "\n"), log.flush()))
+                       propose_path=propose, log=lambda t: (log.write(f"{time.time() - T0:7.1f} {t}\n"), log.flush()))
 deadline = time.time() + 90
 while not inner.is_ready() or pose() is None:
     rclpy.spin_once(n, timeout_sec=0.5)

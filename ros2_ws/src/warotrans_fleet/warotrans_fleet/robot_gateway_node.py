@@ -110,6 +110,10 @@ class RobotGatewayNode(Node):
         self.declare_parameter("docking_footprint", "[[0.21, 0.13], [0.21, -0.13], [-0.11, -0.13], [-0.11, 0.13]]")
         self.declare_parameter("docking_padding", 0.03)
         self.declare_parameter("docking_max_dist", 0.9)
+        # Getting unstuck: re-plan and dock again after a failed run in / align / exit, or after Nav2 gave up this
+        # close to the endpoint (it could not turn there).
+        self.declare_parameter("docking_max_redocks", 2)
+        self.declare_parameter("docking_redock_radius_m", 0.6)
         self.declare_parameter("follow_path_action", "follow_path")
         self.declare_parameter("navigate_action", "navigate_to_pose")
         self.declare_parameter("heartbeat_hz", 1.0)
@@ -517,6 +521,8 @@ class RobotGatewayNode(Node):
         return DockingNavigator(
             inner=navigator, follow=follow, geometry=geometry, pose_provider=self._nav2_base_pose,
             propose_path=self._propose_docking_path, log=lambda text: self.get_logger().info(text),
+            max_redocks=int(self.get_parameter("docking_max_redocks").value),
+            redock_radius_m=self._float_param("docking_redock_radius_m"),
         )
 
     def _nav2_base_pose(self) -> Optional[tuple[float, float, float]]:

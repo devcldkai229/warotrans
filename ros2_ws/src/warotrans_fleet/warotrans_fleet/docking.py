@@ -108,12 +108,17 @@ class DockingGeometry:
         max_dist: float = 0.9,
         step: float = 0.05,
         turn_step_rad: float = math.radians(10.0),
+        strict_extra_padding: float = 0.05,
     ) -> None:
         self.grid = grid
         self.max_dist = max_dist
         self.step = step
         self.turn_step = turn_step_rad
         self._outline = self._sample_outline(self._pad(footprint, padding), 0.5 * grid.resolution)
+        # After a failure the map was too optimistic (the costmap / collision monitor would not let the robot turn
+        # where the static map says it can): look for turning points with a wider margin first.
+        self._strict_outline = self._sample_outline(
+            self._pad(footprint, padding + strict_extra_padding), 0.5 * grid.resolution)
 
     @staticmethod
     def _pad(footprint: Sequence[Point], padding: float) -> list[Point]:
@@ -139,41 +144,54 @@ class DockingGeometry:
                 pts.append((min(xs) + (max(xs) - min(xs)) * i / nx, min(ys) + (max(ys) - min(ys)) * j / ny))
         return pts
 
-    def free(self, x: float, y: float, yaw: float) -> bool:
+    def free(self, x: float, y: float, yaw: float, *, strict: bool = False) -> bool:
         c, s = math.cos(yaw), math.sin(yaw)
-        return not any(self.grid.blocked(x + c * px - s * py, y + s * px + c * py) for px, py in self._outline)
+        outline = self._strict_outline if strict else self._outline
+        return not any(self.grid.blocked(x + c * px - s * py, y + s * px + c * py) for px, py in outline)
 
-    def can_turn(self, x: float, y: float) -> bool:
+    def can_turn(self, x: float, y: float, *, strict: bool = False) -> bool:
         n = int(math.ceil(2 * math.pi / self.turn_step))
-        return all(self.free(x, y, -math.pi + k * 2 * math.pi / n) for k in range(n))
+        return all(self.free(x, y, -math.pi + k * 2 * math.pi / n, strict=strict) for k in range(n))
 
     def _clear_line(self, a: Point, b: Point, yaw: float) -> bool:
         n = max(1, int(math.ceil(math.hypot(b[0] - a[0], b[1] - a[1]) / (0.5 * self.grid.resolution))))
         return all(self.free(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n, yaw) for k in range(n + 1))
 
-    def _turning_point(self, origin: Pose, direction: float) -> Optional[Point]:
+    def _turning_point(self, origin: Pose, direction: float, *, strict: bool = False) -> Optional[Point]:
         """Nearest point on the line from origin along direction (yaw + 0 or pi) where the footprint, kept at the
-        origin heading on the way, can turn. None if the line is blocked first or none is within max_dist."""
+        origin heading on the way, can turn. None if the line is blocked first or none is within max_dist.
+        strict: prefer a point with the wider margin, else the nearest ordinary one."""
         x0, y0, yaw = origin
         ux, uy = math.cos(direction), math.sin(direction)
         prev = (x0, y0)
         d = self.step
+        fallback: Optional[Point] = None
         while d <= self.max_dist + 1e-9:
             p = (x0 + d * ux, y0 + d * uy)
             if not self._clear_line(prev, p, yaw):
-                return None
-            if self.can_turn(*p):
+                break
+            if self.can_turn(*p, strict=strict):
                 return p
+            if strict and fallback is None and self.can_turn(*p):
+                fallback = p
             prev = p
             d += self.step
-        return None
+        return fallback
 
-    def plan(self, start: Pose, goal: Pose) -> DockPlan:
+    def plan(
+        self, start: Pose, goal: Pose, *, force_dock: bool = False, refine: bool = True,
+        avoid_exit_reverse: Optional[bool] = None,
+    ) -> DockPlan:
+        """force_dock: dock even where the static map says the robot can turn at the goal (a turn there just failed);
+        turning points then need the wider margin. refine=False: never the on-axis shortcut (a straight run in just
+        failed, so back out and come in again). avoid_exit_reverse: do not leave the start in that direction (an exit
+        that way just failed)."""
         gx, gy, gyaw = goal
-        goal_needs_dock = not self.can_turn(gx, gy)
+        strict = force_dock
+        goal_needs_dock = force_dock or not self.can_turn(gx, gy)
 
         # Already on the axis of a bay endpoint (a refine): straight onto it, nothing else.
-        if goal_needs_dock:
+        if goal_needs_dock and refine:
             ux, uy = math.cos(gyaw), math.sin(gyaw)
             rx, ry = start[0] - gx, start[1] - gy
             along, across = rx * ux + ry * uy, -rx * uy + ry * ux
@@ -182,15 +200,26 @@ class DockingGeometry:
                 return DockPlan(run_in=StraightMove((start[0], start[1]), (gx, gy), gyaw, reverse=along > 0))
 
         exit_move: Optional[StraightMove] = None
-        if not self.can_turn(start[0], start[1]):
-            candidates = []
-            for direction, reverse in ((start[2], False), (start[2] + math.pi, True)):
-                p = self._turning_point(start, direction)
-                if p is not None:
-                    candidates.append((math.hypot(p[0] - start[0], p[1] - start[1]), reverse, p))
-            if candidates:
-                _, reverse, p = min(candidates)
-                exit_move = StraightMove((start[0], start[1]), p, start[2], reverse)
+        if not self.can_turn(start[0], start[1], strict=strict):
+            # Straight out along the robot's own heading; if it stands a little crooked in the endpoint's bay and that
+            # line touches a wall, along the bay axis (the controller straightens the small heading error as it goes).
+            headings = [start[2]]
+            if goal_needs_dock:
+                axis = gyaw if abs(_wrap(start[2] - gyaw)) <= math.pi / 2 else _wrap(gyaw + math.pi)
+                if 1e-3 < abs(_wrap(start[2] - axis)) <= 0.5:
+                    headings.append(axis)
+            for heading in headings:
+                candidates = []
+                for direction, reverse in ((heading, False), (heading + math.pi, True)):
+                    if avoid_exit_reverse is not None and reverse == avoid_exit_reverse:
+                        continue
+                    p = self._turning_point((start[0], start[1], heading), direction, strict=strict)
+                    if p is not None:
+                        candidates.append((math.hypot(p[0] - start[0], p[1] - start[1]), reverse, p))
+                if candidates:
+                    _, reverse, p = min(candidates)
+                    exit_move = StraightMove((start[0], start[1]), p, heading, reverse)
+                    break
 
         approach: Optional[Pose] = None
         run_in: Optional[StraightMove] = None
@@ -198,7 +227,7 @@ class DockingGeometry:
             candidates = []
             # forward in: turn behind the endpoint; backward in: turn in front of it and back onto it
             for direction, reverse in ((gyaw + math.pi, False), (gyaw, True)):
-                p = self._turning_point(goal, direction)
+                p = self._turning_point(goal, direction, strict=strict)
                 if p is not None:
                     candidates.append((math.hypot(p[0] - gx, p[1] - gy) + (0.0 if not reverse else 0.01), reverse, p))
             if candidates:

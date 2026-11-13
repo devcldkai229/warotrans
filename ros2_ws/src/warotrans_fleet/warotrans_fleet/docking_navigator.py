@@ -4,6 +4,13 @@
   2. travel  NavigateToPose to the turning point at the endpoint heading (or to the endpoint itself)
   3. run in  FollowPath, straight onto the endpoint (reverse controller when backing in)
 
+  4. align   NavigateToPose onto the endpoint itself, a last small in-place turn if the heading is off
+
+Getting unstuck (re-dock, at most max_redocks times per goal): when the run in or the align fails, when an exit
+fails, or when Nav2 gives up within redock_radius_m of the endpoint (typically: it could not turn there although the
+static map says it can), the plan is made again from where the robot stands: straight out to a point with a wider
+margin, turn there, straight in again, align.
+
 MoveCommandHandler still sees a single goal: one response, feedback, one result. A cancel stops the stage that is
 running and no later stage starts. Before a FollowPath stage the straight path is proposed to traffic, as Nav2's own
 plan is for the travel stage. Geometry decisions live in docking.py.
@@ -48,7 +55,7 @@ class FollowPathPort(Protocol):
 
 @dataclass
 class _Stage:
-    kind: str  # "exit" | "travel" | "run_in"
+    kind: str  # "exit" | "travel" | "run_in" | "align"
     goal: Optional[NavGoal] = None
     move: Optional[StraightMove] = None
 
@@ -63,6 +70,8 @@ class _Run:
     responded: bool = False
     cancelled: bool = False
     finished: bool = False
+    redocks: int = 0
+    epoch: int = 0  # bumped by a re-dock: callbacks of the stages before it are stale
 
 
 class DockingNavigator:
@@ -77,9 +86,13 @@ class DockingNavigator:
         log: Callable[[str], None] = lambda text: None,
         arrive_xy_m: float = 0.04,
         align_yaw_rad: float = 0.06,
+        max_redocks: int = 2,
+        redock_radius_m: float = 0.6,
     ) -> None:
         self._arrive_xy = float(arrive_xy_m)
         self._align_yaw = float(align_yaw_rad)
+        self._max_redocks = max(0, int(max_redocks))
+        self._redock_radius = float(redock_radius_m)
         self._inner = inner
         self._follow = follow
         self._geometry = geometry
@@ -92,27 +105,37 @@ class DockingNavigator:
         return self._inner.is_ready()
 
     # ------------------------------------------------------------------ planning
-    def _plan(self, goal: NavGoal) -> Optional[DockPlan]:
+    def _plan(self, goal: NavGoal, **options) -> Optional[DockPlan]:
         if self._geometry is None:
             return None
-        try:
-            start = self._pose()
-        except Exception:  # noqa: BLE001
-            start = None
+        start = self._current_pose()
         if start is None:
             return None
         try:
-            plan = self._geometry.plan(start, (goal.x, goal.y, goal.yaw))
+            plan = self._geometry.plan(start, (goal.x, goal.y, goal.yaw), **options)
         except Exception as exc:  # noqa: BLE001
             self._log(f"[Docking] planning failed ({type(exc).__name__}: {exc}); plain goal")
             return None
         return None if plan.plain else plan
 
     def send_goal(self, goal: NavGoal, ticket: GoalTicket, callbacks: GoalCallbacks) -> None:
-        plan = self._plan(goal)
-        if plan is None:
+        if self._geometry is None:
             self._inner.send_goal(goal, ticket, callbacks)
             return
+        plan = self._plan(goal)
+        # A plain goal runs as a one-stage run too, so a failure next to the endpoint can still re-dock.
+        stages = self._stages(goal, plan) if plan is not None else [_Stage("travel", goal=goal)]
+        run = _Run(goal=goal, callbacks=callbacks, stages=stages)
+        ticket.handle = run
+        if plan is not None:
+            self._log(
+                f"[Docking] commandId={goal.command_id} goal=({goal.x:.3f},{goal.y:.3f},{goal.yaw:.3f}) stages="
+                + ", ".join(self._describe(s) for s in stages)
+            )
+        self._start_stage(run)
+
+    @staticmethod
+    def _stages(goal: NavGoal, plan: DockPlan) -> list[_Stage]:
         stages: list[_Stage] = []
         if plan.exit is not None:
             stages.append(_Stage("exit", move=plan.exit))
@@ -125,13 +148,7 @@ class DockingNavigator:
             stages.append(_Stage("run_in", move=plan.run_in))
             # A straight move cannot correct the heading: a last small in-place turn on the endpoint, if needed.
             stages.append(_Stage("align", goal=goal))
-        run = _Run(goal=goal, callbacks=callbacks, stages=stages)
-        ticket.handle = run
-        self._log(
-            f"[Docking] commandId={goal.command_id} goal=({goal.x:.3f},{goal.y:.3f},{goal.yaw:.3f}) stages="
-            + ", ".join(self._describe(s) for s in stages)
-        )
-        self._start_stage(run)
+        return stages
 
     @staticmethod
     def _describe(stage: _Stage) -> str:
@@ -143,10 +160,11 @@ class DockingNavigator:
 
     # ------------------------------------------------------------------ stages
     def _stage_callbacks(self, run: _Run, index: int) -> GoalCallbacks:
+        epoch = run.epoch
         return GoalCallbacks(
-            on_response=lambda accepted, error: self._on_response(run, index, accepted, error),
-            on_feedback=lambda fb: self._on_feedback(run, index, fb),
-            on_result=lambda result: self._on_result(run, index, result),
+            on_response=lambda accepted, error: self._on_response(run, index, accepted, error, epoch),
+            on_feedback=lambda fb: self._on_feedback(run, index, fb, epoch),
+            on_result=lambda result: self._on_result(run, index, result, epoch),
         )
 
     def _start_stage(self, run: _Run) -> None:
@@ -203,17 +221,56 @@ class DockingNavigator:
             return None
 
     def _skip(self, run: _Run) -> None:
-        """The running (last) stage has nothing to do: the goal is done."""
+        """The running stage has nothing to do: on to the next one, or the goal is done."""
         with self._lock:
             first = not run.responded
             run.responded = True
+            last = run.index + 1 >= len(run.stages)
+            if not last:
+                run.index += 1
         if first:
             run.callbacks.on_response(True, None)
-        self._finish(run, NavResult(status=STATUS_SUCCEEDED))
+        if last:
+            self._finish(run, NavResult(status=STATUS_SUCCEEDED))
+        else:
+            self._start_stage(run)
 
-    def _on_response(self, run: _Run, index: int, accepted: bool, error: Optional[str]) -> None:
+    def _redock(self, run: _Run, index: int, result: NavResult) -> bool:
+        """Make the plan again from here after stage index failed; False when that is not possible or allowed."""
+        stage = run.stages[index]
+        if run.cancelled or result.status == STATUS_CANCELED or run.redocks >= self._max_redocks:
+            return False
+        here = self._current_pose()
+        if here is None:
+            return False
+        g = run.goal
+        if stage.kind == "travel" and math.hypot(g.x - here[0], g.y - here[1]) > self._redock_radius:
+            return False  # failed on the way, not at the endpoint: Nav2's own recovery already had its turn
+        avoid = stage.move.reverse if stage.kind == "exit" else None
+        plan = self._plan(g, force_dock=True, refine=False, avoid_exit_reverse=avoid)
+        if plan is None or plan.run_in is None:
+            self._log(f"[Docking] commandId={g.command_id} {stage.kind} failed; no way to dock again from "
+                      f"({here[0]:.3f},{here[1]:.3f},{here[2]:.3f})")
+            return False
+        stages = self._stages(g, plan)
         with self._lock:
-            if index != run.index or run.finished:
+            if run.cancelled or run.finished:
+                return False
+            run.redocks += 1
+            run.epoch += 1
+            run.stages = stages
+            run.index = 0
+        self._log(
+            f"[Docking] commandId={g.command_id} redock {run.redocks}/{self._max_redocks} after {stage.kind} "
+            f"status={result.status} from ({here[0]:.3f},{here[1]:.3f},{here[2]:.3f}); stages="
+            + ", ".join(self._describe(s) for s in stages)
+        )
+        self._start_stage(run)
+        return True
+
+    def _on_response(self, run: _Run, index: int, accepted: bool, error: Optional[str], epoch: int = 0) -> None:
+        with self._lock:
+            if index != run.index or epoch != run.epoch or run.finished:
                 return
             first = not run.responded
             run.responded = True
@@ -223,9 +280,9 @@ class DockingNavigator:
         if first:
             run.callbacks.on_response(True, None)
 
-    def _on_feedback(self, run: _Run, index: int, feedback: NavFeedback) -> None:
+    def _on_feedback(self, run: _Run, index: int, feedback: NavFeedback, epoch: int = 0) -> None:
         with self._lock:
-            if index != run.index or run.finished:
+            if index != run.index or epoch != run.epoch or run.finished:
                 return
             # Distance still to cover: this stage plus the straight stages after it.
             rest = sum(s.move.length for s in run.stages[index + 1:] if s.move is not None)
@@ -237,9 +294,9 @@ class DockingNavigator:
             number_of_recoveries=feedback.number_of_recoveries,
         ))
 
-    def _on_result(self, run: _Run, index: int, result: NavResult) -> None:
+    def _on_result(self, run: _Run, index: int, result: NavResult, epoch: int = 0) -> None:
         with self._lock:
-            if index != run.index or run.finished:
+            if index != run.index or epoch != run.epoch or run.finished:
                 return
             last = index + 1 >= len(run.stages)
             ok = result.status == STATUS_SUCCEEDED or self._close_enough(run, index)
@@ -254,6 +311,8 @@ class DockingNavigator:
             self._start_stage(run)
             return
         if result.status != STATUS_SUCCEEDED:
+            if self._redock(run, index, result):
+                return
             self._log(f"[Docking] commandId={run.goal.command_id} {run.stages[index].kind} ended status={result.status}")
         self._finish(run, result)
 

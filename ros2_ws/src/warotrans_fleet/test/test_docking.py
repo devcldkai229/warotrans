@@ -269,16 +269,176 @@ def test_a_run_in_that_stalls_close_to_the_wall_goes_on_to_align(geometry):
     assert sink.results[0].status == STATUS_SUCCEEDED
 
 
-def test_a_run_in_that_stops_far_from_the_endpoint_fails(geometry):
+def _nav_opts(geometry, start, **options):
+    inner, follow = FakeNavigator(), FakeFollow()
+    where = start if isinstance(start, Where) else Where(start)
+    nav = DockingNavigator(inner=inner, follow=follow, geometry=geometry, pose_provider=where, **options)
+    return nav, inner, follow, where
+
+
+def _fail(cb, status=STATUS_ABORTED):
     from warotrans_fleet.navigator import NavResult
 
-    where = Where((2.5, 1.0, math.pi))
-    nav, inner, follow, _ = _nav(geometry, where)
+    cb.on_response(True, None)
+    cb.on_result(NavResult(status=status))
+
+
+class Driver:
+    """Completes the stages the navigator starts, one at a time, moving the robot to where each one ends."""
+
+    def __init__(self, inner, follow, where):
+        self.inner, self.follow, self.where = inner, follow, where
+        self.seen_inner, self.seen_follow = len(inner.goals), len(follow.goals)
+        self.kinds = []
+
+    def pending(self):
+        if len(self.inner.goals) > self.seen_inner:
+            return "nav", self.inner.goals[-1]
+        if len(self.follow.goals) > self.seen_follow:
+            return "path", self.follow.goals[-1]
+        return None
+
+    def step(self, ok=True):
+        kind, goal = self.pending()
+        if kind == "nav":
+            self.seen_inner = len(self.inner.goals)
+            g, cb = goal[0], goal[2]
+            if ok:
+                self.where.pose = (g.x, g.y, g.yaw)
+        else:
+            self.seen_follow = len(self.follow.goals)
+            cb = goal[3]
+            if ok:
+                self.where.pose = goal[0][-1]
+        self.kinds.append(kind)
+        (_ok if ok else _fail)(cb)
+        return kind
+
+    def run(self, limit=12):
+        while self.pending() is not None and limit:
+            self.step()
+            limit -= 1
+
+
+def test_a_run_in_that_stops_far_from_the_endpoint_docks_again(geometry):
+    nav, inner, follow, where = _nav_opts(geometry, (2.5, 1.0, math.pi))
     sink = Sink()
     nav.send_goal(NavGoal("c9", "map", 0.30, 1.0, 0.0), GoalTicket(), sink.callbacks())
     _at(where, inner.goals[0][0])
     _ok(inner.goals[0][2])
-    cb = follow.goals[0][3]
-    cb.on_response(True, None)
-    cb.on_result(NavResult(status=STATUS_ABORTED))  # still at the turning point
+    stale = follow.goals[0][3]
+    d = Driver(inner, follow, where)
+    _fail(stale)  # blocked at the turning point: turn / come in again, not the end of the goal
+    assert sink.results == [] and d.pending() is not None
+    _fail(stale)  # a late duplicate of the failed stage changes nothing
+    assert sink.results == []
+    d.run()
+    assert len(sink.results) == 1 and sink.results[0].status == STATUS_SUCCEEDED
+    assert where.pose[:2] == pytest.approx((0.30, 1.0))
+    assert "path" in d.kinds  # it came in straight again
+
+
+def test_a_failed_align_docks_again(geometry):
+    nav, inner, follow, where = _nav_opts(geometry, (2.5, 1.0, math.pi))
+    sink = Sink()
+    d = Driver(inner, follow, where)
+    nav.send_goal(NavGoal("c10", "map", 0.30, 1.0, 0.0), GoalTicket(), sink.callbacks())
+    d.step()  # travel
+    kind, goal = d.pending()
+    assert kind == "path"
+    d.seen_follow = len(follow.goals)
+    where.pose = (0.30, 1.0, 0.25)  # on the endpoint, 14 degrees off
+    _ok(goal[3])
+    d.step(ok=False)  # align: the wall stops the in-place turn
+    assert sink.results == []
+    # the new plan leaves the bay first: a straight move out, not another turn on the spot
+    assert d.pending() is not None and d.pending()[0] == "path"
+    d.run()
+    assert len(sink.results) == 1 and sink.results[0].status == STATUS_SUCCEEDED
+
+
+def test_a_plain_goal_that_fails_at_the_endpoint_docks_instead(geometry):
+    nav, inner, follow, where = _nav_opts(geometry, (2.0, 1.0, 0.0))
+    sink = Sink()
+    nav.send_goal(NavGoal("c11", "map", 3.0, 1.0, math.pi / 2), GoalTicket(), sink.callbacks())
+    assert len(inner.goals) == 1 and follow.goals == []  # the map says it can turn there: a plain goal
+    where.pose = (2.92, 1.0, 0.3)  # Nav2 gave up turning 8 cm from it
+    d = Driver(inner, follow, where)
+    _fail(inner.goals[0][2])
+    assert sink.results == [] and d.pending() is not None
+    d.run()
+    assert len(sink.results) == 1 and sink.results[0].status == STATUS_SUCCEEDED
+    assert "path" in d.kinds  # straight onto the endpoint at its heading
+
+
+def test_a_plain_goal_that_fails_far_from_the_endpoint_just_fails(geometry):
+    nav, inner, follow, where = _nav_opts(geometry, (2.0, 1.0, 0.0))
+    sink = Sink()
+    nav.send_goal(NavGoal("c12", "map", 3.0, 1.0, math.pi / 2), GoalTicket(), sink.callbacks())
+    _fail(inner.goals[0][2])  # still 1 m away
+    assert sink.results[0].status == STATUS_ABORTED and len(inner.goals) == 1 and follow.goals == []
+
+
+def test_redocks_are_limited(geometry):
+    nav, inner, follow, where = _nav_opts(geometry, (2.5, 1.0, math.pi), max_redocks=1)
+    sink = Sink()
+    d = Driver(inner, follow, where)
+    nav.send_goal(NavGoal("c13", "map", 0.30, 1.0, 0.0), GoalTicket(), sink.callbacks())
+    d.step()  # travel
+    d.step(ok=False)  # run in fails where it started: redock 1/1
+    assert sink.results == []
+    # drive the new plan up to its run in, and fail that one too
+    while d.pending() is not None:
+        kind, goal = d.pending()
+        is_run_in = kind == "path" and goal[0][-1][:2] == pytest.approx((0.30, 1.0))
+        d.step(ok=not is_run_in)
+        if is_run_in:
+            break
+    assert len(sink.results) == 1 and sink.results[0].status == STATUS_ABORTED
+    assert d.pending() is None
+
+
+def test_redock_disabled_keeps_the_old_behaviour(geometry):
+    nav, inner, follow, where = _nav_opts(geometry, (2.5, 1.0, math.pi), max_redocks=0)
+    sink = Sink()
+    nav.send_goal(NavGoal("c14", "map", 0.30, 1.0, 0.0), GoalTicket(), sink.callbacks())
+    _at(where, inner.goals[0][0])
+    _ok(inner.goals[0][2])
+    _fail(follow.goals[0][3])
     assert sink.results[0].status == STATUS_ABORTED and len(inner.goals) == 1
+
+
+def test_cancel_during_a_redock_stops_it(geometry):
+    from warotrans_fleet.navigator import STATUS_CANCELED
+
+    nav, inner, follow, where = _nav_opts(geometry, (2.5, 1.0, math.pi))
+    sink, ticket = Sink(), GoalTicket()
+    d = Driver(inner, follow, where)
+    nav.send_goal(NavGoal("c15", "map", 0.30, 1.0, 0.0), ticket, sink.callbacks())
+    d.step()
+    d.step(ok=False)  # redock starts
+    kind, goal = d.pending()
+    nav.cancel_goal(ticket, lambda a, _d: None)
+    assert (inner.cancel_requests if kind == "nav" else follow.cancels)
+    before = len(inner.goals) + len(follow.goals)
+    _fail(goal[2] if kind == "nav" else goal[3], status=STATUS_CANCELED)
+    assert len(sink.results) == 1 and sink.results[0].status == STATUS_CANCELED
+    assert len(inner.goals) + len(follow.goals) == before  # nothing after the cancel
+
+
+def test_a_failed_exit_does_not_back_out_again(geometry):
+    nav, inner, follow, where = _nav_opts(geometry, (0.30, 1.0, math.pi))  # nose in
+    sink = Sink()
+    nav.send_goal(NavGoal("c16", "map", 3.0, 1.0, 0.0), GoalTicket(), sink.callbacks())
+    assert follow.goals[0][1] == CONTROLLER_REVERSE  # backing out
+    _fail(follow.goals[0][3])  # something behind the robot
+    # forward is the bay wall: no second reverse exit; the goal fails or travels, it does not ram the same thing
+    assert all(g[1] != CONTROLLER_REVERSE for g in follow.goals[1:])
+
+
+def test_force_dock_plans_a_straight_run_in_with_a_wider_turning_margin(geometry):
+    goal = (3.0, 1.0, math.pi / 2)
+    assert geometry.plan((2.9, 1.0, 0.3), goal).plain
+    plan = geometry.plan((2.9, 1.0, 0.3), goal, force_dock=True, refine=False)
+    assert plan.run_in is not None and plan.run_in.end == pytest.approx(goal[:2])
+    assert geometry.can_turn(*plan.approach[:2], strict=True)
