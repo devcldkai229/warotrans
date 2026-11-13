@@ -38,6 +38,8 @@ class NavGoal:
     x: float
     y: float
     yaw: float
+    # The target Endpoint's allowed distance (m) from the NAVIGATE payload; None = the navigator's own default.
+    position_tolerance: Optional[float] = None
 
 
 @dataclass(frozen=True)

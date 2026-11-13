@@ -141,11 +141,12 @@ Command (backend → robot, QoS1):
   "type": "NAVIGATE_TO_POSE", "issuedAt": "2026-10-13T08:00:00.000Z",
   "jobAssignmentId": "uuid|null", "jobStepId": "uuid|null",
   "payload": { "frameId": "map", "x": 4.25, "y": 2.10, "yaw": 1.5708,
-               "timeoutSeconds": 300, "mapVersionCode": "MAP-V1" }
+               "timeoutSeconds": 300, "mapVersionCode": "MAP-V1", "positionTolerance": 0.12 }
 }
 ```
 
-`timeoutSeconds`, `mapVersionCode` là **optional** (mở rộng tương thích). `frameId` phải là `map_frame` (mặc định `map`).
+`timeoutSeconds`, `mapVersionCode`, `positionTolerance` là **optional** (mở rộng tương thích). `frameId` phải là `map_frame` (mặc định `map`).
+`positionTolerance` (m) là ngưỡng đến đích của Endpoint: thay `arrival_refine_xy_m` và `docking_arrive_xy_m` cho riêng goal đó.
 
 ACK (`…/command_ack`, QoS1) — "đã nhận và chấp nhận xử lý", **không** phải "đã tới nơi":
 

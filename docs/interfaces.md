@@ -264,12 +264,16 @@ ADR: `docs/adr/0005-fleet-mqtt-command-protocol.md`. Không dùng VDA5050.
 topic   warotrans/v1/robots/{robotCode}/command        QoS1
 type    NAVIGATE_TO_POSE | CANCEL
 commandId (Guid), jobAssignmentId?, jobStepId?
-payload NAVIGATE_TO_POSE: frameId(=map)/x/y/yaw [+ timeoutSeconds?, mapVersionCode?]
+payload NAVIGATE_TO_POSE: frameId(=map)/x/y/yaw [+ timeoutSeconds?, mapVersionCode?, positionTolerance?]
         CANCEL:           targetCommandId
 ```
 
 `timeoutSeconds` / `mapVersionCode` là field optional robot hỗ trợ từ 2026-10-13
 (backend hiện chưa gửi). Robot không query Endpoint — backend resolve thành pose.
+
+`positionTolerance` (m, optional, > 0, từ 2026-11-13) là `position_tolerance` của Endpoint đích. Gateway coi là đã đến
+khi lệch trong ngưỡng này: không gửi lại goal (arrival refine) và docking bỏ qua run in / align. Nav2 goal checker vẫn
+dùng ngưỡng cố định của nó. Không có trường này thì dùng `arrival_refine_xy_m` / `docking_arrive_xy_m` cấu hình sẵn.
 
 ### Robot → Backend
 

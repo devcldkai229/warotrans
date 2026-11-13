@@ -233,6 +233,27 @@ def test_run_in_is_skipped_when_the_robot_already_stands_on_the_endpoint(geometr
     assert follow.goals == [] and sink.results[0].status == STATUS_SUCCEEDED
 
 
+def test_the_goals_position_tolerance_decides_when_the_robot_is_on_the_endpoint(geometry):
+    """payload.positionTolerance (the target Endpoint's, 2026-11-13: 0.12 m) replaces docking_arrive_xy_m (0.04 here)."""
+    where = Where((2.5, 1.0, math.pi))
+    nav, inner, follow, _ = _nav(geometry, where)
+    sink = Sink()
+    nav.send_goal(NavGoal("c6b", "map", 0.30, 1.0, 0.0, position_tolerance=0.12), GoalTicket(), sink.callbacks())
+    where.pose = (0.40, 1.0, 0.0)  # Nav2 stopped 10 cm short: inside 0.12, no run in, no align
+    _ok(inner.goals[0][2])
+    assert follow.goals == [] and len(inner.goals) == 1 and sink.results[0].status == STATUS_SUCCEEDED
+
+
+def test_without_a_position_tolerance_the_configured_arrive_distance_applies(geometry):
+    where = Where((2.5, 1.0, math.pi))
+    nav, inner, follow, _ = _nav(geometry, where)
+    sink = Sink()
+    nav.send_goal(NavGoal("c6c", "map", 0.30, 1.0, 0.0), GoalTicket(), sink.callbacks())
+    where.pose = (0.40, 1.0, 0.0)  # 10 cm short of the endpoint, more than 0.04: run in
+    _ok(inner.goals[0][2])
+    assert len(follow.goals) == 1 and sink.results == []
+
+
 def test_run_in_starts_from_where_the_robot_stopped(geometry):
     where = Where((2.5, 1.0, math.pi))
     nav, inner, follow, _ = _nav(geometry, where)
