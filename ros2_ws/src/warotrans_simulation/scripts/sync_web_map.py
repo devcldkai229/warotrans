@@ -11,6 +11,10 @@ For a `source_map` layout with a `web:` block (config/warehouse_layout.yaml):
     python3 scripts/sync_web_map.py --user admin --password '...'          # ids from the layout
     python3 scripts/sync_web_map.py --map-id <guid> --user admin --password '...'
     WAROTRANS_TOKEN=<jwt> python3 scripts/sync_web_map.py --backend http://localhost:5090
+    python3 scripts/sync_web_map.py --snapshot <warotrans-system>/samples/maps/MAP-ONE-V006   # offline
+
+--snapshot reads a map snapshot exported by the backend (snapshot.json + map.pgm + map.yaml, as committed under
+warotrans-system/samples/maps/<CODE>/), so the world can be rebuilt without a running backend.
 
 Run it again after editing the map on the web; restart the simulation to load the new world.
 Standard library + PyYAML only.
@@ -48,23 +52,8 @@ def http(url: str, token: str | None = None, body: dict | None = None) -> bytes:
         raise SystemExit(f"backend not reachable at {url}: {err.reason}") from None
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--layout", type=Path, default=LAYOUT)
-    parser.add_argument("--backend", default=None, help="backend URL (default: layout web.backend or http://localhost:5090)")
-    parser.add_argument("--map-id", default=None, help="MapVersion id (default: layout web.map_version_id)")
-    parser.add_argument("--user", default=os.environ.get("WAROTRANS_USER"))
-    parser.add_argument("--password", default=os.environ.get("WAROTRANS_PASSWORD"))
-    parser.add_argument("--no-generate", action="store_true", help="only download, do not run generate_warehouse.py")
-    args = parser.parse_args()
-
-    layout_path = args.layout if args.layout.is_absolute() else (Path.cwd() / args.layout)
-    if not layout_path.is_file():
-        layout_path = PKG_ROOT / args.layout
-    layout = yaml.safe_load(layout_path.read_text(encoding="utf-8"))
-    web = layout.get("web") or {}
-    if "source_map" not in layout or "overlay" not in web:
-        raise SystemExit(f"{layout_path}: needs `source_map` and `web.overlay` (see config/warehouse_layout.yaml)")
+def fetch_from_backend(args: argparse.Namespace, web: dict) -> tuple[dict, bytes, dict]:
+    """GET /maps/{id}/detail and the uploaded map.pgm / map.yaml."""
     base = (args.backend or web.get("backend") or "http://localhost:5090").rstrip("/")
     map_id = args.map_id or web.get("map_version_id")
     if not map_id:
@@ -80,17 +69,73 @@ def main() -> int:
             raise SystemExit(f"login failed: {login}")
 
     detail = json.loads(http(f"{base}/api/navigation/maps/{map_id}/detail", token))
+
+    def asset(uri: str) -> bytes:  # local /map-assets/... or an absolute (S3) URL
+        return http(uri if uri.startswith("http") else base + uri)
+
+    return detail, asset(detail["mapUri"]), yaml.safe_load(asset(detail["mapYamlUri"]).decode("utf-8"))
+
+
+def read_snapshot(path: Path) -> tuple[dict, bytes, dict]:
+    """A backend map snapshot (format warotrans-map-snapshot/1, snake_case) mapped to the /detail shape used here."""
+    folder = path.parent if path.is_file() else path
+    snap = json.loads((folder / "snapshot.json").read_text(encoding="utf-8"))
+    if snap.get("format") != "warotrans-map-snapshot/1":
+        raise SystemExit(f"{folder / 'snapshot.json'}: unknown format {snap.get('format')!r}")
+    meta = yaml.safe_load((folder / "map.yaml").read_text(encoding="utf-8"))
+    # The exported map.yaml keeps the uploaded image name; the snapshot folder stores the image as map.pgm.
+    image = folder / meta["image"]
+    pgm = (image if image.is_file() else folder / "map.pgm").read_bytes()
+    mv = snap["mapVersion"]
+    detail = {
+        "id": mv["id"],
+        "code": mv["code"],
+        "status": mv["status"],
+        "originYaw": mv.get("origin_yaw", 0.0),
+        "negate": mv.get("negate", False),
+        "resolution": mv["resolution"],
+        "imageWidthPixels": mv.get("image_width_pixels"),
+        "imageHeightPixels": mv.get("image_height_pixels"),
+        "endpoints": [{"code": e["code"], "name": e["name"], "endpointType": e["endpoint_type"], "x": e["x"],
+                       "y": e["y"], "yaw": e["yaw"], "isEnabled": e.get("is_enabled", True)} for e in snap["endpoints"]],
+        "edges": [{"code": e["code"], "geometry": e["geometry"], "widthMeters": e.get("width_meters"),
+                   "direction": e["direction"], "maxSpeed": e.get("max_speed"), "isActive": e.get("is_active", True)}
+                  for e in snap["edges"]],
+        "zones": [{"code": z["code"], "name": z["name"], "zoneType": z["zone_type"], "geometry": z["geometry"],
+                   "maxSpeed": z.get("max_speed"), "isActive": z.get("is_active", True)} for z in snap["zones"]],
+    }
+    return detail, pgm, meta
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--layout", type=Path, default=LAYOUT)
+    parser.add_argument("--backend", default=None, help="backend URL (default: layout web.backend or http://localhost:5090)")
+    parser.add_argument("--map-id", default=None, help="MapVersion id (default: layout web.map_version_id)")
+    parser.add_argument("--user", default=os.environ.get("WAROTRANS_USER"))
+    parser.add_argument("--password", default=os.environ.get("WAROTRANS_PASSWORD"))
+    parser.add_argument("--snapshot", type=Path, default=None,
+                        help="offline: folder (or snapshot.json) of a backend map snapshot instead of the backend API")
+    parser.add_argument("--no-generate", action="store_true", help="only download, do not run generate_warehouse.py")
+    args = parser.parse_args()
+
+    layout_path = args.layout if args.layout.is_absolute() else (Path.cwd() / args.layout)
+    if not layout_path.is_file():
+        layout_path = PKG_ROOT / args.layout
+    layout = yaml.safe_load(layout_path.read_text(encoding="utf-8"))
+    web = layout.get("web") or {}
+    if "source_map" not in layout or "overlay" not in web:
+        raise SystemExit(f"{layout_path}: needs `source_map` and `web.overlay` (see config/warehouse_layout.yaml)")
+    if args.snapshot:
+        detail, pgm, meta = read_snapshot(args.snapshot)
+    else:
+        detail, pgm, meta = fetch_from_backend(args, web)
     if abs(detail.get("originYaw", 0.0)) > 1e-9 or detail.get("negate"):
         raise SystemExit(f"{detail['code']}: rotated (originYaw) or negated maps are not supported by the generator")
 
     # Map files exactly as uploaded on the web.
     map_yaml_path = PKG_ROOT / layout["source_map"]
     pgm_path = map_yaml_path.with_suffix(".pgm")
-    def asset(uri: str) -> bytes:  # local /map-assets/... or an absolute (S3) URL
-        return http(uri if uri.startswith("http") else base + uri)
-
-    pgm = asset(detail["mapUri"])
-    meta = yaml.safe_load(asset(detail["mapYamlUri"]).decode("utf-8"))
     meta["image"] = pgm_path.name
     map_yaml = yaml.safe_dump(meta, sort_keys=False)
     changed = not pgm_path.is_file() or pgm_path.read_bytes() != pgm

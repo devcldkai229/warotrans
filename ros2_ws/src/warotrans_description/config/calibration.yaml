@@ -83,8 +83,15 @@ chassis:
   length: 0.320
   width: 0.260
   plate_thickness: 0.003
-  # metres, front axle centre to rear axle centre — operator measured 2026-09-07
-  wheelbase: 0.146
+  # metres, front axle centre to rear axle centre. Operator tape 2026-11-11 (docs/LAB_CALIBRATION_2026-11-11.md
+  # Part 3): 0.184 (2026-09-07 note said 0.146). 4 wheels, 4 motors.
+  wheelbase: 0.184
+  # metres, left-right wheel centre to centre (front and rear), operator tape 2026-11-11. Physical track; the
+  # kinematic value for odometry is wheel.separation (effective, includes skid-steer scrub).
+  track: 0.214
+  # metres, front axle along base_link +X (base_link = chassis centre): the lidar sits over the front axle,
+  # 0.10 m ahead of the chassis centre (geometry.yaml laser.x). Rear axle = front_axle_x - wheelbase = -0.084.
+  front_axle_x: 0.10
 
 limits:
   # Velocity that corresponds to 100% duty. Used to convert /cmd_vel to duty

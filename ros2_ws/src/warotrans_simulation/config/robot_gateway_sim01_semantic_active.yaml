@@ -29,3 +29,9 @@ robot_gateway:
     no_stop_json: ""
     keepout_json: ""
     single_occupancy_json: ""
+    # 2026-11-13 tolerance study (docs/simulation/07 §9): 0.12 m / 0.20 rad, same as Nav2's goal checker
+    # (nav2_params_sim.yaml) and the endpoints' position_tolerance in the DB. Was 0.10 m / 0.15 rad.
+    arrival_refine_xy_m: 0.12
+    arrival_refine_yaw_rad: 0.20
+    docking_arrive_xy_m: 0.12
+    docking_align_yaw_rad: 0.20
