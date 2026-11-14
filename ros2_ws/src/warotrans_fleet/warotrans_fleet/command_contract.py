@@ -123,6 +123,9 @@ class NavigateTarget:
     timeout_sec: Optional[float]
     map_version_code: Optional[str]
     route: Optional["RouteGrant"] = None
+    # payload.positionTolerance (m): the target Endpoint's allowed distance. An arrival within it is accepted (no
+    # arrival re-drive, no docking run in / align). None = the gateway's configured defaults.
+    position_tolerance: Optional[float] = None
 
 
 def extract_command_id(body: Any) -> Optional[str]:
@@ -222,6 +225,12 @@ def parse_navigate_target(payload: Mapping[str, Any], *, map_frame: str) -> Navi
         if timeout_sec <= 0:
             raise CommandRejected(REASON_INVALID_PAYLOAD, "'payload.timeoutSeconds' must be > 0")
 
+    position_tolerance: Optional[float] = None
+    if payload.get("positionTolerance") is not None:
+        position_tolerance = _finite_number(payload, "positionTolerance")
+        if position_tolerance <= 0:
+            raise CommandRejected(REASON_INVALID_PAYLOAD, "'payload.positionTolerance' must be > 0")
+
     map_version_code = payload.get("mapVersionCode")
     if map_version_code is not None and not isinstance(map_version_code, str):
         raise CommandRejected(REASON_INVALID_PAYLOAD, "'payload.mapVersionCode' must be a string")
@@ -238,6 +247,7 @@ def parse_navigate_target(payload: Mapping[str, Any], *, map_frame: str) -> Navi
         timeout_sec=timeout_sec,
         map_version_code=map_version_code or None,
         route=route,
+        position_tolerance=position_tolerance,
     )
 
 

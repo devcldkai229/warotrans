@@ -66,6 +66,47 @@ def test_a_miss_found_after_the_amcl_update_drives_the_same_goal_again():
     assert result["result"]["arrivalOutOfTolerance"] is False
 
 
+def test_the_endpoints_position_tolerance_accepts_an_arrival_the_default_would_refine():
+    """payload.positionTolerance 0.12 (EP-INBOUND / EP-OUTBOUND, 2026-11-13) replaces arrival_refine_xy_m (0.05)."""
+    pose = {"p": (GOAL[0] - 0.10, GOAL[1], GOAL[2])}
+    refreshes: list = []
+    h = _harness(pose, refreshes)
+    h.send(navigate(CMD, positionTolerance=0.12))
+    assert h.nav.goals[0][0].position_tolerance == pytest.approx(0.12)
+    h.nav.accept()
+    h.nav.finish(STATUS_SUCCEEDED)
+    _settle(h)
+    result = h.recorder.results[0]
+    assert result["outcome"] == "SUCCEEDED"
+    assert result["result"]["refineCount"] == 0
+    assert result["result"]["arrivalOutOfTolerance"] is False
+    assert len(h.nav.goals) == 1
+
+
+def test_without_a_position_tolerance_the_same_miss_is_driven_again():
+    pose = {"p": (GOAL[0] - 0.10, GOAL[1], GOAL[2])}
+    refreshes: list = []
+    h = _harness(pose, refreshes)
+    h.send(navigate(CMD))
+    assert h.nav.goals[0][0].position_tolerance is None
+    h.nav.accept()
+    h.nav.finish(STATUS_SUCCEEDED)
+    _settle(h)
+    assert h.recorder.results == []
+    assert len(h.nav.goals) == 2
+
+
+def test_a_position_tolerance_that_is_not_positive_is_rejected():
+    from warotrans_fleet.command_contract import CommandRejected, parse_navigate_target
+
+    base = {"frameId": "map", "x": 1.0, "y": 2.0, "yaw": 0.0}
+    assert parse_navigate_target({**base, "positionTolerance": 0.12}, map_frame="map").position_tolerance == 0.12
+    assert parse_navigate_target(base, map_frame="map").position_tolerance is None
+    for bad in (0, -0.1, "x"):
+        with pytest.raises(CommandRejected):
+            parse_navigate_target({**base, "positionTolerance": bad}, map_frame="map")
+
+
 def test_refines_stop_at_the_limit_and_report_out_of_tolerance():
     pose = {"p": (GOAL[0], GOAL[1], GOAL[2] + 0.4)}
     h = _harness(pose, [])

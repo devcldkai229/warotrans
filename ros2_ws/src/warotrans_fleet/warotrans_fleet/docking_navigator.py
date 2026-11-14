@@ -177,7 +177,7 @@ class DockingNavigator:
         if stage.kind == "align":
             here = self._current_pose()
             g = stage.goal
-            if here is not None and math.hypot(g.x - here[0], g.y - here[1]) <= self._arrive_xy and abs(
+            if here is not None and math.hypot(g.x - here[0], g.y - here[1]) <= self._arrive_for(run) and abs(
                     math.atan2(math.sin(here[2] - g.yaw), math.cos(here[2] - g.yaw))) <= self._align_yaw:
                 self._log(f"[Docking] commandId={run.goal.command_id} align skipped: on the endpoint")
                 self._skip(run)
@@ -192,7 +192,7 @@ class DockingNavigator:
             here = self._current_pose()
             if here is not None:
                 remaining = math.hypot(move.end[0] - here[0], move.end[1] - here[1])
-                if remaining <= self._arrive_xy:
+                if remaining <= self._arrive_for(run):
                     self._log(f"[Docking] commandId={run.goal.command_id} run_in skipped: {remaining:.3f} m to go")
                     self._skip(run)
                     return
@@ -212,7 +212,13 @@ class DockingNavigator:
         if stage.kind != "run_in" or run.cancelled:
             return False
         here = self._current_pose()
-        return here is not None and math.hypot(stage.move.end[0] - here[0], stage.move.end[1] - here[1]) <= self._arrive_xy
+        return here is not None and math.hypot(stage.move.end[0] - here[0], stage.move.end[1] - here[1]) <= self._arrive_for(run)
+
+    def _arrive_for(self, run: _Run) -> float:
+        """On the endpoint when this close: the NAVIGATE's positionTolerance (the target Endpoint's), else the
+        configured docking_arrive_xy_m."""
+        tolerance = run.goal.position_tolerance
+        return float(tolerance) if tolerance is not None and tolerance > 0 else self._arrive_xy
 
     def _current_pose(self) -> Optional[Pose]:
         try:
@@ -292,6 +298,8 @@ class DockingNavigator:
             navigation_time_sec=feedback.navigation_time_sec,
             estimated_time_remaining_sec=feedback.estimated_time_remaining_sec,
             number_of_recoveries=feedback.number_of_recoveries,
+            # Re-docks restart the stage list: the epoch keeps a new run's stage 0 apart from the old one.
+            stage=run.epoch * 100 + index,
         ))
 
     def _on_result(self, run: _Run, index: int, result: NavResult, epoch: int = 0) -> None:

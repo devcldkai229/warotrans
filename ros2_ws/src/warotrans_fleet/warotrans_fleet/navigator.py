@@ -38,6 +38,8 @@ class NavGoal:
     x: float
     y: float
     yaw: float
+    # The target Endpoint's allowed distance (m) from the NAVIGATE payload; None = the navigator's own default.
+    position_tolerance: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +48,8 @@ class NavFeedback:
     navigation_time_sec: Optional[float] = None
     estimated_time_remaining_sec: Optional[float] = None
     number_of_recoveries: Optional[int] = None
+    # Docking: which stage (travel, run in, align, ...) of the goal is running. A new stage is progress.
+    stage: Optional[int] = None
 
 
 @dataclass(frozen=True)

@@ -120,6 +120,7 @@ class _ActiveMove:
     # Obstacle window: last_progress_at slides forward while the gate holds the robot, so a traffic wait is not counted.
     last_tick_at: Optional[float] = None
     progress_pose: Optional[tuple[float, float]] = None
+    last_stage: Optional[int] = None
     # First planner failure since the last progress. A closed gate cannot cause "no path", so this ignores holds.
     planner_failing_since: Optional[float] = None
     settle_until: Optional[float] = None
@@ -498,10 +499,12 @@ class MoveCommandHandler:
                 move.deadline = now + move.timeout_sec
             t = move.target
             gx, gy = self._nav2_goal_xy(t.x, t.y, t.yaw)
-            goal = NavGoal(command_id=move.command_id, frame_id=t.frame_id, x=gx, y=gy, yaw=t.yaw)
+            goal = NavGoal(command_id=move.command_id, frame_id=t.frame_id, x=gx, y=gy, yaw=t.yaw,
+                           position_tolerance=t.position_tolerance)
             self._log.info(
                 f"[Nav2GoalSent] commandId={move.command_id} frame={t.frame_id} x={gx:.3f} y={gy:.3f} "
-                f"yaw={t.yaw:.4f} endpoint=({t.x:.3f},{t.y:.3f}) timeoutSec={move.timeout_sec}"
+                f"yaw={t.yaw:.4f} endpoint=({t.x:.3f},{t.y:.3f}) timeoutSec={move.timeout_sec} "
+                f"positionTolerance={t.position_tolerance}"
             )
             callbacks = GoalCallbacks(
                 on_response=lambda accepted, error: self._on_goal_response(move, accepted, error),
@@ -582,6 +585,11 @@ class MoveCommandHandler:
                     f"{_fmt(dist)}"
                 )
                 return
+            # A docking stage that finished (travel -> run in -> align) is progress: the next stage starts from 0.
+            if feedback.stage is not None and feedback.stage != move.last_stage:
+                move.last_stage = feedback.stage
+                self._mark_progress(move, now)
+                move.last_distance_remaining = dist
             # Distance drop resets the obstacle wait window (robot made forward progress).
             if dist is not None and (
                 move.last_distance_remaining is None or dist < move.last_distance_remaining - 0.05
@@ -724,7 +732,7 @@ class MoveCommandHandler:
             move.refine_count += 1
             self._log.warning(
                 f"[ArrivalRefine] commandId={move.command_id} attempt={move.refine_count}/{self._arrival_max_refines}"
-                f"{self._arrival_error_text(move)} limits xy={self._arrival_refine_xy_m:.3f}m "
+                f"{self._arrival_error_text(move)} limits xy={self._arrival_xy_limit(move):.3f}m "
                 f"yaw={self._arrival_refine_yaw_rad:.3f}rad; re-sending the goal"
             )
             move.settle_until = None
@@ -738,12 +746,17 @@ class MoveCommandHandler:
             return
         self._finish_succeeded(move)
 
+    def _arrival_xy_limit(self, move: _ActiveMove) -> float:
+        """The target Endpoint's positionTolerance when the NAVIGATE carried one, else the configured limit."""
+        tolerance = move.target.position_tolerance
+        return float(tolerance) if tolerance is not None and tolerance > 0 else self._arrival_refine_xy_m
+
     def _arrival_out_of_tolerance(self, move: _ActiveMove) -> Optional[bool]:
         fields = self._arrival_error_fields(move)
         if not fields:
             return None
         return (
-            fields["arrivalErrorXyM"] > self._arrival_refine_xy_m
+            fields["arrivalErrorXyM"] > self._arrival_xy_limit(move)
             or fields["arrivalErrorYawRad"] > self._arrival_refine_yaw_rad
         )
 
