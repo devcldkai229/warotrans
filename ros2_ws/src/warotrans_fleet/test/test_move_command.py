@@ -462,6 +462,23 @@ def test_obstacle_window_ends_on_time_even_if_nav2_never_aborts():
     assert result["outcome"] == "FAILED" and result["errorCode"] == "NAVIGATION_BLOCKED"
 
 
+def test_a_new_docking_stage_restarts_the_obstacle_window():
+    """Gazebo 2026-11-13: travel crept 60 s at the edge of its tolerance, then the run in was cut 1.5 s after it started."""
+    from warotrans_fleet.navigator import NavFeedback
+
+    h = Harness(traffic_mode="semantic_active", traffic_hold_active=lambda: False, obstacle_wait_sec=60.0)
+    h.send(navigate(CMD, timeoutSeconds=900))
+    h.nav.accept()
+    cb = h.nav.goals[-1][2]
+    cb.on_feedback(NavFeedback(distance_remaining=0.17, stage=1))  # travel
+    h.tick(59.0)
+    cb.on_feedback(NavFeedback(distance_remaining=0.17, stage=2))  # travel done: the run in starts
+    h.tick(30.0)
+    assert h.recorder.kinds().count("nav2_cancel") == 0
+    h.tick(31.0)  # the run in itself makes no progress for 60 s: blocked
+    assert h.recorder.kinds().count("nav2_cancel") == 1
+
+
 def test_a_long_detour_is_progress_even_though_distance_remaining_went_up():
     pose = {"xy": (0.0, 0.0)}
     h = Harness(arrival_pose=lambda: (*pose["xy"], 0.0), obstacle_wait_sec=60.0)

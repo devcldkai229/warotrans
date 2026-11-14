@@ -120,6 +120,7 @@ class _ActiveMove:
     # Obstacle window: last_progress_at slides forward while the gate holds the robot, so a traffic wait is not counted.
     last_tick_at: Optional[float] = None
     progress_pose: Optional[tuple[float, float]] = None
+    last_stage: Optional[int] = None
     # First planner failure since the last progress. A closed gate cannot cause "no path", so this ignores holds.
     planner_failing_since: Optional[float] = None
     settle_until: Optional[float] = None
@@ -584,6 +585,11 @@ class MoveCommandHandler:
                     f"{_fmt(dist)}"
                 )
                 return
+            # A docking stage that finished (travel -> run in -> align) is progress: the next stage starts from 0.
+            if feedback.stage is not None and feedback.stage != move.last_stage:
+                move.last_stage = feedback.stage
+                self._mark_progress(move, now)
+                move.last_distance_remaining = dist
             # Distance drop resets the obstacle wait window (robot made forward progress).
             if dist is not None and (
                 move.last_distance_remaining is None or dist < move.last_distance_remaining - 0.05

@@ -48,6 +48,8 @@ class NavFeedback:
     navigation_time_sec: Optional[float] = None
     estimated_time_remaining_sec: Optional[float] = None
     number_of_recoveries: Optional[int] = None
+    # Docking: which stage (travel, run in, align, ...) of the goal is running. A new stage is progress.
+    stage: Optional[int] = None
 
 
 @dataclass(frozen=True)

@@ -298,6 +298,8 @@ class DockingNavigator:
             navigation_time_sec=feedback.navigation_time_sec,
             estimated_time_remaining_sec=feedback.estimated_time_remaining_sec,
             number_of_recoveries=feedback.number_of_recoveries,
+            # Re-docks restart the stage list: the epoch keeps a new run's stage 0 apart from the old one.
+            stage=run.epoch * 100 + index,
         ))
 
     def _on_result(self, run: _Run, index: int, result: NavResult, epoch: int = 0) -> None:
