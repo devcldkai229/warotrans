@@ -66,8 +66,8 @@ if [[ $DRY -eq 1 ]]; then
 fi
 
 # Copy operational tools; these do not modify runtime data by themselves.
-scp -q tools/doctor.sh tools/check.sh tools/rollback_source.sh tools/real_robot_readiness.py tools/nav_stuck_probe.py tools/set_initial_pose.py tools/pi_run_semantic.sh tools/measure_speed.py "${PI}:~/warotrans_tools/"
-ssh "$PI" 'chmod +x ~/warotrans_tools/pi_run_semantic.sh ~/warotrans_tools/doctor.sh ~/warotrans_tools/check.sh ~/warotrans_tools/rollback_source.sh'
+scp -q tools/doctor.sh tools/check.sh tools/rollback_source.sh tools/real_robot_readiness.py tools/nav_stuck_probe.py tools/set_initial_pose.py tools/pi_run_semantic.sh tools/measure_speed.py tools/broker_discovery.py tools/pi_network_setup.sh tools/install_chrony.sh "${PI}:~/warotrans_tools/"
+ssh "$PI" 'chmod +x ~/warotrans_tools/pi_network_setup.sh ~/warotrans_tools/install_chrony.sh ~/warotrans_tools/pi_run_semantic.sh ~/warotrans_tools/doctor.sh ~/warotrans_tools/check.sh ~/warotrans_tools/rollback_source.sh'
 
 if [[ $SYNC_CLOCK -eq 1 ]]; then
   echo "==> Sync Pi clock to this machine (UTC)"

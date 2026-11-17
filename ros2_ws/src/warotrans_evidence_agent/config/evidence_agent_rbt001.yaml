@@ -2,7 +2,7 @@
 # POST /api/evidence/admin/robots/RBT-001/credentials).
 evidence_agent:
   ros__parameters:
-    recorder_url: "http://192.168.137.1:5095"
+    recorder_url: ""                      # given at start: http://<backend found by broker_discovery>:5095
     robot_code: "RBT-001"
     spool_dir: "~/warotrans_evidence"
     quota_gb: 20.0
