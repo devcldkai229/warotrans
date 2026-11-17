@@ -102,7 +102,7 @@ def test_segment_intent_is_what_the_recorder_expects(tmp_path):
 
 def test_a_recording_waits_for_its_run_then_registers_uploads_and_finalizes(tmp_path, spool):
     api, puts = FakeApi(), []
-    up = Uploader(spool, api, put=lambda grant, path, bps: puts.append(path), delete_uploaded=False)
+    up = Uploader(spool, api, put=lambda grant, path, bps: puts.append(path), delete_uploaded=False, settle_s=0)
     spool.add_recording("k", 1_763_348_400 * NS, "boot", "step-1", str(tmp_path), PROFILE)
     for i in range(3):
         spool.add_segment(segment(tmp_path, "k", i, 30 * i))
@@ -125,7 +125,7 @@ def test_a_network_failure_retries_later_and_nothing_is_lost(tmp_path, spool):
     api = FakeApi()
     api.fail_upload_grants = 1
     clock_puts = []
-    up = Uploader(spool, api, put=lambda g, p, b: clock_puts.append(p), delete_uploaded=True)
+    up = Uploader(spool, api, put=lambda g, p, b: clock_puts.append(p), delete_uploaded=True, settle_s=0)
     spool.add_recording("k", 0, "boot", None, str(tmp_path), PROFILE)
     info = segment(tmp_path, "k", 0)
     spool.add_segment(info)
@@ -155,7 +155,7 @@ def test_a_segment_already_stored_counts_as_uploaded(tmp_path, spool):
 
 def test_gaps_reported_by_the_camera_reach_finalize(tmp_path, spool):
     api = FakeApi()
-    up = Uploader(spool, api, put=lambda *a: None, delete_uploaded=False)
+    up = Uploader(spool, api, put=lambda *a: None, delete_uploaded=False, settle_s=0)
     spool.add_recording("k", 0, "boot", None, str(tmp_path), PROFILE)
     spool.add_segment(segment(tmp_path, "k", 0, 0))
     spool.add_segment(segment(tmp_path, "k", 1, 45, gap="CAMERA_LOST"))
@@ -295,3 +295,21 @@ def test_a_full_spool_pauses_recording_instead_of_deleting(tmp_path, spool):
 
 def test_iso_is_utc_with_microseconds():
     assert iso(1_763_348_400 * NS + 123_456_789) == "2025-11-17T03:00:00.123456Z"
+
+
+def test_finalize_waits_for_the_last_segment_and_a_late_one_still_goes_up(tmp_path, spool):
+    api, now = FakeApi(), [100 * NS]
+    up = Uploader(spool, api, put=lambda *a: None, delete_uploaded=False, wall_ns=lambda: now[0])
+    spool.add_recording("k", 0, "boot", None, str(tmp_path), PROFILE)
+    spool.add_segment(segment(tmp_path, "k", 0, 0))
+    spool.end_recording("k", 100 * NS)
+    up.pump()
+    assert not [c for c in api.calls if c[0] == "finalize"], "the camera may still close a segment"
+    spool.add_segment(segment(tmp_path, "k", 1, 30))  # the camera's last segment
+    now[0] += 11 * NS
+    up.pump()
+    assert ("finalize", 2, 0) in api.calls
+    spool.add_segment(segment(tmp_path, "k", 2, 60))  # later still: registered all the same
+    spool._q("UPDATE recordings SET next_attempt_at = 0")
+    up.pump()
+    assert ("register", [2]) in api.calls

@@ -61,7 +61,7 @@ def main(args=None) -> None:
             d("token_file", "")
             d("spool_dir", os.path.expanduser("~/warotrans_evidence"))
             d("quota_gb", 20.0)
-            d("upload_rate_limit_mbps", 2.0)
+            d("upload_rate_limit_mbytes_per_s", 2.0)  # MB/s (a 30 s 720p segment is ~36 MB)
             d("delete_uploaded", True)
             d("map_frame", "map")
             d("base_frame", "base_link")
@@ -94,7 +94,7 @@ def main(args=None) -> None:
                                   quota_bytes=int(float(g("quota_gb")) * 1024 ** 3),
                                   map_version=str(g("map_version_code")) or None, logger=self.get_logger())
             self.uploader = Uploader(self.spool, self.api, self.get_logger(),
-                                     rate_limit_bps=float(g("upload_rate_limit_mbps")) * 125_000,
+                                     rate_limit_bps=float(g("upload_rate_limit_mbytes_per_s")) * 1_000_000,
                                      delete_uploaded=bool(g("delete_uploaded")))
             self._lock = threading.Lock()  # the core is fed from the executor and the poll thread
             self._map_frame, self._base_frame = str(g("map_frame")), str(g("base_frame"))

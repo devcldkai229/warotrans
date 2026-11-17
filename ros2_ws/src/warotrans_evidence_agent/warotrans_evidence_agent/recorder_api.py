@@ -89,12 +89,14 @@ class RecorderApi:
         return self._call("POST", "/clock-anchors", {"anchors": anchors})
 
 
-def put_file(grant: dict, path: str, rate_limit_bps: Optional[float] = None, timeout: float = 120.0) -> int:
-    """PUTs a file to a presigned URL with the granted headers. Optional bandwidth cap (Nav2 keeps the network)."""
-    size = 0
+def put_file(grant: dict, path: str, rate_limit_bps: Optional[float] = None, timeout: Optional[float] = None) -> int:
+    """PUTs a file to a presigned URL with the granted headers. Optional bandwidth cap in bytes/s (Nav2 keeps the
+    network). The timeout follows the size: a 36 MB segment at 2 MB/s needs 18 s, never a fixed 120 s guess."""
     with open(path, "rb") as f:
         body = f.read()
-        size = len(body)
+    size = len(body)
+    if timeout is None:
+        timeout = 60.0 + (size / rate_limit_bps * 1.5 if rate_limit_bps else size / 250_000)
     req = urllib.request.Request(grant["url"], data=_Throttled(body, rate_limit_bps), method=grant.get("method", "PUT"))
     for name, value in (grant.get("headers") or {}).items():
         req.add_header(name, value)

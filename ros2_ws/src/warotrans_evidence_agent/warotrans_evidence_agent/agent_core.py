@@ -211,8 +211,14 @@ class AgentCore:
         if self.log:
             self.log.info(f"evidence: recording {key} stopped")
 
+    QUOTA_CHECK_S = 10.0
+
     def _check_quota(self) -> None:
         s = self.state
+        now = self._mono()
+        if now - getattr(self, "_quota_checked_at", -1e9) < self.QUOTA_CHECK_S and not s.paused_for_quota:
+            return
+        self._quota_checked_at = now
         used = _dir_size(os.path.join(self.spool_dir, "recordings"))
         low_disk = self._disk_free(self.spool_dir) < 1024 ** 3  # keep 1 GiB for the system
         full = used >= self.quota_bytes or low_disk

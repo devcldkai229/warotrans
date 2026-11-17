@@ -6,7 +6,7 @@ evidence_agent:
     robot_code: "RBT-001"
     spool_dir: "~/warotrans_evidence"
     quota_gb: 20.0
-    upload_rate_limit_mbps: 2.0
+    upload_rate_limit_mbytes_per_s: 2.0   # 1280x720@15 MJPEG records ~1.2 MB/s
     camera_id: "front"
     camera_model: "Raspberry Pi Camera Module 3"
     nominal_fov_degrees: 75.0

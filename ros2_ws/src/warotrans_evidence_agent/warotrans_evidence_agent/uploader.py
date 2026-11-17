@@ -17,6 +17,9 @@ from typing import Callable, Optional
 from .recorder_api import ApiError, RecorderApi, put_file
 from .spool import Spool
 
+#: The camera closes its last segment a moment after the agent stopped the recording: finalize only after this.
+FINALIZE_SETTLE_S = 10.0
+
 SEGMENT_FIELDS = ("segment_id", "sequence_number", "start_monotonic_ns", "end_monotonic_ns", "duration_ms",
                   "frame_count", "dropped_frame_count", "duplicated_frame_count", "max_slot_error_ms",
                   "container_format", "codec", "byte_size", "sha256")
@@ -44,12 +47,15 @@ def backoff(attempts: int, base: float = 5.0, cap: float = 300.0) -> float:
 
 
 class Uploader:
-    def __init__(self, spool: Spool, api: RecorderApi, logger=None, rate_limit_bps: Optional[float] = 2_000_000,
-                 delete_uploaded: bool = True, put: Callable = put_file) -> None:
+    def __init__(self, spool: Spool, api: RecorderApi, logger=None, rate_limit_bps: Optional[float] = 2_000_000,  # bytes/s
+                 delete_uploaded: bool = True, put: Callable = put_file, wall_ns: Callable[[], int] = time.time_ns,
+                 settle_s: float = FINALIZE_SETTLE_S) -> None:
         self.spool, self.api, self.log = spool, api, logger
         self.rate_limit_bps = rate_limit_bps
         self.delete_uploaded = delete_uploaded
         self._put = put
+        self._wall_ns = wall_ns
+        self.settle_s = settle_s
         self.last_error = ""
 
     def _warn(self, text: str) -> None:
@@ -65,9 +71,14 @@ class Uploader:
             stats["bound"] += 1 if rec.recording_id is None else 0
             rec = self.spool.recording(rec.key)
             stats["registered"] += self._register(rec)
-            if rec.state == "ENDED" and all(s["registered"] for s in self.spool.segments(rec.key)):
+            settled = rec.ended_at_ns is not None and (self._wall_ns() - rec.ended_at_ns) / 1e9 >= self.settle_s
+            if rec.state == "ENDED" and settled and all(s["registered"] for s in self.spool.segments(rec.key)):
                 if self._finalize(rec):
                     stats["finalized"] += 1
+        # A segment closed after the finalize still goes up (the Recorder seals it as its own group).
+        for rec in self.spool.recordings(("FINALIZED",), due_only=True):
+            if rec.recording_id is not None:
+                stats["registered"] += self._register(rec)
         for rec in self.spool.recordings(("RECORDING", "ENDED", "FINALIZED")):
             if rec.recording_id is None or stats["uploaded"] >= max_uploads:
                 continue
