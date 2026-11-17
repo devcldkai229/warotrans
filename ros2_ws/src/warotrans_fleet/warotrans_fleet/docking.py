@@ -109,8 +109,14 @@ class DockingGeometry:
         step: float = 0.05,
         turn_step_rad: float = math.radians(10.0),
         strict_extra_padding: float = 0.05,
+        min_run_in: float = 0.0,
     ) -> None:
         self.grid = grid
+        # > 0: every goal is approached by a straight run of at least this length along the endpoint heading, after a
+        # turn at a turning point that far out (2026-11-15, MAP-ONE-V013 SHELF-B-2 / SHELF-C-1: Nav2 stopped on the edge
+        # of the 0.12 m circle from the side, the in-place turn onto the endpoint heading slid the skid-steer chassis
+        # out of it again, and the gateway re-sent the goal: the robot shuffled at the shelf for ~2 min).
+        self.min_run_in = max(0.0, float(min_run_in))
         self.max_dist = max_dist
         self.step = step
         self.turn_step = turn_step_rad
@@ -157,7 +163,8 @@ class DockingGeometry:
         n = max(1, int(math.ceil(math.hypot(b[0] - a[0], b[1] - a[1]) / (0.5 * self.grid.resolution))))
         return all(self.free(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n, yaw) for k in range(n + 1))
 
-    def _turning_point(self, origin: Pose, direction: float, *, strict: bool = False) -> Optional[Point]:
+    def _turning_point(self, origin: Pose, direction: float, *, strict: bool = False,
+                       min_dist: float = 0.0) -> Optional[Point]:
         """Nearest point on the line from origin along direction (yaw + 0 or pi) where the footprint, kept at the
         origin heading on the way, can turn. None if the line is blocked first or none is within max_dist.
         strict: prefer a point with the wider margin, else the nearest ordinary one."""
@@ -170,6 +177,10 @@ class DockingGeometry:
             p = (x0 + d * ux, y0 + d * uy)
             if not self._clear_line(prev, p, yaw):
                 break
+            if d < min_dist - 1e-9:
+                prev = p
+                d += self.step
+                continue
             if self.can_turn(*p, strict=strict):
                 return p
             if strict and fallback is None and self.can_turn(*p):
@@ -188,7 +199,7 @@ class DockingGeometry:
         that way just failed)."""
         gx, gy, gyaw = goal
         strict = force_dock
-        goal_needs_dock = force_dock or not self.can_turn(gx, gy)
+        goal_needs_dock = force_dock or self.min_run_in > 0.0 or not self.can_turn(gx, gy)
 
         # Already on the axis of a bay endpoint (a refine): straight onto it, nothing else.
         if goal_needs_dock and refine:
@@ -224,12 +235,18 @@ class DockingGeometry:
         approach: Optional[Pose] = None
         run_in: Optional[StraightMove] = None
         if goal_needs_dock:
-            candidates = []
-            # forward in: turn behind the endpoint; backward in: turn in front of it and back onto it
-            for direction, reverse in ((gyaw + math.pi, False), (gyaw, True)):
-                p = self._turning_point(goal, direction, strict=strict)
-                if p is not None:
-                    candidates.append((math.hypot(p[0] - gx, p[1] - gy) + (0.0 if not reverse else 0.01), reverse, p))
+            def turning_points(min_dist: float) -> list:
+                found = []
+                # forward in: turn behind the endpoint; backward in: turn in front of it and back onto it
+                for direction, reverse in ((gyaw + math.pi, False), (gyaw, True)):
+                    p = self._turning_point(goal, direction, strict=strict, min_dist=min_dist)
+                    if p is not None:
+                        found.append((math.hypot(p[0] - gx, p[1] - gy) + (0.0 if not reverse else 0.01), reverse, p))
+                return found
+
+            candidates = turning_points(self.min_run_in)
+            if not candidates and self.min_run_in > 0.0:
+                candidates = turning_points(0.0)  # no straight run that long on either side: the nearest turning point
             if candidates:
                 _, reverse, p = min(candidates)
                 approach = (p[0], p[1], gyaw)

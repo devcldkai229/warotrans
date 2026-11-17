@@ -140,7 +140,7 @@ class Nav2FollowPathClient:
         return bool(self._client.server_is_ready())
 
     def send_path(self, command_id: str, frame_id: str, poses: Any, controller_id: str, ticket: GoalTicket,
-                  callbacks: GoalCallbacks) -> None:
+                  callbacks: GoalCallbacks, goal_checker_id: Optional[str] = None) -> None:
         from nav_msgs.msg import Path
 
         path = Path()
@@ -157,7 +157,7 @@ class Nav2FollowPathClient:
         msg = self._FollowPath.Goal()
         msg.path = path
         msg.controller_id = controller_id
-        msg.goal_checker_id = self._goal_checker_id
+        msg.goal_checker_id = goal_checker_id or self._goal_checker_id
 
         def _on_feedback(feedback_msg: Any) -> None:
             fb = feedback_msg.feedback

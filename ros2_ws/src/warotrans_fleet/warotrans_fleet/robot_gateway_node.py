@@ -110,6 +110,7 @@ class RobotGatewayNode(Node):
         self.declare_parameter("docking_footprint", "[[0.21, 0.13], [0.21, -0.13], [-0.11, -0.13], [-0.11, 0.13]]")
         self.declare_parameter("docking_padding", 0.03)
         self.declare_parameter("docking_max_dist", 0.9)
+        self.declare_parameter("docking_min_run_in_m", 0.0)
         # Getting unstuck: re-plan and dock again after a failed run in / align / exit, or after Nav2 gave up this
         # close to the endpoint (it could not turn there).
         self.declare_parameter("docking_max_redocks", 2)
@@ -117,6 +118,9 @@ class RobotGatewayNode(Node):
         self.declare_parameter("docking_arrive_xy_m", 0.10)
         self.declare_parameter("docking_align_yaw_rad", 0.15)
         self.declare_parameter("docking_redock_radius_m", 0.6)
+        self.declare_parameter("docking_approach_lateral_m", 0.04)
+        self.declare_parameter("docking_approach_yaw_rad", 0.05)
+        self.declare_parameter("docking_max_approach_retries", 2)
         self.declare_parameter("follow_path_action", "follow_path")
         self.declare_parameter("navigate_action", "navigate_to_pose")
         self.declare_parameter("heartbeat_hz", 1.0)
@@ -515,6 +519,7 @@ class RobotGatewayNode(Node):
             geometry = DockingGeometry(
                 OccupancyMap.load(map_yaml), footprint, padding=self._float_param("docking_padding"),
                 max_dist=self._float_param("docking_max_dist"),
+                min_run_in=self._float_param("docking_min_run_in_m"),
             )
             follow = Nav2FollowPathClient(self, self._str_param("follow_path_action"))
         except Exception as exc:  # noqa: BLE001
@@ -528,6 +533,9 @@ class RobotGatewayNode(Node):
             arrive_xy_m=self._float_param("docking_arrive_xy_m"),
             align_yaw_rad=self._float_param("docking_align_yaw_rad"),
             redock_radius_m=self._float_param("docking_redock_radius_m"),
+            approach_lateral_m=self._float_param("docking_approach_lateral_m"),
+            approach_yaw_rad=self._float_param("docking_approach_yaw_rad"),
+            max_approach_retries=int(self.get_parameter("docking_max_approach_retries").value),
         )
 
     def _nav2_base_pose(self) -> Optional[tuple[float, float, float]]:
