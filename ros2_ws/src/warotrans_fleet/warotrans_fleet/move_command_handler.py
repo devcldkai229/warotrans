@@ -87,6 +87,9 @@ _TRAFFIC_NAV_STATUS = {
 _NAV2_CONTROLLER_BLOCK_CODES = frozenset({104, 105, 106})  # PATIENCE_EXCEEDED, FAILED_TO_MAKE_PROGRESS, NO_VALID_CONTROL
 # Moving this far counts as progress even while distance_remaining is above its best (a long detour after a replan).
 _OBSTACLE_PROGRESS_MOVE_M = 0.20
+# Turning towards the endpoint heading is progress too (the align step on an endpoint only turns): the heading error
+# has to get this much below its best so far, so turning back and forth never resets the window.
+_OBSTACLE_PROGRESS_YAW_RAD = 0.05
 _NAV2_PLANNER_ERROR_CODES = range(200, 300)
 
 _CANCEL_BY_BACKEND = "BACKEND"
@@ -120,6 +123,7 @@ class _ActiveMove:
     # Obstacle window: last_progress_at slides forward while the gate holds the robot, so a traffic wait is not counted.
     last_tick_at: Optional[float] = None
     progress_pose: Optional[tuple[float, float]] = None
+    progress_best_yaw_err: Optional[float] = None
     last_stage: Optional[int] = None
     # First planner failure since the last progress. A closed gate cannot cause "no path", so this ignores holds.
     planner_failing_since: Optional[float] = None
@@ -780,6 +784,7 @@ class MoveCommandHandler:
         move.last_progress_at = now
         move.planner_failing_since = None
         move.progress_pose = None
+        move.progress_best_yaw_err = None
 
     def _traffic_hold_is_active(self) -> bool:
         if self._traffic_mode != "semantic_active":
@@ -807,6 +812,16 @@ class MoveCommandHandler:
                 move.progress_pose = (pose[0], pose[1])
             elif math.hypot(pose[0] - move.progress_pose[0], pose[1] - move.progress_pose[1]) >= _OBSTACLE_PROGRESS_MOVE_M:
                 self._mark_progress(move, now)
+                return False
+            t = move.target
+            yaw_err = abs(math.atan2(math.sin(pose[2] - t.yaw), math.cos(pose[2] - t.yaw)))
+            anchor = move.progress_best_yaw_err  # heading error when progress was last marked
+            if anchor is None:
+                move.progress_best_yaw_err = yaw_err
+            elif yaw_err <= anchor - _OBSTACLE_PROGRESS_YAW_RAD:
+                self._mark_progress(move, now)
+                move.progress_pose = (pose[0], pose[1])
+                move.progress_best_yaw_err = yaw_err
                 return False
         return (
             move.started

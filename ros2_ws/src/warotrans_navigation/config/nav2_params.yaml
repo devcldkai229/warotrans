@@ -55,10 +55,10 @@ controller_server:
     min_theta_velocity_threshold: 0.001
     failure_tolerance: 1.0
     progress_checker_plugins: ["progress_checker"]
-    goal_checker_plugins: ["general_goal_checker", "docking_goal_checker"]
+    goal_checker_plugins: ["general_goal_checker", "docking_goal_checker", "align_goal_checker"]
     # FollowPath = forward only. FollowPathReverse = dedicated RPP with allow_reversing
     # (never enable reverse on the primary Forward controller — Active Mode contract v10).
-    controller_plugins: ["FollowPath", "FollowPathReverse"]
+    controller_plugins: ["FollowPath", "FollowPathReverse", "FollowPathAlign", "FollowPathDock"]
     odom_topic: /odom
     # Phase 3: SpeedFilter → controller (only when enable_costmap_filters:=true)
     speed_limit_topic: "speed_limit"
@@ -67,7 +67,10 @@ controller_server:
     enable_stamped_cmd_vel: false
 
     progress_checker:
-      plugin: "nav2_controller::SimpleProgressChecker"
+      # 2026-11-15: PoseProgressChecker, a turn in place is progress too. SimpleProgressChecker only counted 0.05 m of
+      # travel, so the 1 deg final align on an endpoint (no travel) was aborted as "Failed to make progress".
+      plugin: "nav2_controller::PoseProgressChecker"
+      required_movement_angle: 0.05
       # 2026-10-16: 45 s hid a stalled robot for most of a minute per attempt (the T-junction
       # "hang"). With deadband compensation the robot moves 0.10 m in ~1-3 s, so 20 s is ample.
       # 0.10 → 0.05: a docking run in can be 0.05–0.15 m long in total.
@@ -82,25 +85,41 @@ controller_server:
       # drives the goal again if the settled pose still misses by > 0.05 m / 0.087 rad (arrival refine).
       # 2026-11-13 operator: 0.10 m / 0.15 rad. Tighter made the robot keep pivoting on the spot to fix the last
       # centimetres and degrees, and each pivot slid it somewhere else (endpoints position_tolerance 0.10 in the DB).
-      xy_goal_tolerance: 0.10       # metres; was 0.05, 0.07, earlier 0.15
+      # 2026-11-15 operator: 0.12 m and 5 deg at every endpoint (1 deg the same day made the robot pivot and slide
+      # several times per endpoint). The gateway's last stage (align: FollowPathAlign + align_goal_checker) turns
+      # slowly onto the endpoint heading when the travel ends outside it.
+      # 2026-11-15 08:20: 0.08. Since every endpoint is docked, this checker ends the travel to the turning point
+      # (open floor): stopping on the edge of 0.12 left the robot 11-13 cm off the bay axis (SHELF-A-2).
+      xy_goal_tolerance: 0.08       # metres; was 0.12, 0.10, 0.05, 0.07, earlier 0.15
       # 2026-10-16: RViz (WSL) gửi goal luôn có yaw = 0 (17/17 goal đo được) → robot quay tại chỗ
       # tới heading giả, open-loop vọt lố + đảo chiều liên tục. π = bỏ qua heading khi đến đích.
       # Đặt lại 0.25 khi cần heading thật (docking) và nguồn goal gửi yaw đúng.
-      yaw_goal_tolerance: 0.15      # radians (~8.6°); was 0.08, 0.13, earlier 3.14 (any yaw "ok")
+      yaw_goal_tolerance: 0.0873    # radians (5°); was 0.15 (2026-11-13), 0.08, 0.13, earlier 3.14
 
     # Docking straight moves (warotrans_fleet/docking_navigator.py): position only. A straight run in a bay cannot
     # correct the heading; the gateway's final align step (NavigateToPose, general checker) does that.
     docking_goal_checker:
       stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.06       # was 0.03: the last centimetres of a run in were a crawl against the wall
+      # 2026-11-15: 0.06 -> 0.08. Within the last centimetres a lateral offset makes RPP's curvature explode and the
+      # robot turned 23 deg on the spot at the end of a reverse run in (EP-SHELF-B-1); the align stage turns instead.
+      xy_goal_tolerance: 0.08       # was 0.06, 0.03 (the last centimetres of a run in were a crawl against the wall)
       yaw_goal_tolerance: 6.28
+
+    # Final in-place turn on the endpoint (gateway align stage, FollowPathAlign): heading only. xy wider than the
+    # 0.12 m endpoint tolerance so RPP never drives, it only rotates to the goal heading. 5 deg, operator 2026-11-15.
+    align_goal_checker:
+      stateful: true
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.15
+      yaw_goal_tolerance: 0.0873
 
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
       # 2026-11-13 operator: cruise 0.10 -> 0.40 m/s (at 0.10 the wheels slipped and the pose drifted from the UI).
       # The SPEED zone mask caps it at 0.20 m/s there; approach scaling slows it before the goal.
-      desired_linear_vel: 0.40
+      # 2026-11-15 operator: default cruise 0.35 m/s, SPEED zones 0.25 m/s.
+      desired_linear_vel: 0.35
       # Lookahead ~1 chassis length. With inflation now keeping the path centred in the aisle
       # (no corner hugging), 0.30 tracks 90° turns without oscillating.
       # 2026-11-11: 0.30/0.20 → 0.22/0.15. A carrot 0.30 m ahead starts the turn early and the body cuts the corner
@@ -163,14 +182,77 @@ controller_server:
       inflation_cost_scaling_factor: 4.0
       regulated_linear_scaling_min_radius: 0.9
       regulated_linear_scaling_min_speed: 0.05
-      use_fixed_curvature_lookahead: false
+      use_fixed_curvature_lookahead: true   # needed by interpolate_curvature_after_goal (below)
       curvature_lookahead_dist: 0.25
       # Reverse path yaw already faces travel direction; do not rotate-to-heading on reverse.
       use_rotate_to_heading: false
       max_angular_accel: 0.8
       max_robot_pose_search_dist: 2.0
-      interpolate_curvature_after_goal: false
+      # 2026-11-15: curvature from a fixed 0.25 m point, projected past the goal near the end of the path. With the
+      # carrot on the goal a 4.7 cm lateral offset 7 cm before the end gave a curvature of ~19/m: the robot spun
+      # 23 deg in place instead of backing the last centimetres (EP-SHELF-B-1).
+      interpolate_curvature_after_goal: true
       allow_reversing: true
+
+    # Straight forward docking moves (gateway run in / exit, 2026-11-15): every endpoint is entered by a straight run of
+    # >= 0.25 m along its heading (docking_min_run_in_m). Slow, no cost-regulated crawl next to the shelf, curvature
+    # from a fixed point projected past the goal so a few cm of lateral offset never spin the robot near the end.
+    FollowPathDock:
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      desired_linear_vel: 0.15
+      lookahead_dist: 0.25
+      min_lookahead_dist: 0.20
+      max_lookahead_dist: 0.35
+      lookahead_time: 1.5
+      rotate_to_heading_angular_vel: 0.3
+      transform_tolerance: 0.3
+      use_velocity_scaled_lookahead_dist: false
+      min_approach_linear_velocity: 0.05
+      approach_velocity_scaling_dist: 0.3
+      use_collision_detection: true
+      max_allowed_time_to_collision_up_to_carrot: 1.0
+      use_regulated_linear_velocity_scaling: false
+      use_cost_regulated_linear_velocity_scaling: false
+      inflation_cost_scaling_factor: 4.0
+      regulated_linear_scaling_min_radius: 0.9
+      regulated_linear_scaling_min_speed: 0.05
+      use_fixed_curvature_lookahead: true
+      curvature_lookahead_dist: 0.25
+      interpolate_curvature_after_goal: true
+      use_rotate_to_heading: true
+      rotate_to_heading_min_angle: 0.5
+      max_angular_accel: 0.8
+      max_robot_pose_search_dist: 2.0
+      allow_reversing: false
+
+    # Final turn on the endpoint (gateway align stage, 5 deg). 0.2 rad/s = ~1.1 deg per 10 Hz cycle; the encoder PI loop holds 0.04 m/s per wheel (lab 2026-11-11), which 0.2 rad/s needs.
+    FollowPathAlign:
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      desired_linear_vel: 0.05
+      lookahead_dist: 0.20
+      min_lookahead_dist: 0.15
+      max_lookahead_dist: 0.30
+      lookahead_time: 1.5
+      rotate_to_heading_angular_vel: 0.2
+      transform_tolerance: 0.3
+      use_velocity_scaled_lookahead_dist: false
+      min_approach_linear_velocity: 0.03
+      approach_velocity_scaling_dist: 0.3
+      use_collision_detection: true
+      max_allowed_time_to_collision_up_to_carrot: 1.0
+      use_regulated_linear_velocity_scaling: false
+      use_cost_regulated_linear_velocity_scaling: false
+      inflation_cost_scaling_factor: 4.0
+      regulated_linear_scaling_min_radius: 0.9
+      regulated_linear_scaling_min_speed: 0.03
+      use_fixed_curvature_lookahead: false
+      curvature_lookahead_dist: 0.25
+      use_rotate_to_heading: true
+      rotate_to_heading_min_angle: 0.0
+      max_angular_accel: 0.8
+      max_robot_pose_search_dist: 2.0
+      interpolate_curvature_after_goal: false
+      allow_reversing: false
 
 # -----------------------------------------------------------------------------
 # Planner Server (NavFn Global Planner)
@@ -244,7 +326,7 @@ velocity_smoother:
     feedback: "OPEN_LOOP"
     # In the cmd_vel pipeline since 2026-10-16: controller/behaviors -> cmd_vel_nav ->
     # velocity_smoother -> cmd_vel_smoothed -> collision_monitor -> cmd_vel -> esp32_bridge
-    max_velocity: [0.40, 0.0, 0.6]     # 2026-11-13: cruise 0.40 m/s (was 0.10)
+    max_velocity: [0.35, 0.0, 0.6]     # 2026-11-15: cruise 0.35 m/s (0.40 on 2026-11-13, 0.10 before)
     min_velocity: [-0.20, 0.0, -0.6]   # reverse bay moves 0.20 m/s
     max_accel: [0.5, 0.0, 1.2]
     max_decel: [-0.5, 0.0, -1.2]

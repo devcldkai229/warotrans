@@ -70,7 +70,7 @@ def world_to_pixel(
 
 # More than the footprint radius (hypot(0.18, 0.15) = 0.234 m).
 # Usual cruise of the real robot (nav2_params FollowPath desired_linear_vel; 2026-11-13: 0.10 -> 0.40 m/s, operator).
-CRUISE_SPEED_MPS = 0.40
+CRUISE_SPEED_MPS = 0.35
 KEEPOUT_PLANNING_INFLATE_M = 0.25
 
 
