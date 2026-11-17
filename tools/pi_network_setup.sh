@@ -65,7 +65,7 @@ ARCHIVE="$BACKUP_DIR/network_$STAMP.tgz"
 tar -czf "$ARCHIVE" -C / etc/netplan $( [[ -d /etc/NetworkManager/system-connections ]] && echo etc/NetworkManager/system-connections ) 2>/dev/null
 chmod 600 "$ARCHIVE"
 echo "backup: $ARCHIVE"
-RESTORE="rm -f /etc/netplan/60-warotrans.yaml /etc/NetworkManager/system-connections/warotrans-*.nmconnection; \
+RESTORE="rm -f /etc/netplan/60-warotrans.yaml /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg /etc/NetworkManager/system-connections/warotrans-*.nmconnection; \
 tar -xzf $ARCHIVE -C /; netplan generate; netplan apply; systemctl is-active --quiet NetworkManager && nmcli connection reload || true"
 systemctl stop "$UNIT.timer" 2>/dev/null || true
 systemctl reset-failed "$UNIT.service" 2>/dev/null || true
@@ -156,6 +156,10 @@ with open(ours, "w") as f:
 os.umask(old)
 os.chmod(ours, 0o600)
 PY
+  # cloud-init must not re-render 50-cloud-init.yaml over this at a later boot
+  if [[ -d /etc/cloud/cloud.cfg.d ]]; then
+    echo 'network: {config: disabled}' > /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+  fi
   netplan generate
   netplan apply
 fi
