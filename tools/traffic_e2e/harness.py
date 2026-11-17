@@ -15,6 +15,13 @@ ROBOT_REPO = Path(__file__).resolve().parents[2]
 SYSTEM_REPO = Path(os.environ.get("WAROTRANS_SYSTEM_REPO", ROBOT_REPO.parent / "warotrans-system"))
 HOST_DLL = SYSTEM_REPO / "backend" / "src" / "WaroTrans.Host" / "bin" / "Debug" / "net10.0" / "WaroTrans.Host.dll"
 BUNDLE = ROBOT_REPO / "ros2_ws" / "src" / "warotrans_navigation" / "maps" / "map_one_v004"
+RECORDER_DLL = (SYSTEM_REPO / "backend" / "src" / "WaroTrans.Evidence" / "Recorder" / "bin" / "Debug" / "net10.0"
+                / "WaroTrans.Evidence.Recorder.dll")
+
+# Evidence Recorder of the harness (docs/adr/0012 of warotrans-system): own port, own *test* database, own token.
+EVIDENCE_DB = os.environ.get("WARO_E2E_EVIDENCE_DB", "warotrans_evidence_e2e_test")
+EVIDENCE_PORT = int(os.environ.get("WARO_E2E_EVIDENCE_PORT", "5198"))
+EVIDENCE_TOKEN = "warotrans-e2e-evidence-service-token-0123456789"
 
 TEST_DB = os.environ.get("WARO_E2E_DB", "warotrans_test")
 PREFIX = os.environ.get("WARO_E2E_PREFIX", "warotrans-e2e/v1")
@@ -23,6 +30,8 @@ BASE = f"http://127.0.0.1:{PORT}"
 
 if "test" not in TEST_DB.lower():  # never TRUNCATE-able dev data
     raise SystemExit(f"WARO_E2E_DB={TEST_DB}: the harness only runs against a *test* database")
+if "test" not in EVIDENCE_DB.lower():
+    raise SystemExit(f"WARO_E2E_EVIDENCE_DB={EVIDENCE_DB}: the harness only runs against a *test* database")
 if PREFIX.strip("/") == "warotrans/v1":
     raise SystemExit("the harness must not use the live topic prefix warotrans/v1 (real robots listen there)")
 
@@ -70,6 +79,8 @@ class Host:
             "Logging__Console__FormatterOptions__TimestampFormat": "HH:mm:ss.fff ",
             "Logging__LogLevel__Default": "Information",
             "Logging__LogLevel__Microsoft.EntityFrameworkCore": "Warning",
+            # Never push test events to a developer's Recorder on :5095; EvidenceRecorder.host_env() turns it on.
+            "EvidenceBridge__Enabled": "false",
         })
         e.update(self.extra_env)
         return e
@@ -121,6 +132,79 @@ class Host:
             self.proc.kill()
             self.proc.wait(timeout=20)
         self.proc = None
+
+
+class EvidenceRecorder:
+    """The real Evidence Recorder (current build) on its own test database, fed by the harness Host's EvidenceBridge."""
+
+    def __init__(self, log_dir: Path, core_base: str = BASE, port: int = EVIDENCE_PORT) -> None:
+        self.log_dir = log_dir
+        self.core_base = core_base
+        self.port = port
+        self.proc: Optional[subprocess.Popen] = None
+
+    @property
+    def base(self) -> str:
+        return f"http://127.0.0.1:{self.port}"
+
+    @staticmethod
+    def available() -> bool:
+        return RECORDER_DLL.exists()
+
+    def env(self) -> dict[str, str]:
+        e = dict(os.environ)
+        e.update({
+            "ASPNETCORE_ENVIRONMENT": "Development",
+            "ASPNETCORE_URLS": self.base,
+            "ConnectionStrings__Evidence": f"Host=127.0.0.1;Port=5433;Database={EVIDENCE_DB};Username=warotrans;Password=warotrans",
+            "Evidence__ServiceToken": EVIDENCE_TOKEN,
+            "Evidence__CoreBaseUrl": self.core_base,
+            "Evidence__ReconcileIntervalSeconds": "30",
+            "Evidence__MaintenanceIntervalSeconds": "10",
+            "Logging__Console__FormatterName": "simple",
+            "Logging__Console__FormatterOptions__TimestampFormat": "HH:mm:ss.fff ",
+        })
+        return e
+
+    def host_env(self) -> dict[str, str]:
+        """What the harness Host needs to push its events here."""
+        return {
+            "EvidenceBridge__Enabled": "true",
+            "EvidenceBridge__RecorderBaseUrl": self.base,
+            "EvidenceBridge__ServiceToken": EVIDENCE_TOKEN,
+            "EvidenceBridge__PollIntervalMs": "300",
+        }
+
+    def start(self) -> None:
+        if not RECORDER_DLL.exists():
+            raise SystemExit(f"{RECORDER_DLL} missing: dotnet build backend/src/WaroTrans.Evidence/Recorder first")
+        out = open(self.log_dir / "evidence-recorder.log", "wb")
+        self.proc = subprocess.Popen(["dotnet", str(RECORDER_DLL)], cwd=RECORDER_DLL.parent, env=self.env(),
+                                     stdout=out, stderr=subprocess.STDOUT)
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            if self.proc.poll() is not None:
+                raise RuntimeError(f"Evidence Recorder exited ({self.proc.returncode}); see {out.name}")
+            try:
+                urllib.request.urlopen(f"{self.base}/health", timeout=2).read()
+                return
+            except (urllib.error.URLError, OSError):
+                time.sleep(0.5)
+        self.stop()
+        raise RuntimeError("Evidence Recorder did not come up within 60 s")
+
+    def stop(self) -> None:
+        if self.proc is not None and self.proc.poll() is None:
+            self.proc.kill()
+            self.proc.wait(timeout=20)
+        self.proc = None
+
+    def journal(self, api: "Api", transport_request_id: str) -> Optional[dict]:
+        """The journal of a request as an Admin sees it (with the Host's access token), or None while there is none."""
+        reader = Api(self.base)
+        reader.token = api.token
+        body = reader.call("GET", f"/api/evidence/journals/by-transport-request/{transport_request_id}", ok=(200, 404))
+        return body if body.get("id") else None
 
 
 class Api:

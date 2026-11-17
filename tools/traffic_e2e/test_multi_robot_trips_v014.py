@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from harness import PREFIX, ROBOT_REPO, Api, Host, wait_for
+from harness import PREFIX, ROBOT_REPO, Api, EvidenceRecorder, Host, wait_for
 from map_paths import MapPaths
 from sim_robot import SimRobot
 
@@ -42,6 +42,9 @@ RUN = uuid.uuid4().hex[:4].upper()
 SPEED = {"R1": 0.35, "R2": 0.30}  # RBT-001 / RBT-002 cruise
 PATHS = MapPaths(BUNDLE)
 ROBOTS: list[SimRobot] = []
+# The Evidence Recorder runs beside the Host when it is built (WARO_E2E_EVIDENCE=0 turns it off).
+EVIDENCE = os.environ.get("WARO_E2E_EVIDENCE", "1") == "1" and EvidenceRecorder.available()
+RECORDERS: list[EvidenceRecorder] = []
 
 
 @pytest.fixture(scope="module")
@@ -51,7 +54,14 @@ def host():
     for args in (["--cleanup-e2e-robots"], ["--map-code", MAP_CODE, "--workflow-code", "INBOUND", "--workflow-alias", WORKFLOW]):
         done = subprocess.run([sys.executable, str(seed), *args], capture_output=True, text=True)
         assert done.returncode == 0, done.stderr
+    evidence_env: dict[str, str] = {}
+    if EVIDENCE:
+        recorder = EvidenceRecorder(ARTIFACTS)
+        recorder.start()
+        RECORDERS.append(recorder)
+        evidence_env = recorder.host_env()
     h = Host(ARTIFACTS, name="host-v013", extra_env={
+        **evidence_env,
         "Traffic__SemanticMapDirectory": str(BUNDLE),
         "Traffic__SemanticPrefixGrant": os.environ.get("WARO_E2E_PREFIX_GRANT", "true"),  # RealRobot: true
         # RealRobot uses 0.25 m cells. WARO_E2E_CELL lets the same run be tried with another size.
@@ -62,11 +72,18 @@ def host():
         "FleetIdle__IdleSeconds": "3",
         "FleetIdle__FallbackEndpointCodes": "EP-QUEUE-POINT",
     })
-    h.start()
+    try:
+        h.start()
+    except BaseException:
+        for recorder in RECORDERS:
+            recorder.stop()
+        raise
     yield h
     for r in ROBOTS:
         r.stop()
     h.stop()
+    for recorder in RECORDERS:
+        recorder.stop()
 
 
 @pytest.fixture(scope="module")
@@ -255,6 +272,25 @@ def test_two_robots_split_five_containers_and_drive_at_the_same_time(api, pair):
     assert rec.both_moving_s >= 5.0, f"robots moved together only {rec.both_moving_s:.1f} s"
     assert not r1.moved_while_gate_closed() and not r2.moved_while_gate_closed()
     print(f"\nmoved {rec.moved_m}, both moving {rec.both_moving_s:.1f} s, confirmations {rec.confirmations}")
+
+    if EVIDENCE:
+        # Evidence: one journal for the request, one run per robot assignment (3 + 2 containers), filed from the
+        # Host's outbox; the request's status is copied as Transportation states it.
+        recorder = RECORDERS[0]
+
+        def complete_journal():
+            j = recorder.journal(api, tr)
+            return j if j and j["sourceTransportStatus"] == "COMPLETED" and len(j["runs"]) == 2 else None
+
+        journal = wait_for(complete_journal, 60, interval=1.0, what="evidence journal with 2 runs")
+        assert journal["requestedContainerCount"] == 5
+        assert sorted(r["assignedContainerCount"] for r in journal["runs"]) == [2, 3]
+        assert {r["robotCode"] for r in journal["runs"]} == {r1.code, r2.code}
+        assert {r["sourceJobId"] for r in journal["runs"]} == set(jobs)
+        assert all(r["runCorrelationKey"].startswith("jra:") and r["endedAtUtc"] for r in journal["runs"])
+        assert all(r["mapVersion"] == MAP_CODE for r in journal["runs"])
+        assert journal["eventsBySeverity"].get("INFO", 0) > 10, journal["eventsBySeverity"]
+        print(f"evidence journal {journal['requestCode']}: {journal['evidenceStatus']}, events {journal['eventsBySeverity']}")
 
 
 # ---------------------------------------------------------------------- 2
