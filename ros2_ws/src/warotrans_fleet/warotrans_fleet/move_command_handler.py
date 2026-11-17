@@ -238,6 +238,17 @@ class MoveCommandHandler:
             return self._active.command_id if self._active is not None else None
 
     @property
+    def active_command_context(self) -> Optional[dict]:
+        """The backend command the robot is executing, for local observers (evidence recording); None when idle."""
+        with self._lock:
+            move = self._active
+            if move is None:
+                return None
+            c = move.command
+            return {"commandId": c.command_id, "type": c.command_type, "jobAssignmentId": c.job_assignment_id,
+                    "jobStepId": c.job_step_id}
+
+    @property
     def navigation_status(self) -> str:
         with self._lock:
             if self._active_traffic_mode():

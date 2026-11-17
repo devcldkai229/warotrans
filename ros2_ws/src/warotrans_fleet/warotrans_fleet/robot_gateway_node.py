@@ -11,6 +11,7 @@ Threading:
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import queue
@@ -432,6 +433,21 @@ class RobotGatewayNode(Node):
         self._inbox: "queue.SimpleQueue[tuple[str, dict[str, Any]]]" = queue.SimpleQueue()
         self._inbox_signal = self.create_guard_condition(self._drain_inbox)
         self.create_timer(1.0 / tick_hz, self._commands.router.tick)
+
+        # Local observers (the evidence agent records while a backend command runs) learn what runs right now.
+        from std_msgs.msg import String as _String
+        self._active_command_pub = self.create_publisher(_String, "/fleet/active_command", 10)
+        self._active_command_last: Optional[str] = None
+        self._active_command_sent_at = 0.0
+
+        def _publish_active_command() -> None:
+            data = json.dumps(self._commands.move.active_command_context)
+            now = time.monotonic()
+            if data != self._active_command_last or now - self._active_command_sent_at >= 5.0:
+                self._active_command_pub.publish(_String(data=data))
+                self._active_command_last, self._active_command_sent_at = data, now
+
+        self.create_timer(0.5, _publish_active_command)
 
         self.mqtt.start()
 

@@ -1,0 +1,15 @@
+# RBT-001. The credential is NOT here: put WARO_EVIDENCE_TOKEN in the robot's env file (issued by an admin with
+# POST /api/evidence/admin/robots/RBT-001/credentials).
+evidence_agent:
+  ros__parameters:
+    recorder_url: "http://192.168.137.1:5095"
+    robot_code: "RBT-001"
+    spool_dir: "~/warotrans_evidence"
+    quota_gb: 20.0
+    upload_rate_limit_mbps: 2.0
+    camera_id: "front"
+    camera_model: "Raspberry Pi Camera Module 3"
+    nominal_fov_degrees: 75.0
+    width: 1280
+    height: 720
+    framerate: 15

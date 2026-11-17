@@ -16,6 +16,10 @@ MOTORS="${MOTORS:-false}"
 EKF="${EKF:-true}"
 # Dual-robot lab: ROBOT_CODE=RBT-002 ROS_DOMAIN_ID=31 (and a second Pi / namespace).
 ROBOT_CODE="${ROBOT_CODE:-RBT-001}"
+# Evidence (camera recording during trips, uploads to the Recorder on the backend laptop, port 5095). CAMERA=false
+# leaves the camera off; the credential WARO_EVIDENCE_TOKEN comes from ~/.config/warotrans/evidence.env (never a repo).
+CAMERA="${CAMERA:-true}"
+EVIDENCE_ENV="$HOME/.config/warotrans/evidence.env"
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 
 case "$ACTION" in
@@ -47,12 +51,22 @@ case "$ACTION" in
       semantic_manifest:="$BUNDLE/semantic_manifest.json" mqtt_host:="$BROKER" \
       robot_code:="$ROBOT_CODE" \
       > "$LOGS/gateway_${ROBOT_CODE}.log" 2>&1 < /dev/null &
+    if [[ "$CAMERA" == "true" ]]; then
+      setsid nohup ros2 run warotrans_camera camera_stream --ros-args         --params-file "$SRC/warotrans_camera/config/camera_rbt001.yaml"         > "$LOGS/camera_${ROBOT_CODE}.log" 2>&1 < /dev/null &
+      if [[ -f "$EVIDENCE_ENV" ]]; then
+        set -a; source "$EVIDENCE_ENV"; set +a
+        setsid nohup ros2 run warotrans_evidence_agent evidence_agent --ros-args           --params-file "$SRC/warotrans_evidence_agent/config/evidence_agent_rbt001.yaml"           -p recorder_url:="http://$BROKER:5095" -p robot_code:="$ROBOT_CODE"           -p map_version_code:="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['mapCode'])" "$BUNDLE/semantic_manifest.json")"           > "$LOGS/evidence_${ROBOT_CODE}.log" 2>&1 < /dev/null &
+      else
+        echo "no $EVIDENCE_ENV (WARO_EVIDENCE_TOKEN=...): camera live only, no evidence recording"
+      fi
+    fi
     echo started
     ;;
   stop)
     # Bracketed patterns: an SSH command line that mentions these names must not match (it would kill itself).
     pkill -INT -f 'ros2 launch warotrans[_]' 2>/dev/null
     sleep 6
+    pkill -INT -f 'camera_strea[m]|evidence_agen[t]' 2>/dev/null
     pkill -f 'esp32_bridge_nod[e]|wheel_odom_nod[e]|robot_gateway_nod[e]|cmd_vel_authority_gat[e]|collision_monito[r]|velocity_smoothe[r]|controller_serve[r]|planner_serve[r]|behavior_serve[r]|bt_navigato[r]|waypoint_followe[r]|nav2_amc[l]|/amc[l]|map_serve[r]|lifecycle_manage[r]|costmap_filte[r]|rplida[r]|robot_state_publishe[r]|battery_monitor_nod[e]|recovery_guar[d]|bno055_nod[e]|ekf_nod[e]' 2>/dev/null
     sleep 1
     pgrep -af 'warotrans|nav2|rplidar|amcl' | grep -v pi_run_semantic | grep -v pgrep | cut -c1-100 || true
