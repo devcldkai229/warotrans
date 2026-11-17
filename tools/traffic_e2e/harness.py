@@ -75,6 +75,15 @@ class Host:
         return e
 
     def start(self, wait_for_lease: bool = True) -> None:
+        try:
+            self._start(wait_for_lease)
+        except BaseException:
+            # A Host that came up without the lease (or never answered) keeps the port and the advisory lock of
+            # warotrans_test: left running, it makes every later run fail the same way. Stop it before failing.
+            self.stop()
+            raise
+
+    def _start(self, wait_for_lease: bool) -> None:
         if not HOST_DLL.exists():
             raise SystemExit(f"{HOST_DLL} missing: dotnet build backend/src/WaroTrans.Host first")
         self.starts += 1
