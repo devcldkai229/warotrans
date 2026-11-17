@@ -209,6 +209,7 @@ class SimRobot:
             robot_map_version_code=map_code,
             traffic_mode="semantic_active",
             traffic_hold_active=lambda: self.client.held_for_traffic(),
+            traffic_wait_active=lambda: self.client.waiting_behind_traffic(),
         )
         self._threads: list[threading.Thread] = []
 

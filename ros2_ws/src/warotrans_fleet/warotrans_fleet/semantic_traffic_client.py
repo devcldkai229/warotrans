@@ -517,6 +517,15 @@ class SemanticTrafficClient:
         """The gate held the robot during the current command within the last ``window_sec``."""
         return self.command_id is not None and self.monotonic() - self._last_blocked_mono <= window_sec
 
+    #: Holds that are not a wait behind another robot: the link or the backend's authority is gone, or the backend sees
+    #: a wait-for cycle. Time held for these still counts against the command's timeout.
+    FAULT_BLOCK_PREFIXES = ("LINK_DOWN", "AUTHORITY_SILENT", "STALE_EPOCH", "DEADLOCK_RISK")
+
+    def waiting_behind_traffic(self, window_sec: float = 5.0) -> bool:
+        """Held for traffic, and the reason is another robot's space (queue, capacity, outside the granted part)."""
+        reason = str(self.last_block_reason or "")
+        return self.held_for_traffic(window_sec) and not reason.startswith(self.FAULT_BLOCK_PREFIXES)
+
     # ------------------------------------------------------------------ uplink: verified exits
 
     def resources_cleared_at(self, x: float, y: float) -> list[str]:

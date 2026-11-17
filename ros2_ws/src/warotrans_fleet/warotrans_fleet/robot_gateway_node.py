@@ -354,6 +354,7 @@ class RobotGatewayNode(Node):
                 graph_path=self._str_param("route_graph").strip() or None,
             ),
             traffic_hold_active=lambda: self._semantic_client is not None and self._semantic_client.held_for_traffic(),
+            traffic_wait_active=lambda: self._semantic_client is not None and self._semantic_client.waiting_behind_traffic(),
             arrival_pose=self._traffic_pose,
             arrival_settle_sec=1.0,
             motion_hold_active=lambda: self._motion_hold.held,

@@ -9,7 +9,7 @@
 # AMCL's motion noise follows it, so the odometry source and what AMCL assumes about it cannot disagree.
 set -uo pipefail
 ACTION="${1:-status}"
-BUNDLE="${BUNDLE:-$HOME/ros2_ws/src/warotrans_navigation/maps/map_one_v013}"
+BUNDLE="${BUNDLE:-$HOME/ros2_ws/src/warotrans_navigation/maps/map_one_v014}"
 SRC="$HOME/ros2_ws/src"
 LOGS="$HOME/wt_logs"
 MOTORS="${MOTORS:-false}"
