@@ -58,6 +58,8 @@ def main() -> int:
         exists = psql(a.target_db, "SELECT to_regclass('fleet.robots') IS NOT NULL;")
         if exists == "t":
             psql(a.target_db, """BEGIN;
+DELETE FROM fleet.robot_positioning_intents WHERE robot_id IN (SELECT id FROM fleet.robots WHERE code LIKE 'E2E-%')
+   OR robot_id NOT IN (SELECT id FROM fleet.robots);
 DELETE FROM fleet.robot_commands WHERE robot_id IN (SELECT id FROM fleet.robots WHERE code LIKE 'E2E-%');
 DELETE FROM fleet.robots WHERE code LIKE 'E2E-%';
 COMMIT;""")

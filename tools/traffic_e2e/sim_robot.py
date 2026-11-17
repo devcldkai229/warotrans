@@ -210,6 +210,9 @@ class SimRobot:
             traffic_mode="semantic_active",
             traffic_hold_active=lambda: self.client.held_for_traffic(),
             traffic_wait_active=lambda: self.client.waiting_behind_traffic(),
+            # Like the real gateway: real travel counts as progress, not only a shrinking straight-line distance (a
+            # detour away from the goal is not a blocked robot).
+            arrival_pose=lambda: (self.x, self.y, self.yaw) if self.localized else None,
         )
         self._threads: list[threading.Thread] = []
 

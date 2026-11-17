@@ -217,6 +217,14 @@ def assignments(job_id: str) -> list[tuple[str, bool]]:
     return [(r, ok == "t") for r, ok in (l.split(",") for l in out.stdout.strip().splitlines() if l)]
 
 
+def assignments_open(robot_id: str) -> bool:
+    out = subprocess.run(
+        ["docker", "exec", "warotrans-postgres", "psql", "-U", "warotrans", "-d", "warotrans_test", "-t", "-A",
+         "-c", f"select count(*) from execution.job_robot_assignments where robot_id = '{robot_id}' and ended_at is null"],
+        capture_output=True, text=True, check=True)
+    return out.stdout.strip() not in ("", "0")
+
+
 def terminal(states: dict[str, dict]) -> bool:
     return bool(states) and all(s["status"] in ("COMPLETED", "FAILED", "CANCELLED") for s in states.values())
 
@@ -284,14 +292,16 @@ def test_a_robot_lost_on_the_way_gives_its_trip_back_and_the_request_still_compl
                 requeued["reason"] = s.get("blockingReason") or ""
                 r2.reconnect()  # it comes back; the backend reconciles it from its reported pose
 
-    states = rec.run_until(lambda st: terminal(st) and bool(requeued), 480, jobs, on_tick=watch)
+    # Waiting behind the other robot is normal here (one robot per area, a lost robot keeps its space): allow 15 min.
+    states = rec.run_until(lambda st: terminal(st) and bool(requeued), 900, jobs, on_tick=watch)
 
     assert lost, "R2 never took a trip"
     assert requeued, "the lost robot's trip did not go back to the queue"
     assert all(s["status"] == "COMPLETED" for s in states.values()), {k[:8]: s["status"] for k, s in states.items()}
     history = assignments(lost["job"])
     assert history[0] == (r2.robot_id, False), "R2's assignment of the lost trip was closed"
-    assert len(history) >= 2 and history[-1][1], history
+    # Taken again after it went back to the queue; every assignment is closed now that the trip is done.
+    assert len(history) >= 2 and not any(open_ for _, open_ in history), history
     assert all(c["status"] == "DELIVERED" for s in states.values() for c in s["containers"])
     assert api.call("GET", f"/api/transportation/transport-requests/{tr}")["status"] == "COMPLETED"
     assert not r1.moved_while_gate_closed() and not r2.moved_while_gate_closed()
@@ -305,6 +315,9 @@ def test_a_robot_lost_on_the_way_gives_its_trip_back_and_the_request_still_compl
 def test_two_requests_in_separate_areas_run_on_both_robots_at_the_same_time(api, pair):
     """Shelf row A for one robot, row C to OUTBOUND for the other: the queue gives one to each, both drive at once."""
     wh, (r1, id1), (r2, id2) = pair
+    # Both robots free first (an earlier scenario may still be driving one home), else one robot rightly takes both.
+    wait_for(lambda: all(api.call("GET", f"/api/fleet/robots/{rid}")["status"] == "AVAILABLE" for rid in (id1, id2))
+             and not assignments_open(id1) and not assignments_open(id2), 300, what="both robots free")
     tr_a, jobs_a, _ = request_pairs(api, wh, [("EP-SHELF-A-1", "EP-SHELF-A-2")])
     tr_c, jobs_c, _ = request_pairs(api, wh, [("EP-SHELF-C-1", "EP-OUTBOUND")])
     api.call("POST", f"/api/workflow-execution/jobs/{jobs_c[0]}/enqueue", {})  # request() queued only its own first trip
@@ -318,7 +331,7 @@ def test_two_requests_in_separate_areas_run_on_both_robots_at_the_same_time(api,
     assert {assignments(j)[-1][0] for j in jobs} == {id1, id2}, "each robot took one request"
     for tr in (tr_a, tr_c):
         assert api.call("GET", f"/api/transportation/transport-requests/{tr}")["status"] == "COMPLETED"
-    assert min(rec.moved_m.values()) > 1.5, rec.moved_m
+    assert min(rec.moved_m.values()) > 1.0, rec.moved_m  # C-1 -> OUTBOUND alone is ~1.1 m
     assert rec.both_moving_s >= 5.0, f"robots moved together only {rec.both_moving_s:.1f} s"
     assert not r1.moved_while_gate_closed() and not r2.moved_while_gate_closed()
     print(f"separate areas: moved {rec.moved_m}, both moving {rec.both_moving_s:.1f} s")

@@ -146,6 +146,14 @@ class Api:
         except urllib.error.HTTPError as exc:
             raw, status = exc.read(), exc.code
         parsed = json.loads(raw) if raw else {}
+        if status == 401 and auth and self.token and not getattr(self, "_relogging", False):
+            # The access token outlives no long scenario (15 min): log in again once and repeat the call.
+            self._relogging = True
+            try:
+                self.login()
+            finally:
+                self._relogging = False
+            return self.call(method, path, body, auth=auth, ok=ok)
         if status not in ok:
             raise AssertionError(f"{method} {path} → {status}: {parsed}")
         return parsed
