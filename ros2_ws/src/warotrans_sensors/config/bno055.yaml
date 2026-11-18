@@ -14,3 +14,8 @@ bno055_node:
     orientation_covariance: 0.01
     angular_velocity_covariance: 0.0004
     linear_acceleration_covariance: 0.04
+    # 2026-11-18 LiDAR ICP self-calibration on the floor (backup of the previous config on the Pi:
+    # ~/warotrans_backups/20261118_pre_recalib). Raw gyro z +2.5 % (2 x 360 deg: 6.24 vs 6.08 rad); fused yaw
+    # -0.75 % (EKF on yaw*0.975 read 3.3 % short: 6.037 vs 6.242 rad).
+    gyro_z_scale: 0.975
+    yaw_scale: 1.0075

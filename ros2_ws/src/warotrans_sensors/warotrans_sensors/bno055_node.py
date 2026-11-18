@@ -57,6 +57,10 @@ class Bno055Node(Node):
         self.declare_parameter("orientation_covariance", 0.01)
         self.declare_parameter("angular_velocity_covariance", 0.02)
         self.declare_parameter("linear_acceleration_covariance", 0.04)
+        # 2026-11-18 LiDAR self-calibration: the raw gyro z reads 2.5 % high (2 x 360 deg: 6.24 vs 6.08 rad) while
+        # the fused quaternion yaw reads ~0.75 % low, so each has its own scale. 1.0 = off.
+        self.declare_parameter("yaw_scale", 1.0)       # orientation yaw (unwrapped about the start)
+        self.declare_parameter("gyro_z_scale", 1.0)    # angular_velocity.z
 
         self._bus = int(self.get_parameter("i2c_bus").value)
         self._address = int(self.get_parameter("i2c_address").value)
@@ -138,6 +142,24 @@ class Bno055Node(Node):
         time.sleep(0.025)
         self.get_logger().info(f"BNO055 CHIP_ID OK, OPR_MODE={self._mode_name}")
 
+    def _scale_yaw(self, w, x, y, z, k):
+        """Yaw * k (unwrapped across +-pi), roll and pitch kept."""
+        roll = math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))
+        pitch = math.asin(max(-1.0, min(1.0, 2 * (w * y - z * x))))
+        yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+        last = getattr(self, "_yaw_last", None)
+        if last is None:
+            self._yaw_unwrapped = yaw
+        else:
+            self._yaw_unwrapped += math.atan2(math.sin(yaw - last), math.cos(yaw - last))
+        self._yaw_last = yaw
+        ys = self._yaw_unwrapped * k
+        cr, sr = math.cos(roll / 2), math.sin(roll / 2)
+        cp, sp = math.cos(pitch / 2), math.sin(pitch / 2)
+        cy, sy = math.cos(ys / 2), math.sin(ys / 2)
+        return (cr * cp * cy + sr * sp * sy, sr * cp * cy - cr * sp * sy,
+                cr * sp * cy + sr * cp * sy, cr * cp * sy - sr * sp * cy)
+
     def _on_timer(self) -> None:
         try:
             acc_raw = self._read_regs(REG_ACC_DATA, 6)
@@ -155,10 +177,12 @@ class Bno055Node(Node):
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = self._frame_id
 
-        msg.orientation.w = qw / QUA_SCALE
-        msg.orientation.x = qx / QUA_SCALE
-        msg.orientation.y = qy / QUA_SCALE
-        msg.orientation.z = qz / QUA_SCALE
+        w, x, y, z = qw / QUA_SCALE, qx / QUA_SCALE, qy / QUA_SCALE, qz / QUA_SCALE
+        k = float(self.get_parameter("yaw_scale").value)
+        if k != 1.0:
+            w, x, y, z = self._scale_yaw(w, x, y, z, k)
+        gz = gz * float(self.get_parameter("gyro_z_scale").value)
+        msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z = w, x, y, z
         msg.orientation_covariance[0] = self._ori_cov
         msg.orientation_covariance[4] = self._ori_cov
         msg.orientation_covariance[8] = self._ori_cov
