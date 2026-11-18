@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Start / stop the real-robot stack for Semantic traffic on the Pi (bringup + gateway), logs in ~/wt_logs.
-#   BROKER=192.168.137.1 ~/warotrans_tools/pi_run_semantic.sh start
+#   ~/warotrans_tools/pi_run_semantic.sh start              BROKER=auto (default): the backend laptop is found by
+#                                                           name / ICS address / LAN scan (broker_discovery.py)
+#   BROKER=<ip|name> ~/warotrans_tools/pi_run_semantic.sh start   pin it
 #   ~/warotrans_tools/pi_run_semantic.sh status | stop
 # MOTORS defaults to false: odometry live, the ESP32 bridge writes no velocity. MOTORS=true is for a supervised run
 # only, with a tested hardware E-stop in reach. BUNDLE selects the map (semantic bundle directory).
@@ -9,18 +11,23 @@
 # AMCL's motion noise follows it, so the odometry source and what AMCL assumes about it cannot disagree.
 set -uo pipefail
 ACTION="${1:-status}"
-BUNDLE="${BUNDLE:-$HOME/ros2_ws/src/warotrans_navigation/maps/map_one_v004}"
+BUNDLE="${BUNDLE:-$HOME/ros2_ws/src/warotrans_navigation/maps/map_one_v014}"
 SRC="$HOME/ros2_ws/src"
 LOGS="$HOME/wt_logs"
 MOTORS="${MOTORS:-false}"
 EKF="${EKF:-true}"
 # Dual-robot lab: ROBOT_CODE=RBT-002 ROS_DOMAIN_ID=31 (and a second Pi / namespace).
 ROBOT_CODE="${ROBOT_CODE:-RBT-001}"
+# Evidence (camera recording during trips, uploads to the Recorder on the backend laptop, port 5095). CAMERA=false
+# leaves the camera off; the credential WARO_EVIDENCE_TOKEN comes from ~/.config/warotrans/evidence.env (never a repo).
+CAMERA="${CAMERA:-true}"
+EVIDENCE_ENV="$HOME/.config/warotrans/evidence.env"
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 
 case "$ACTION" in
   start)
-    [[ -n "${BROKER:-}" ]] || { echo "BROKER=<backend IP> is required"; exit 2; }
+    # The laptop's address changes with the network; a name is kept as a name (MQTT and the agent re-resolve it).
+    BROKER=$(BROKER="${BROKER:-auto}" python3 "$HOME/warotrans_tools/broker_discovery.py" resolve --retry-s 30)       || { echo "backend not found (MQTT 1883): start the backend or give BROKER=<ip>"; exit 2; }
     [[ -f "$BUNDLE/semantic_manifest.json" ]] || { echo "no bundle at $BUNDLE"; exit 2; }
     if [[ "$(systemctl is-active warotrans-teleop 2>/dev/null)" == "active" ]]; then
       echo "warotrans-teleop is running (owns the ESP32 port, drives /cmd_vel): sudo systemctl stop warotrans-teleop"
@@ -47,12 +54,27 @@ case "$ACTION" in
       semantic_manifest:="$BUNDLE/semantic_manifest.json" mqtt_host:="$BROKER" \
       robot_code:="$ROBOT_CODE" \
       > "$LOGS/gateway_${ROBOT_CODE}.log" 2>&1 < /dev/null &
+    if [[ "$CAMERA" == "true" ]]; then
+      setsid nohup ros2 run warotrans_camera camera_stream --ros-args         --params-file "$SRC/warotrans_camera/config/camera_rbt001.yaml"         > "$LOGS/camera_${ROBOT_CODE}.log" 2>&1 < /dev/null &
+      if [[ -f "$EVIDENCE_ENV" ]]; then
+        set -a; source "$EVIDENCE_ENV"; set +a
+        setsid nohup ros2 run warotrans_evidence_agent evidence_agent --ros-args           --params-file "$SRC/warotrans_evidence_agent/config/evidence_agent_rbt001.yaml"           -p recorder_url:="http://$BROKER:5095" -p robot_code:="$ROBOT_CODE"           -p map_version_code:="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['mapCode'])" "$BUNDLE/semantic_manifest.json")"           > "$LOGS/evidence_${ROBOT_CODE}.log" 2>&1 < /dev/null &
+      else
+        echo "no $EVIDENCE_ENV (WARO_EVIDENCE_TOKEN=...): camera live only, no evidence recording"
+      fi
+    fi
+    # Follow the laptop if its address changes mid-session: 3 missed MQTT checks -> resolve again -> stop/start
+    # (same environment). The restart runs detached because stop kills this watcher.
+    mkdir -p "$HOME/.cache/warotrans"; echo "$BROKER" > "$HOME/.cache/warotrans/broker"
+    setsid nohup python3 "$HOME/warotrans_tools/broker_discovery.py" watch --state "$HOME/.cache/warotrans/broker"       --on-change "setsid nohup bash -c 'BROKER=auto $0 stop; sleep 3; BROKER=auto $0 start' >> $LOGS/broker_watch_${ROBOT_CODE}.log 2>&1 < /dev/null &"       >> "$LOGS/broker_watch_${ROBOT_CODE}.log" 2>&1 < /dev/null &
     echo started
     ;;
   stop)
     # Bracketed patterns: an SSH command line that mentions these names must not match (it would kill itself).
     pkill -INT -f 'ros2 launch warotrans[_]' 2>/dev/null
     sleep 6
+    pkill -INT -f 'camera_strea[m]|evidence_agen[t]' 2>/dev/null
+    pkill -f 'broker_discovery.py watc[h]' 2>/dev/null
     pkill -f 'esp32_bridge_nod[e]|wheel_odom_nod[e]|robot_gateway_nod[e]|cmd_vel_authority_gat[e]|collision_monito[r]|velocity_smoothe[r]|controller_serve[r]|planner_serve[r]|behavior_serve[r]|bt_navigato[r]|waypoint_followe[r]|nav2_amc[l]|/amc[l]|map_serve[r]|lifecycle_manage[r]|costmap_filte[r]|rplida[r]|robot_state_publishe[r]|battery_monitor_nod[e]|recovery_guar[d]|bno055_nod[e]|ekf_nod[e]' 2>/dev/null
     sleep 1
     pgrep -af 'warotrans|nav2|rplidar|amcl' | grep -v pi_run_semantic | grep -v pgrep | cut -c1-100 || true

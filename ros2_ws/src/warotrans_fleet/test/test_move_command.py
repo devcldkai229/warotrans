@@ -539,6 +539,33 @@ def test_semantic_traffic_hold_keeps_the_original_timeout():
     assert len(h.nav.cancel_requests) == 1
 
 
+def test_waiting_behind_a_healthy_robot_does_not_run_down_the_timeout():
+    wait = {"value": True}
+    h = Harness(traffic_mode="semantic_active", traffic_hold_active=lambda: wait["value"],
+                traffic_wait_active=lambda: wait["value"])
+    h.send(navigate(CMD, timeoutSeconds=30))
+    h.nav.accept()
+    for _ in range(60):          # 10 minutes in the queue behind another robot
+        h.tick(10.0)
+    assert h.nav.cancel_requests == []
+    wait["value"] = False         # its turn: from now on the 30 s count again
+    h.tick(29.0)
+    assert h.nav.cancel_requests == []
+    h.tick(2.0)
+    assert len(h.nav.cancel_requests) == 1
+
+
+def test_aborts_while_waiting_behind_traffic_are_resent_past_the_retry_cap():
+    h = Harness(traffic_mode="semantic_active", traffic_hold_active=lambda: True,
+                traffic_wait_active=lambda: True)
+    h.send(navigate(CMD, timeoutSeconds=30))
+    for _ in range(35):  # more than the 30 retries a hold of unknown cause gets
+        h.nav.accept()
+        h.tick(20.0)
+        h.nav.finish(STATUS_ABORTED)
+    assert h.recorder.results == []  # nothing reported: still waiting for its turn
+
+
 def test_legacy_mode_abort_is_reported_even_if_a_hold_is_signalled():
     h = Harness(traffic_hold_active=lambda: True)
     h.send(navigate(CMD))

@@ -117,6 +117,7 @@ def _setup(context, *args, **kwargs):
 
     # Optional last overlay(s) (e.g. sim speeds; Stage-2 lane-aware). ';' or ',' separated.
     extra_params_raw = LaunchConfiguration("extra_params_file").perform(context).strip()
+    extra_param_files: list[str] = []  # also given to recovery_guard, so a robot overlay can size its footprint
     if extra_params_raw:
         for part in extra_params_raw.replace(",", ";").split(";"):
             extra_params = os.path.expanduser(part.strip())
@@ -125,6 +126,7 @@ def _setup(context, *args, **kwargs):
             if not os.path.isfile(extra_params):
                 raise RuntimeError(f"extra_params_file not found: {extra_params}")
             param_files.append(extra_params)
+            extra_param_files.append(extra_params)
 
     lanes_json = os.path.expanduser(
         LaunchConfiguration("lanes_json").perform(context).strip()
@@ -419,10 +421,11 @@ def _setup(context, *args, **kwargs):
                 respawn=True,
                 respawn_delay=2.0,
                 parameters=[
+                    *extra_param_files,
                     {
                         "use_sim_time": use_sim_time,
                         "require_traffic_authorization": enable_authority_gate,
-                    }
+                    },
                 ],
                 remappings=remappings,
             )

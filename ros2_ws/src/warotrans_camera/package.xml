@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>warotrans_camera</name>
+  <version>0.2.0</version>
+  <description>Robot camera (Pi Camera Module 3): MJPEG server on :8081 and evidence recording (MJPEG AVI segments). Shared by RBT-001 and RBT-002.</description>
+  <maintainer email="dev@warotrans.local">WaroTrans Team</maintainer>
+  <license>Proprietary</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>diagnostic_msgs</exec_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

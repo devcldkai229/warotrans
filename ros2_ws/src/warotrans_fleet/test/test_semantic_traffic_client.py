@@ -297,6 +297,18 @@ def test_held_for_traffic_reports_recent_gate_holds_of_the_command():
     assert not client.held_for_traffic()
 
 
+def test_waiting_behind_traffic_excludes_link_authority_and_deadlock_holds():
+    client, _, _, clock = make()
+    client.on_plan(PATH, command_id=CMD)
+    client.tick((0.0, 0.0, 0.0))  # no grant yet: waiting for its turn
+    assert client.waiting_behind_traffic()
+    for fault in ("LINK_DOWN", "AUTHORITY_SILENT", "STALE_EPOCH", "DEADLOCK_RISK/DeadlockRisk blocker=x"):
+        client.last_block_reason = fault
+        assert client.held_for_traffic() and not client.waiting_behind_traffic(), fault
+    client.last_block_reason = "QUEUED/Capacity blocker=x"
+    assert client.waiting_behind_traffic()
+
+
 def test_expires_at_with_dotnet_seven_digit_fraction_parses():
     ts = stc._parse_expires_at("2026-11-04T10:00:00.1234567+00:00")
     assert abs(ts - datetime(2026, 11, 4, 10, 0, 0, 123456, tzinfo=timezone.utc).timestamp()) < 1e-6

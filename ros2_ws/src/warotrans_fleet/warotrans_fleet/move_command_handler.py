@@ -87,6 +87,9 @@ _TRAFFIC_NAV_STATUS = {
 _NAV2_CONTROLLER_BLOCK_CODES = frozenset({104, 105, 106})  # PATIENCE_EXCEEDED, FAILED_TO_MAKE_PROGRESS, NO_VALID_CONTROL
 # Moving this far counts as progress even while distance_remaining is above its best (a long detour after a replan).
 _OBSTACLE_PROGRESS_MOVE_M = 0.20
+# Turning towards the endpoint heading is progress too (the align step on an endpoint only turns): the heading error
+# has to get this much below its best so far, so turning back and forth never resets the window.
+_OBSTACLE_PROGRESS_YAW_RAD = 0.05
 _NAV2_PLANNER_ERROR_CODES = range(200, 300)
 
 _CANCEL_BY_BACKEND = "BACKEND"
@@ -112,6 +115,7 @@ class _ActiveMove:
     cancel_sessions: list[CommandSession] = field(default_factory=list)
     started: bool = False
     traffic_retries: int = 0
+    deadline_tick_at: Optional[float] = None
     obstacle_retries: int = 0
     last_feedback: Optional[NavFeedback] = None
     last_progress_log_at: Optional[float] = None
@@ -120,6 +124,7 @@ class _ActiveMove:
     # Obstacle window: last_progress_at slides forward while the gate holds the robot, so a traffic wait is not counted.
     last_tick_at: Optional[float] = None
     progress_pose: Optional[tuple[float, float]] = None
+    progress_best_yaw_err: Optional[float] = None
     last_stage: Optional[int] = None
     # First planner failure since the last progress. A closed gate cannot cause "no path", so this ignores holds.
     planner_failing_since: Optional[float] = None
@@ -160,6 +165,7 @@ class MoveCommandHandler:
         traffic_client: Optional["TrafficClient"] = None,
         expected_graph_hash: Optional[str] = None,
         traffic_hold_active: Callable[[], bool] = lambda: False,
+        traffic_wait_active: Callable[[], bool] = lambda: False,
         max_traffic_retries: int = 30,
         obstacle_wait_sec: float = 60.0,
         arrival_settle_sec: float = 0.0,
@@ -187,6 +193,9 @@ class MoveCommandHandler:
         # semantic_active: the authority gate held the robot for traffic (no grant / outside reservation). Nav2's
         # progress checker then aborts the goal although nothing failed; such an abort re-sends the goal instead.
         self._traffic_hold_active = traffic_hold_active
+        # Held behind another robot (not a lost link, a silent backend or a wait-for cycle): that wait is not a failure
+        # of this robot, so it neither runs down timeoutSeconds nor uses up the traffic retries.
+        self._traffic_wait_active = traffic_wait_active
         self._motion_hold_active = motion_hold_active
         self._max_traffic_retries = int(max_traffic_retries)
         self._obstacle_wait_sec = float(obstacle_wait_sec)
@@ -227,6 +236,17 @@ class MoveCommandHandler:
             if self._active_traffic_mode():
                 return self._traffic_client.command_id  # type: ignore[union-attr]
             return self._active.command_id if self._active is not None else None
+
+    @property
+    def active_command_context(self) -> Optional[dict]:
+        """The backend command the robot is executing, for local observers (evidence recording); None when idle."""
+        with self._lock:
+            move = self._active
+            if move is None:
+                return None
+            c = move.command
+            return {"commandId": c.command_id, "type": c.command_type, "jobAssignmentId": c.job_assignment_id,
+                    "jobStepId": c.job_step_id}
 
     @property
     def navigation_status(self) -> str:
@@ -386,6 +406,7 @@ class MoveCommandHandler:
                     )
                     return
 
+            self._pause_deadline_while_waiting(move, now)
             if move.deadline is not None and now >= move.deadline and move.cancel_reason is None:
                 self._log.warning(
                     f"[NavigationTimeout] commandId={move.command_id} exceeded timeoutSeconds="
@@ -497,6 +518,7 @@ class MoveCommandHandler:
             if move.timeout_sec is not None and move.deadline is None:
                 # Once per command: a goal re-sent after a traffic hold keeps the original timeoutSeconds.
                 move.deadline = now + move.timeout_sec
+                move.deadline_tick_at = now
             t = move.target
             gx, gy = self._nav2_goal_xy(t.x, t.y, t.yaw)
             goal = NavGoal(command_id=move.command_id, frame_id=t.frame_id, x=gx, y=gy, yaw=t.yaw,
@@ -780,6 +802,7 @@ class MoveCommandHandler:
         move.last_progress_at = now
         move.planner_failing_since = None
         move.progress_pose = None
+        move.progress_best_yaw_err = None
 
     def _traffic_hold_is_active(self) -> bool:
         if self._traffic_mode != "semantic_active":
@@ -807,6 +830,16 @@ class MoveCommandHandler:
                 move.progress_pose = (pose[0], pose[1])
             elif math.hypot(pose[0] - move.progress_pose[0], pose[1] - move.progress_pose[1]) >= _OBSTACLE_PROGRESS_MOVE_M:
                 self._mark_progress(move, now)
+                return False
+            t = move.target
+            yaw_err = abs(math.atan2(math.sin(pose[2] - t.yaw), math.cos(pose[2] - t.yaw)))
+            anchor = move.progress_best_yaw_err  # heading error when progress was last marked
+            if anchor is None:
+                move.progress_best_yaw_err = yaw_err
+            elif yaw_err <= anchor - _OBSTACLE_PROGRESS_YAW_RAD:
+                self._mark_progress(move, now)
+                move.progress_pose = (pose[0], pose[1])
+                move.progress_best_yaw_err = yaw_err
                 return False
         return (
             move.started
@@ -874,9 +907,27 @@ class MoveCommandHandler:
             f"arrivalErrorYaw={fields['arrivalErrorYawRad']:.3f}rad"
         )
 
+    def _waiting_behind_traffic(self) -> bool:
+        if self._traffic_mode != "semantic_active":
+            return False
+        try:
+            return bool(self._traffic_wait_active())
+        except Exception:  # noqa: BLE001 — unknown → counts like any other time
+            return False
+
+    def _pause_deadline_while_waiting(self, move: _ActiveMove, now: float) -> None:
+        """Moves the deadline on by the time spent waiting behind another robot since the last tick."""
+        since = now - move.deadline_tick_at if move.deadline_tick_at is not None else 0.0
+        move.deadline_tick_at = now
+        if move.deadline is not None and since > 0 and self._waiting_behind_traffic():
+            move.deadline += since
+
     def _held_for_traffic(self, move: _ActiveMove) -> bool:
         if self._traffic_mode != "semantic_active" or move.cancel_reason is not None:
             return False
+        if self._waiting_behind_traffic():
+            # Behind a healthy robot: no retry cap, and the deadline is paused while waiting anyway.
+            return True
         if move.traffic_retries >= self._max_traffic_retries:
             return False
         if move.deadline is not None and self._clock() >= move.deadline:

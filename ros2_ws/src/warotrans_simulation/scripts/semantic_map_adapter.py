@@ -70,7 +70,7 @@ def world_to_pixel(
 
 # More than the footprint radius (hypot(0.18, 0.15) = 0.234 m).
 # Usual cruise of the real robot (nav2_params FollowPath desired_linear_vel; 2026-11-13: 0.10 -> 0.40 m/s, operator).
-CRUISE_SPEED_MPS = 0.40
+CRUISE_SPEED_MPS = 0.35
 KEEPOUT_PLANNING_INFLATE_M = 0.25
 
 
@@ -240,16 +240,25 @@ def export_zone_list(zones: Iterable[dict[str, Any]], zone_type: str) -> list[di
         rings = polygon_rings(z.get("geometry"))
         if not rings:
             continue
-        out.append(
-            {
-                "id": str(z.get("id") or ""),
-                "code": str(z.get("code") or ""),
-                "name": str(z.get("name") or ""),
-                "zone_type": zt,
-                "max_speed": z.get("max_speed") if z.get("max_speed") is not None else z.get("maxSpeed"),
-                "rings": [[[p[0], p[1]] for p in ring] for ring in rings],
-            }
-        )
+        entry = {
+            "id": str(z.get("id") or ""),
+            "code": str(z.get("code") or ""),
+            "name": str(z.get("name") or ""),
+            "zone_type": zt,
+            "max_speed": z.get("max_speed") if z.get("max_speed") is not None else z.get("maxSpeed"),
+            "rings": [[[p[0], p[1]] for p in ring] for ring in rings],
+        }
+        # SINGLE_OCCUPANCY area with a queue point (zone policy queueEndpointCode): the backend sends a robot there
+        # while another robot is in the area.
+        policy = z.get("policy")
+        if isinstance(policy, str):
+            try:
+                policy = json.loads(policy)
+            except ValueError:
+                policy = None
+        if isinstance(policy, dict) and isinstance(policy.get("queueEndpointCode"), str) and policy["queueEndpointCode"]:
+            entry["queueEndpointCode"] = policy["queueEndpointCode"]
+        out.append(entry)
     return out
 
 

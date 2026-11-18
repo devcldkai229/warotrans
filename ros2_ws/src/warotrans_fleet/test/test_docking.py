@@ -7,7 +7,7 @@ import pytest
 from fleet_fakes import FakeNavigator
 
 from warotrans_fleet.docking import DockingGeometry, OccupancyMap, StraightMove
-from warotrans_fleet.docking_navigator import CONTROLLER_FORWARD, CONTROLLER_REVERSE, DockingNavigator
+from warotrans_fleet.docking_navigator import CONTROLLER_ALIGN, CONTROLLER_DOCK, CONTROLLER_REVERSE, DockingNavigator
 from warotrans_fleet.navigator import STATUS_ABORTED, STATUS_SUCCEEDED, GoalCallbacks, GoalTicket, NavGoal
 
 FOOTPRINT = [(0.21, 0.13), (0.21, -0.13), (-0.11, -0.13), (-0.11, 0.13)]
@@ -41,6 +41,24 @@ def geometry():
 def test_open_floor_needs_no_docking(geometry):
     plan = geometry.plan((2.0, 1.0, 0.0), (3.0, 1.0, math.pi / 2))
     assert plan.plain
+
+
+def test_min_run_in_approaches_even_an_open_floor_goal_straight_along_its_heading():
+    # 2026-11-15 SHELF-C-1: turning on the endpoint itself slid the robot out of the 0.12 m tolerance again and again.
+    geo = DockingGeometry(bay_map(), FOOTPRINT, padding=0.02, min_run_in=0.25)
+    plan = geo.plan((2.0, 1.0, 0.0), (3.0, 1.0, math.pi / 2))
+    assert not plan.plain and plan.run_in is not None and plan.approach is not None
+    assert plan.run_in.length >= 0.25 - 1e-9
+    ax, ay, ayaw = plan.approach
+    assert ax == pytest.approx(3.0) and ayaw == pytest.approx(math.pi / 2)  # on the endpoint axis, endpoint heading
+
+
+def test_min_run_in_prefers_the_side_with_a_long_enough_straight_run_over_a_nearer_short_one():
+    # 2026-11-15 SHELF-B-2: a 0.05 m forward run in on one side must not win over a 0.25 m reverse one on the other.
+    geo = DockingGeometry(bay_map(), FOOTPRINT, padding=0.02, min_run_in=0.25)
+    for start in ((2.0, 1.0, 0.0), (3.0, 1.6, math.pi)):
+        plan = geo.plan(start, (3.0, 1.0, math.pi / 2))
+        assert plan.run_in is not None and plan.run_in.length >= 0.25 - 1e-9
 
 
 def test_facing_out_of_the_bay_turns_outside_and_backs_in(geometry):
@@ -113,7 +131,7 @@ class FakeFollow:
     def is_ready(self):
         return True
 
-    def send_path(self, command_id, frame_id, poses, controller_id, ticket, callbacks):
+    def send_path(self, command_id, frame_id, poses, controller_id, ticket, callbacks, goal_checker_id=None):
         self.goals.append((list(poses), controller_id, ticket, callbacks))
 
     def cancel_goal(self, ticket, on_response):
@@ -220,7 +238,7 @@ def test_forward_controller_for_a_forward_run_in(geometry):
     nav.send_goal(NavGoal("c5", "map", 0.30, 1.0, math.pi), GoalTicket(), Sink().callbacks())
     _at(where, inner.goals[0][0])
     _ok(inner.goals[0][2])
-    assert follow.goals[0][1] == CONTROLLER_FORWARD
+    assert follow.goals[0][1] == CONTROLLER_DOCK
 
 
 def test_run_in_is_skipped_when_the_robot_already_stands_on_the_endpoint(geometry):
@@ -254,14 +272,15 @@ def test_without_a_position_tolerance_the_configured_arrive_distance_applies(geo
     assert len(follow.goals) == 1 and sink.results == []
 
 
-def test_run_in_starts_from_where_the_robot_stopped(geometry):
+def test_run_in_starts_on_the_bay_axis_where_the_robot_stopped(geometry):
     where = Where((2.5, 1.0, math.pi))
     nav, inner, follow, _ = _nav(geometry, where)
     nav.send_goal(NavGoal("c7", "map", 0.30, 1.0, 0.0), GoalTicket(), Sink().callbacks())
     where.pose = (0.52, 1.02, 0.01)
     _ok(inner.goals[0][2])
     poses = follow.goals[0][0]
-    assert poses[0][:2] == pytest.approx((0.52, 1.02)) and poses[-1][:2] == pytest.approx((0.30, 1.0))
+    # The projection of the stop onto the bay axis, not a diagonal from it (2026-11-15: a diagonal turned the body).
+    assert poses[0][:2] == pytest.approx((0.52, 1.0)) and poses[-1][:2] == pytest.approx((0.30, 1.0))
     assert follow.goals[0][1] == CONTROLLER_REVERSE
 
 
@@ -284,10 +303,28 @@ def test_a_run_in_that_stalls_close_to_the_wall_goes_on_to_align(geometry):
     cb = follow.goals[0][3]
     cb.on_response(True, None)
     cb.on_result(NavResult(status=STATUS_ABORTED))
-    assert sink.results == [] and len(inner.goals) == 2  # align: NavigateToPose onto the endpoint itself
-    assert (inner.goals[1][0].x, inner.goals[1][0].y, inner.goals[1][0].yaw) == (0.30, 1.0, 0.0)
-    _ok(inner.goals[1][2])
+    # align: the slow in-place FollowPath turn onto the endpoint heading
+    assert sink.results == [] and len(inner.goals) == 1 and len(follow.goals) == 2
+    poses, controller = follow.goals[1][0], follow.goals[1][1]
+    # a 2 cm path from where the robot stands along the endpoint heading: RPP can only turn towards that heading
+    assert controller == CONTROLLER_ALIGN and poses[0] == pytest.approx((0.32, 1.0, 0.0))
+    assert poses[-1] == pytest.approx((0.34, 1.0, 0.0))
+    _ok(follow.goals[1][3])
     assert sink.results[0].status == STATUS_SUCCEEDED
+
+
+def test_a_pivot_that_slid_off_the_bay_axis_drives_the_turning_point_again(geometry):
+    where = Where((2.5, 1.0, math.pi))
+    nav, inner, follow, _ = _nav(geometry, where)
+    nav.send_goal(NavGoal("c9", "map", 0.30, 1.0, 0.0), GoalTicket(), Sink().callbacks())
+    approach = inner.goals[0][0]
+    where.pose = (approach.x, approach.y + 0.12, approach.yaw)  # the pivot slid 0.12 m sideways
+    _ok(inner.goals[0][2])
+    assert len(inner.goals) == 2 and not follow.goals  # travel again, no diagonal run in
+    assert (inner.goals[1][0].x, inner.goals[1][0].y) == (approach.x, approach.y)
+    _at(where, inner.goals[1][0])
+    _ok(inner.goals[1][2])
+    assert len(follow.goals) == 1  # now the run in
 
 
 def _nav_opts(geometry, start, **options):

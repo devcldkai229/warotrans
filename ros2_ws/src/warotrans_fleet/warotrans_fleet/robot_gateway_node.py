@@ -11,6 +11,7 @@ Threading:
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import queue
@@ -110,6 +111,7 @@ class RobotGatewayNode(Node):
         self.declare_parameter("docking_footprint", "[[0.21, 0.13], [0.21, -0.13], [-0.11, -0.13], [-0.11, 0.13]]")
         self.declare_parameter("docking_padding", 0.03)
         self.declare_parameter("docking_max_dist", 0.9)
+        self.declare_parameter("docking_min_run_in_m", 0.0)
         # Getting unstuck: re-plan and dock again after a failed run in / align / exit, or after Nav2 gave up this
         # close to the endpoint (it could not turn there).
         self.declare_parameter("docking_max_redocks", 2)
@@ -117,6 +119,9 @@ class RobotGatewayNode(Node):
         self.declare_parameter("docking_arrive_xy_m", 0.10)
         self.declare_parameter("docking_align_yaw_rad", 0.15)
         self.declare_parameter("docking_redock_radius_m", 0.6)
+        self.declare_parameter("docking_approach_lateral_m", 0.04)
+        self.declare_parameter("docking_approach_yaw_rad", 0.05)
+        self.declare_parameter("docking_max_approach_retries", 2)
         self.declare_parameter("follow_path_action", "follow_path")
         self.declare_parameter("navigate_action", "navigate_to_pose")
         self.declare_parameter("heartbeat_hz", 1.0)
@@ -350,6 +355,7 @@ class RobotGatewayNode(Node):
                 graph_path=self._str_param("route_graph").strip() or None,
             ),
             traffic_hold_active=lambda: self._semantic_client is not None and self._semantic_client.held_for_traffic(),
+            traffic_wait_active=lambda: self._semantic_client is not None and self._semantic_client.waiting_behind_traffic(),
             arrival_pose=self._traffic_pose,
             arrival_settle_sec=1.0,
             motion_hold_active=lambda: self._motion_hold.held,
@@ -427,6 +433,21 @@ class RobotGatewayNode(Node):
         self._inbox: "queue.SimpleQueue[tuple[str, dict[str, Any]]]" = queue.SimpleQueue()
         self._inbox_signal = self.create_guard_condition(self._drain_inbox)
         self.create_timer(1.0 / tick_hz, self._commands.router.tick)
+
+        # Local observers (the evidence agent records while a backend command runs) learn what runs right now.
+        from std_msgs.msg import String as _String
+        self._active_command_pub = self.create_publisher(_String, "/fleet/active_command", 10)
+        self._active_command_last: Optional[str] = None
+        self._active_command_sent_at = 0.0
+
+        def _publish_active_command() -> None:
+            data = json.dumps(self._commands.move.active_command_context)
+            now = time.monotonic()
+            if data != self._active_command_last or now - self._active_command_sent_at >= 5.0:
+                self._active_command_pub.publish(_String(data=data))
+                self._active_command_last, self._active_command_sent_at = data, now
+
+        self.create_timer(0.5, _publish_active_command)
 
         self.mqtt.start()
 
@@ -515,6 +536,7 @@ class RobotGatewayNode(Node):
             geometry = DockingGeometry(
                 OccupancyMap.load(map_yaml), footprint, padding=self._float_param("docking_padding"),
                 max_dist=self._float_param("docking_max_dist"),
+                min_run_in=self._float_param("docking_min_run_in_m"),
             )
             follow = Nav2FollowPathClient(self, self._str_param("follow_path_action"))
         except Exception as exc:  # noqa: BLE001
@@ -528,6 +550,9 @@ class RobotGatewayNode(Node):
             arrive_xy_m=self._float_param("docking_arrive_xy_m"),
             align_yaw_rad=self._float_param("docking_align_yaw_rad"),
             redock_radius_m=self._float_param("docking_redock_radius_m"),
+            approach_lateral_m=self._float_param("docking_approach_lateral_m"),
+            approach_yaw_rad=self._float_param("docking_approach_yaw_rad"),
+            max_approach_retries=int(self.get_parameter("docking_max_approach_retries").value),
         )
 
     def _nav2_base_pose(self) -> Optional[tuple[float, float, float]]:

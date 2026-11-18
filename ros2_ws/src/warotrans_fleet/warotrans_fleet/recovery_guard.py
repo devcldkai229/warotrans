@@ -140,7 +140,19 @@ if _HAS_RCLPY:  # pragma: no cover - needs rclpy; the decisions are tested throu
             self._traffic_timeout = float(self.get_parameter("traffic_timeout_sec").value)
             self._base = str(self.get_parameter("base_frame").value)
             self._global = str(self.get_parameter("global_frame").value)
-            self._cfg = GuardConfig()
+            # Body size per robot (RBT-002 is 0.30 x 0.264 m): defaults are RBT-001's, overlays set the others.
+            defaults = GuardConfig()
+            for name in ("half_length", "half_width", "padding", "max_backup_m"):
+                self.declare_parameter(name, float(getattr(defaults, name)))
+            self._cfg = GuardConfig(
+                half_length=float(self.get_parameter("half_length").value),
+                half_width=float(self.get_parameter("half_width").value),
+                padding=float(self.get_parameter("padding").value),
+                max_backup_m=float(self.get_parameter("max_backup_m").value),
+            )
+            self.get_logger().info(
+                f"footprint half {self._cfg.half_length:.3f} x {self._cfg.half_width:.3f} m, padding {self._cfg.padding:.3f} m"
+            )
             self._group = ReentrantCallbackGroup()
             self._tf = Buffer()
             self._listener = TransformListener(self._tf, self)

@@ -1,0 +1,11 @@
+# RBT-001 camera (Camera Module 3, nominal 75 deg as declared by the operator; axis not verified).
+camera_stream:
+  ros__parameters:
+    port: 8081
+    width: 1280
+    height: 720
+    framerate: 15
+    quality: 80
+    rotation: 0
+    camera_model: "Raspberry Pi Camera Module 3"
+    segment_seconds: 30.0

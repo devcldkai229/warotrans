@@ -37,6 +37,13 @@ from warotrans_fleet.navigator import (
 
 CONTROLLER_FORWARD = "FollowPath"
 CONTROLLER_REVERSE = "FollowPathReverse"
+# Straight forward run in / exit (2026-11-15): slow, curvature from a fixed point projected past the goal, so the last
+# centimetres do not spin the robot on a small lateral offset the way the cruise controller does.
+CONTROLLER_DOCK = "FollowPathDock"
+# Final turn on the endpoint (2026-11-15, 1 deg): a slow in-place controller and a goal checker that only asks for the
+# heading. At 10 Hz the cruise rotate speed (0.5 rad/s) moves ~2.9 deg per cycle, wider than a +-1 deg window.
+CONTROLLER_ALIGN = "FollowPathAlign"
+GOAL_CHECKER_ALIGN = "align_goal_checker"
 
 
 class FollowPathPort(Protocol):
@@ -45,7 +52,7 @@ class FollowPathPort(Protocol):
 
     def send_path(
         self, command_id: str, frame_id: str, poses: Sequence[Pose], controller_id: str, ticket: GoalTicket,
-        callbacks: GoalCallbacks,
+        callbacks: GoalCallbacks, goal_checker_id: Optional[str] = None,
     ) -> None:
         ...
 
@@ -71,6 +78,7 @@ class _Run:
     cancelled: bool = False
     finished: bool = False
     redocks: int = 0
+    approach_retries: int = 0  # travel stage sent again because the pivot at the turning point slid off the bay axis
     epoch: int = 0  # bumped by a re-dock: callbacks of the stages before it are stale
 
 
@@ -88,8 +96,17 @@ class DockingNavigator:
         align_yaw_rad: float = 0.06,
         max_redocks: int = 2,
         redock_radius_m: float = 0.6,
+        approach_lateral_m: float = 0.04,
+        approach_yaw_rad: float = 0.05,
+        max_approach_retries: int = 2,
     ) -> None:
         self._arrive_xy = float(arrive_xy_m)
+        # 2026-11-15 lab (EP-INBOUND, MAP-ONE-V009): the pivot at the turning point slid the robot 0.17 m off the bay
+        # axis, the run in then went in on a diagonal, ended 36 deg off and the align could not turn next to the wall.
+        # The turning point is therefore checked before the run in and driven again while it is missed by more than this.
+        self._approach_lateral = float(approach_lateral_m)
+        self._approach_yaw = float(approach_yaw_rad)
+        self._max_approach_retries = max(0, int(max_approach_retries))
         self._align_yaw = float(align_yaw_rad)
         self._max_redocks = max(0, int(max_redocks))
         self._redock_radius = float(redock_radius_m)
@@ -124,7 +141,7 @@ class DockingNavigator:
             return
         plan = self._plan(goal)
         # A plain goal runs as a one-stage run too, so a failure next to the endpoint can still re-dock.
-        stages = self._stages(goal, plan) if plan is not None else [_Stage("travel", goal=goal)]
+        stages = self._stages(goal, plan) if plan is not None else [_Stage("travel", goal=goal), _Stage("align", goal=goal)]
         run = _Run(goal=goal, callbacks=callbacks, stages=stages)
         ticket.handle = run
         if plan is not None:
@@ -146,8 +163,8 @@ class DockingNavigator:
             stages.append(_Stage("travel", goal=goal))
         if plan.run_in is not None:
             stages.append(_Stage("run_in", move=plan.run_in))
-            # A straight move cannot correct the heading: a last small in-place turn on the endpoint, if needed.
-            stages.append(_Stage("align", goal=goal))
+        # Every goal ends with the slow in-place turn to the endpoint heading (skipped when already within it).
+        stages.append(_Stage("align", goal=goal))
         return stages
 
     @staticmethod
@@ -182,6 +199,17 @@ class DockingNavigator:
                 self._log(f"[Docking] commandId={run.goal.command_id} align skipped: on the endpoint")
                 self._skip(run)
                 return
+            if here is not None:
+                # Turn in place: a 2 cm path that starts where the robot stands and points along the endpoint heading.
+                # A path to the endpoint itself turned the robot the wrong way at EP-SHELF-B-1 (2026-11-15): the
+                # endpoint was behind it, so RPP turned towards that carrot. With this path both RPP branches (turn
+                # to the goal heading, turn to the path) turn towards the endpoint heading. The position is the
+                # gateway's arrival check (positionTolerance), not this stage's.
+                poses = [(here[0], here[1], g.yaw),
+                         (here[0] + 0.02 * math.cos(g.yaw), here[1] + 0.02 * math.sin(g.yaw), g.yaw)]
+                self._follow.send_path(run.goal.command_id, run.goal.frame_id, poses, CONTROLLER_ALIGN, run.inner,
+                                       callbacks, goal_checker_id=GOAL_CHECKER_ALIGN)
+                return
         if stage.goal is not None:
             self._inner.send_goal(stage.goal, run.inner, callbacks)
             return
@@ -197,13 +225,17 @@ class DockingNavigator:
                     self._skip(run)
                     return
                 along = (move.end[0] - here[0]) * math.cos(move.yaw) + (move.end[1] - here[1]) * math.sin(move.yaw)
-                move = StraightMove((here[0], here[1]), move.end, move.yaw, reverse=along < 0)
+                # Start on the bay axis (the projection of where the robot stands), never on a diagonal from an
+                # off-axis stop: the controller follows the path line, so a diagonal turns the body away from the
+                # endpoint heading and leaves the align a large turn next to the wall.
+                start = (move.end[0] - along * math.cos(move.yaw), move.end[1] - along * math.sin(move.yaw))
+                move = StraightMove(start, move.end, move.yaw, reverse=along < 0)
         poses = move.poses()
         try:
             self._propose(poses)
         except Exception as exc:  # noqa: BLE001
             self._log(f"[Docking] traffic proposal failed: {type(exc).__name__}: {exc}")
-        controller = CONTROLLER_REVERSE if move.reverse else CONTROLLER_FORWARD
+        controller = CONTROLLER_REVERSE if move.reverse else CONTROLLER_DOCK
         self._follow.send_path(run.goal.command_id, run.goal.frame_id, poses, controller, run.inner, callbacks)
 
     def _close_enough(self, run: _Run, index: int) -> bool:
@@ -213,6 +245,30 @@ class DockingNavigator:
             return False
         here = self._current_pose()
         return here is not None and math.hypot(stage.move.end[0] - here[0], stage.move.end[1] - here[1]) <= self._arrive_for(run)
+
+    def _approach_error(self, run: _Run, index: int) -> Optional[tuple[float, float]]:
+        """(lateral offset from the bay axis, heading error) at the turning point; None if not a turning point."""
+        stage = run.stages[index]
+        nxt = run.stages[index + 1] if index + 1 < len(run.stages) else None
+        if stage.kind != "travel" or stage.goal is None or nxt is None or nxt.kind != "run_in" or nxt.move is None:
+            return None
+        here = self._current_pose()
+        if here is None:
+            return None
+        end, yaw = nxt.move.end, nxt.move.yaw
+        lateral = abs(-(here[0] - end[0]) * math.sin(yaw) + (here[1] - end[1]) * math.cos(yaw))
+        heading = abs(math.atan2(math.sin(here[2] - stage.goal.yaw), math.cos(here[2] - stage.goal.yaw)))
+        return lateral, heading
+
+    def _approach_missed(self, run: _Run, index: int) -> bool:
+        if run.approach_retries >= self._max_approach_retries:
+            return False
+        err = self._approach_error(run, index)
+        return err is not None and (err[0] > self._approach_lateral or err[1] > self._approach_yaw)
+
+    def _approach_text(self, run: _Run, index: int) -> str:
+        err = self._approach_error(run, index)
+        return "no pose" if err is None else f"lateral={err[0]:.3f}m yaw={err[1]:.3f}rad"
 
     def _arrive_for(self, run: _Run) -> float:
         """On the endpoint when this close: the NAVIGATE's positionTolerance (the target Endpoint's), else the
@@ -308,13 +364,23 @@ class DockingNavigator:
                 return
             last = index + 1 >= len(run.stages)
             ok = result.status == STATUS_SUCCEEDED or self._close_enough(run, index)
-            if ok and not last and not run.cancelled:
+            retry_approach = ok and not last and not run.cancelled and self._approach_missed(run, index)
+            if retry_approach:
+                run.approach_retries += 1
+                run.inner = GoalTicket()
+                go_on = False
+            elif ok and not last and not run.cancelled:
                 run.index += 1
                 self._log(f"[Docking] commandId={run.goal.command_id} {run.stages[index].kind} done; "
                           f"{self._describe(run.stages[run.index])}")
                 go_on = True
             else:
                 go_on = False
+        if retry_approach:
+            self._log(f"[Docking] commandId={run.goal.command_id} turning point missed ({self._approach_text(run, index)}); "
+                      f"travel again {run.approach_retries}/{self._max_approach_retries}")
+            self._start_stage(run)
+            return
         if go_on:
             self._start_stage(run)
             return
