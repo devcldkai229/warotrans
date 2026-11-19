@@ -333,7 +333,9 @@ velocity_smoother:
     odom_topic: /odom
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
-    velocity_timeout: 1.0
+    # 2026-11-19: 1.0 -> 0.5 s. If the controller dies, the smoother repeats its last command for this long
+    # (0.35 m at cruise with 1.0 s). 0.5 s = 5 missed 10 Hz controller cycles; then it sends 0 (a stop, safe).
+    velocity_timeout: 0.5
 
     # CRITICAL: esp32_bridge_node expects geometry_msgs/Twist, NOT TwistStamped
     enable_stamped_cmd_vel: false

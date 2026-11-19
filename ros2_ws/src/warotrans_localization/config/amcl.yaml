@@ -6,9 +6,16 @@
 #   AMCL owns the map -> odom transform during navigation.
 #
 # NOTES
-#   - robot_model_type: nav2_amcl::DifferentialMotionModel (skid-steer approximation)
-#   - alpha1-5 tuned slightly higher than default for skid-steer slip
-#   - Particles limited for Pi 5 CPU budget
+#   - EKF variant (enable_ekf:=true, the default of tools/pi_run_semantic.sh). Motion comes from the EKF, whose
+#     heading is the BNO055 (within 0.07 % of the LiDAR, 2026-11-18), not from the slipping wheel yaw: alpha1-4
+#     stay low (0.15). Raising them would only spread the particles. amcl_wheel_only.yaml is the no-EKF variant.
+#   - robot_model_type: nav2_amcl::DifferentialMotionModel (the Nav2 name of ROS 1 "diff-corrected")
+#   - Light for the Pi 5 CPU (2026-11-11, commit 2cc95f2): 300-800 particles; AMCL after turns 0.02-0.04 m /
+#     <= 2.4 deg against the scan match. The update thresholds and laser model are the same as RBT-002's
+#     (amcl_rbt002.yaml), which tracks well with them.
+#   - Keys tuned per variant (warotrans_navigation/test/test_recovery_tree.py TUNED_PER_SOURCE): alpha1-4,
+#     update_min_d/a, sigma_hit, laser_likelihood_max_dist, min/max_particles, max_beams. Everything else must
+#     match amcl_wheel_only.yaml.
 #   - set_initial_pose: true — PROVISIONAL boot pose so map->odom exists for Nav2 activate.
 #     Operator must overwrite via RViz "2D Pose Estimate" before trusting goals.
 #
@@ -28,7 +35,9 @@ amcl:
     scan_topic: "/scan"
     laser_max_range: 12.0      # RPLIDAR A1M8 max ~12m, matches slam_toolbox
     laser_min_range: 0.15      # A1M8 min ~0.15m
-    max_beams: 60              # TUNING: subsample for CPU; A1M8 has ~360 points (60 was sparse at corners)
+    # 2026-11-19: 60 -> 90 (one beam per 4 deg; RBT-002 and amcl_wheel_only.yaml use 90). 60 was chosen with the
+    # particle cut on 2026-11-11 and is sparse at the lab's corners. CHECK the Pi load average after deploying.
+    max_beams: 90
 
     # ----- Motion model (DifferentialMotionModel for skid-steer approx) -----
     robot_model_type: "nav2_amcl::DifferentialMotionModel"

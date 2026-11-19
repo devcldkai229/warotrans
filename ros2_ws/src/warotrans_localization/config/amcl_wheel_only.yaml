@@ -1,6 +1,8 @@
-# Same as amcl.yaml except alpha1-4: the wheel-only values for enable_ekf:=false (tools/pi_run_semantic.sh EKF=false).
-# amcl.yaml lowered them on the assumption that the EKF supplies the yaw; wheel yaw on this skid-steer is far worse
-# (docs/calibration.md: ~29 deg of drift over 2 m). test_recovery_tree.py keeps the two files otherwise identical.
+# No-EKF variant (enable_ekf:=false, tools/pi_run_semantic.sh EKF=false). Differs from amcl.yaml only in the keys
+# tuned per variant (test_recovery_tree.py TUNED_PER_SOURCE): higher alpha1-4 because the wheel yaw on this
+# skid-steer is far worse (docs/calibration.md: ~29 deg of drift over 2 m), and more frequent updates with a
+# sharper laser model (2026-11-11: update_min 0.05 m / 0.08 rad, sigma_hit 0.1, likelihood field 1.0 m) so each
+# correction stays small, plus 500-2000 particles. amcl.yaml (EKF) keeps the lighter values: its yaw comes from the IMU.
 # =============================================================================
 # WaroTrans AMCL Configuration (Nav2 Phase 0)
 # =============================================================================
