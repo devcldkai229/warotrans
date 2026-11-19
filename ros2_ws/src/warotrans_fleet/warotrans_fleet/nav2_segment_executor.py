@@ -257,7 +257,11 @@ class Nav2SegmentExecutor:
             except Exception:  # noqa: BLE001
                 current = None
         if current is None:
-            current = 0.0
+            # Spin.target_yaw is relative: guessing current=0 would turn by the absolute target yaw.
+            # (robot_gateway_node does not pass get_yaw_fn yet, so Active Mode SPIN steps abort here.)
+            self._log("[Nav2SegmentExecutor] current yaw unavailable; refusing Spin")
+            self._finish(RESULT_ABORTED, "SPIN_YAW_UNAVAILABLE")
+            return
         spin_dist = _normalize_angle(float(step.yaw_target) - float(current))
 
         goal = self._Spin.Goal()

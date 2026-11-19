@@ -17,6 +17,8 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Imu
 
+from .yaw_tracker import YawTracker, quaternion_ok, quaternion_to_rpy, rpy_to_quaternion
+
 # Linux I2C
 I2C_SLAVE = 0x0703
 
@@ -87,11 +89,19 @@ class Bno055Node(Node):
         self._fd: Optional[int] = None
         self._publisher = self.create_publisher(Imu, "/imu/data", 10)
 
+        # Continuous, scaled yaw that is joined back on after a chip reset (yaw_tracker.py).
+        self._tracker = YawTracker(float(self.get_parameter("yaw_scale").value))
+        self._bad_quaternions = 0
+        self._ready = False
+
         self._open_bus()
         self._configure_sensor()
+        self._ready = True
 
         period = 1.0 / rate
         self._timer = self.create_timer(period, self._on_timer)
+        # A brown-out or I2C glitch resets the BNO055 into CONFIG mode (no fusion, zero quaternion).
+        self._health_timer = self.create_timer(1.0, self._check_chip)
         self.get_logger().info(
             f"BNO055 ready on {self._device} addr=0x{self._address:02X} "
             f"frame={self._frame_id} rate={rate:.1f} Hz"
@@ -134,7 +144,8 @@ class Bno055Node(Node):
         time.sleep(0.025)
         self._write_reg(REG_PAGE_ID, 0x00)
         self._write_reg(REG_PWR_MODE, 0x00)  # NORMAL
-        # Unit select: Android orientation, deg/s gyro, m/s^2 accel (default-ish)
+        # Unit select 0x00: Windows orientation (only the sign of the Euler pitch output, not used here;
+        # the quaternion is unaffected), deg/s gyro, m/s^2 accel, degrees Euler, Celsius.
         self._write_reg(REG_UNIT_SEL, 0x00)
         self._write_reg(REG_SYS_TRIGGER, 0x00)
         time.sleep(0.010)
@@ -142,25 +153,33 @@ class Bno055Node(Node):
         time.sleep(0.025)
         self.get_logger().info(f"BNO055 CHIP_ID OK, OPR_MODE={self._mode_name}")
 
-    def _scale_yaw(self, w, x, y, z, k):
-        """Yaw * k (unwrapped across +-pi), roll and pitch kept."""
-        roll = math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))
-        pitch = math.asin(max(-1.0, min(1.0, 2 * (w * y - z * x))))
-        yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
-        last = getattr(self, "_yaw_last", None)
-        if last is None:
-            self._yaw_unwrapped = yaw
-        else:
-            self._yaw_unwrapped += math.atan2(math.sin(yaw - last), math.cos(yaw - last))
-        self._yaw_last = yaw
-        ys = self._yaw_unwrapped * k
-        cr, sr = math.cos(roll / 2), math.sin(roll / 2)
-        cp, sp = math.cos(pitch / 2), math.sin(pitch / 2)
-        cy, sy = math.cos(ys / 2), math.sin(ys / 2)
-        return (cr * cp * cy + sr * sp * sy, sr * cp * cy - cr * sp * sy,
-                cr * sp * cy + sr * cp * sy, cr * cp * sy - sr * sp * cy)
+    def _check_chip(self) -> None:
+        """1 Hz: reconfigure the chip if it left the fusion mode (reset), keeping yaw continuous."""
+        want = FUSION_MODES[self._mode_name]
+        try:
+            mode = self._read_regs(REG_OPR_MODE, 1)[0] & 0x0F
+        except OSError as exc:
+            self.get_logger().warn(f"BNO055 mode check failed: {exc}", throttle_duration_sec=5.0)
+            return
+        if mode == want and self._ready:
+            return
+        if self._ready:
+            self._ready = False
+            self._tracker.on_chip_reset()
+            self.get_logger().error(
+                f"BNO055 reset detected (OPR_MODE=0x{mode:02X}, want 0x{want:02X}): reconfiguring, "
+                f"yaw is joined onto the last published value")
+        try:
+            self._configure_sensor()
+        except (OSError, RuntimeError) as exc:  # the chip needs ~650 ms after a power-on reset
+            self.get_logger().warn(f"BNO055 reconfigure failed, retrying in 1 s: {exc}")
+            return
+        self._ready = True
+        self.get_logger().error(f"BNO055 reconfigured after reset #{self._tracker.resets}; yaw kept continuous")
 
     def _on_timer(self) -> None:
+        if not self._ready:
+            return
         try:
             acc_raw = self._read_regs(REG_ACC_DATA, 6)
             gyr_raw = self._read_regs(REG_GYR_DATA, 6)
@@ -178,9 +197,16 @@ class Bno055Node(Node):
         msg.header.frame_id = self._frame_id
 
         w, x, y, z = qw / QUA_SCALE, qx / QUA_SCALE, qy / QUA_SCALE, qz / QUA_SCALE
-        k = float(self.get_parameter("yaw_scale").value)
-        if k != 1.0:
-            w, x, y, z = self._scale_yaw(w, x, y, z, k)
+        if not quaternion_ok(w, x, y, z):
+            # Zero / garbage quaternion: chip resetting or in CONFIG. Drop the whole sample (gyro too).
+            self._bad_quaternions += 1
+            self.get_logger().warn(
+                f"BNO055 invalid quaternion ({self._bad_quaternions} so far), sample dropped",
+                throttle_duration_sec=2.0)
+            return
+        self._tracker.scale = float(self.get_parameter("yaw_scale").value)
+        roll, pitch, raw_yaw = quaternion_to_rpy(w, x, y, z)
+        w, x, y, z = rpy_to_quaternion(roll, pitch, self._tracker.update(raw_yaw))
         gz = gz * float(self.get_parameter("gyro_z_scale").value)
         msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z = w, x, y, z
         msg.orientation_covariance[0] = self._ori_cov
