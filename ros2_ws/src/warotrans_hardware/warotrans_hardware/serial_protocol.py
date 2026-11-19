@@ -57,7 +57,8 @@ def format_velocity_command(linear_mps: float, angular_rps: float) -> str:
 
 
 # Runtime drive tuning understood by warotrans_low_level.ino ("C <name> <value>").
-CONFIG_NAMES = ("min_duty", "closed_loop", "kp", "ki")
+# mpt_l / mpt_r: wheel metres per encoder tick (PI speed measurement); sep: effective wheel separation (mixer).
+CONFIG_NAMES = ("min_duty", "closed_loop", "kp", "ki", "mpt_l", "mpt_r", "sep")
 
 
 def format_config_command(name: str, value: float) -> str:
@@ -67,7 +68,29 @@ def format_config_command(name: str, value: float) -> str:
         raise ValueError(f"unknown config name {name!r}; expected one of {CONFIG_NAMES}")
     if not math.isfinite(value) or value < 0.0:
         raise ValueError(f"{name} must be a finite non-negative number")
-    return f"C {name} {value:g}\n"
+    # 9 significant digits: metres per tick (~8.4e-05) keeps its precision; integers print as before.
+    return f"C {name} {value:.9g}\n"
+
+
+def wheel_geometry_commands(
+    ticks_per_rev_left: float,
+    ticks_per_rev_right: float,
+    wheel_radius_left: float,
+    wheel_radius_right: float,
+    wheel_separation: float,
+) -> list[str]:
+    """``C mpt_l / mpt_r / sep`` lines from the wheel_odom_node values, so the ESP32 PI measures wheel speed
+    with the same calibration as the odometry. A value <= 0 (not configured) sends nothing for that item and
+    the firmware keeps its built-in default."""
+
+    lines = []
+    for name, ticks, radius in (("mpt_l", ticks_per_rev_left, wheel_radius_left),
+                                ("mpt_r", ticks_per_rev_right, wheel_radius_right)):
+        if math.isfinite(ticks) and math.isfinite(radius) and ticks > 0.0 and radius > 0.0:
+            lines.append(format_config_command(name, 2.0 * math.pi * radius / ticks))
+    if math.isfinite(wheel_separation) and wheel_separation > 0.0:
+        lines.append(format_config_command("sep", wheel_separation))
+    return lines
 
 
 def parse_config_ack(line: bytes | str) -> Optional[tuple[str, str]]:

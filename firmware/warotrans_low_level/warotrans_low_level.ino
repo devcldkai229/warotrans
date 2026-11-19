@@ -25,9 +25,14 @@ constexpr uint8_t right_encoder_c1_pin = 11;
 // Command setpoint only; real velocity must come from encoder odometry
 // and Phase 7B physical testing.
 constexpr float commissioning_full_scale_linear = 0.32F;  // m/s at 100% duty
-constexpr float wheel_separation = 0.4535F;  // effective, operator 2026-09-07
-constexpr float commissioning_full_scale_angular =
-    2.0F * commissioning_full_scale_linear / wheel_separation;  // ~1.411 rad/s
+// Effective (slip) wheel separation of the skid-steer mixer. Runtime "C sep <m>" from hardware.yaml;
+// default = hardware.yaml 2026-11-19 (LiDAR ICP 2026-11-18: 0.378 CCW / 0.413 CW, was 0.4535).
+constexpr float wheel_separation_min = 0.25F;
+constexpr float wheel_separation_max = 0.60F;
+float cfg_wheel_separation = 0.395F;
+float commissioning_full_scale_angular() {  // ~1.62 rad/s at 0.395
+  return 2.0F * commissioning_full_scale_linear / cfg_wheel_separation;
+}
 
 // Motor polarity — commissioning configuration, flip if a side runs backwards.
 // Commissioning 2026-09-04: FORWARD(+linear) turned left and LEFT(+angular)
@@ -81,7 +86,8 @@ constexpr uint32_t motor_pwm_limit_duty =
 // DEFAULT OFF — keep current open-loop behavior until bench PID calib.
 // RISK: non-zero gains without measurement can overshoot / fight motors.
 // ROLLBACK: leave USE_WHEEL_VELOCITY_CLOSED_LOOP false, or reflash prior build.
-// Calib constants mirror ros2_ws/.../hardware.yaml (operator 2026-09-07).
+// Wheel metres per encoder tick: runtime "C mpt_l / mpt_r", computed by esp32_bridge_node from the same
+// hardware.yaml values wheel_odom_node uses, so the PI and the odometry cannot disagree again.
 // ---------------------------------------------------------------------------
 constexpr bool USE_WHEEL_VELOCITY_CLOSED_LOOP = false;
 // PROVISIONAL — require physical step-response / in-place 90° calib. Do NOT invent.
@@ -90,10 +96,12 @@ constexpr float WHEEL_VEL_KP = 0.0F;
 constexpr float WHEEL_VEL_KI = 0.0F;
 // Wheels commanded slower than this are treated as stopped (no deadband kick).
 constexpr float wheel_moving_epsilon_mps = 0.005F;
-constexpr float odom_ticks_per_rev_left = 2478.1F;
-constexpr float odom_ticks_per_rev_right = 2478.1F;
-constexpr float odom_wheel_radius_left = 0.03296F;
-constexpr float odom_wheel_radius_right = 0.03263F;
+// Defaults = hardware.yaml 2026-11-19: 2*pi*r/ticks, r 0.03340 / 0.03306 m, ticks 2481.9 / 2468.6.
+// (Before: 2478.1 ticks both sides and r 0.03296 / 0.03263: the right wheel ran 0.53 % fast -> left drift.)
+constexpr float metres_per_tick_min = 5.0e-5F;
+constexpr float metres_per_tick_max = 2.0e-4F;
+float cfg_mpt_left = 2.0F * 3.14159265358979323846F * 0.03340F / 2481.9F;
+float cfg_mpt_right = 2.0F * 3.14159265358979323846F * 0.03306F / 2468.6F;
 constexpr uint32_t wheel_vel_control_period_ms = 20;
 
 constexpr size_t command_buffer_size = 64;
@@ -295,6 +303,29 @@ bool handle_config_command(const char* line) {
     pid_integral_left = 0.0F;
     pid_integral_right = 0.0F;
     Serial.printf("K ki %.3f\n", cfg_ki);
+  } else if (strcmp(name, "mpt_l") == 0 || strcmp(name, "mpt_r") == 0) {
+    // Out-of-range values are refused: a typo must not make the PI chase a wrong speed.
+    if (value < metres_per_tick_min || value > metres_per_tick_max) {
+      Serial.printf("K ERR %s\n", name);
+      return true;
+    }
+    if (name[4] == 'l') {
+      cfg_mpt_left = value;
+    } else {
+      cfg_mpt_right = value;
+    }
+    pid_integral_left = 0.0F;
+    pid_integral_right = 0.0F;
+    Serial.printf("K %s %.6e\n", name, value);
+  } else if (strcmp(name, "sep") == 0) {
+    if (value < wheel_separation_min || value > wheel_separation_max) {
+      Serial.printf("K ERR %s\n", name);
+      return true;
+    }
+    cfg_wheel_separation = value;
+    pid_integral_left = 0.0F;
+    pid_integral_right = 0.0F;
+    Serial.printf("K sep %.4f\n", cfg_wheel_separation);
   } else {
     Serial.printf("K ERR %s\n", name);
   }
@@ -313,11 +344,11 @@ bool is_reset_command(const char* line) {
 }
 
 bool motion_config_ready() {
-  return isfinite(wheel_separation) && wheel_separation > 0.0F &&
+  return isfinite(cfg_wheel_separation) && cfg_wheel_separation > 0.0F &&
          isfinite(commissioning_full_scale_linear) &&
          commissioning_full_scale_linear > 0.0F &&
-         isfinite(commissioning_full_scale_angular) &&
-         commissioning_full_scale_angular > 0.0F;
+         isfinite(commissioning_full_scale_angular()) &&
+         commissioning_full_scale_angular() > 0.0F;
 }
 
 uint32_t duty_from_wheel_speed(float wheel_speed) {
@@ -412,17 +443,11 @@ void apply_wheel_velocities(float left_speed, float right_speed) {
                        RIGHT_MOTOR_INVERTED);
 }
 
-float ticks_to_mps(int32_t delta_ticks,
-                   float ticks_per_rev,
-                   float wheel_radius,
-                   float dt_s) {
-  if (dt_s <= 0.0F || ticks_per_rev <= 0.0F || wheel_radius <= 0.0F) {
+float ticks_to_mps(int32_t delta_ticks, float metres_per_tick, float dt_s) {
+  if (dt_s <= 0.0F || metres_per_tick <= 0.0F) {
     return 0.0F;
   }
-  const float meters =
-      (static_cast<float>(delta_ticks) / ticks_per_rev) *
-      (2.0F * 3.14159265358979323846F * wheel_radius);
-  return meters / dt_s;
+  return static_cast<float>(delta_ticks) * metres_per_tick / dt_s;
 }
 
 uint32_t clamp_duty_u32(float duty_f) {
@@ -490,11 +515,9 @@ void update_wheel_velocity_closed_loop(uint32_t now) {
   const float dt_s =
       static_cast<float>(now - speed_sample_ms) * 0.001F;
   const float meas_left = ticks_to_mps(
-      signed_left - speed_sample_left_ticks, odom_ticks_per_rev_left,
-      odom_wheel_radius_left, dt_s);
+      signed_left - speed_sample_left_ticks, cfg_mpt_left, dt_s);
   const float meas_right = ticks_to_mps(
-      signed_right - speed_sample_right_ticks, odom_ticks_per_rev_right,
-      odom_wheel_radius_right, dt_s);
+      signed_right - speed_sample_right_ticks, cfg_mpt_right, dt_s);
   speed_sample_left_ticks = signed_left;
   speed_sample_right_ticks = signed_right;
   speed_sample_ms = now;
@@ -528,14 +551,14 @@ void handle_velocity_command(float linear_mps, float angular_rps) {
 
   linear_mps = constrain(linear_mps, -commissioning_full_scale_linear,
                          commissioning_full_scale_linear);
-  angular_rps = constrain(angular_rps, -commissioning_full_scale_angular,
-                          commissioning_full_scale_angular);
+  const float angular_max = commissioning_full_scale_angular();
+  angular_rps = constrain(angular_rps, -angular_max, angular_max);
 
-  // Skid-steer: left = v - w*W/2, right = v + w*W/2 (W effective 0.4535).
+  // Skid-steer: left = v - w*W/2, right = v + w*W/2 (W = effective cfg_wheel_separation).
   float left_speed =
-      linear_mps - angular_rps * wheel_separation / 2.0F;
+      linear_mps - angular_rps * cfg_wheel_separation / 2.0F;
   float right_speed =
-      linear_mps + angular_rps * wheel_separation / 2.0F;
+      linear_mps + angular_rps * cfg_wheel_separation / 2.0F;
 
   const float peak = fmaxf(fabsf(left_speed), fabsf(right_speed));
   if (peak > commissioning_full_scale_linear) {

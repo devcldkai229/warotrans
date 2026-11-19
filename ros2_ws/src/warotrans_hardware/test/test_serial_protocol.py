@@ -8,6 +8,7 @@ from warotrans_hardware.serial_protocol import (
     parse_battery_line,
     parse_config_ack,
     parse_encoder_line,
+    wheel_geometry_commands,
 )
 
 
@@ -55,6 +56,23 @@ def test_format_config_command():
     assert format_config_command("min_duty", 60.0) == "C min_duty 60\n"
     assert format_config_command("closed_loop", 1.0) == "C closed_loop 1\n"
     assert format_config_command("kp", 250.5) == "C kp 250.5\n"
+
+
+def test_format_config_command_wheel_geometry():
+    mpt = 2 * math.pi * 0.03340 / 2481.9
+    line = format_config_command("mpt_l", mpt)
+    assert line.startswith("C mpt_l 8.4555") and line.endswith("e-05\n")
+    assert float(line.split()[2]) == pytest.approx(mpt, rel=1e-8)
+    assert format_config_command("sep", 0.395) == "C sep 0.395\n"
+
+
+def test_wheel_geometry_commands():
+    lines = wheel_geometry_commands(2481.9, 2468.6, 0.03340, 0.03306, 0.395)
+    assert [line.split()[1] for line in lines] == ["mpt_l", "mpt_r", "sep"]
+    assert float(lines[1].split()[2]) == pytest.approx(2 * math.pi * 0.03306 / 2468.6, rel=1e-8)
+    # Not configured (0) -> nothing sent, the firmware keeps its default.
+    assert wheel_geometry_commands(0.0, 0.0, 0.0, 0.0, 0.0) == []
+    assert [line.split()[1] for line in wheel_geometry_commands(2481.9, 0.0, 0.0334, 0.033, 0.0)] == ["mpt_l"]
 
 
 @pytest.mark.parametrize("name, value", [("speed", 1.0), ("kp", -1.0), ("ki", math.inf)])

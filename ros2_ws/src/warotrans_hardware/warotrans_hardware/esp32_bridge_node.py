@@ -19,6 +19,7 @@ from .serial_protocol import (
     parse_battery_line,
     parse_config_ack,
     parse_encoder_line,
+    wheel_geometry_commands,
 )
 
 
@@ -37,6 +38,13 @@ class Esp32BridgeNode(Node):
         self.declare_parameter("wheel_velocity_closed_loop", False)
         self.declare_parameter("wheel_velocity_kp", 0.0)
         self.declare_parameter("wheel_velocity_ki", 0.0)
+        # Wheel geometry shared with wheel_odom_node (hardware.yaml "/**" block): sent as C mpt_l / mpt_r / sep so
+        # the ESP32 PI and mixer use the odometry calibration. 0 = not configured, firmware default kept.
+        self.declare_parameter("ticks_per_rev_left", 0.0)
+        self.declare_parameter("ticks_per_rev_right", 0.0)
+        self.declare_parameter("wheel_radius_left", 0.0)
+        self.declare_parameter("wheel_radius_right", 0.0)
+        self.declare_parameter("wheel_separation", 0.0)
         # Authority gate on (semantic traffic): the gate's own topic, and only the gate may publish it.
         self.declare_parameter("cmd_vel_topic", "/cmd_vel")
         self.declare_parameter("required_cmd_vel_publisher", "")
@@ -57,6 +65,12 @@ class Esp32BridgeNode(Node):
             format_config_command("kp", float(self.get_parameter("wheel_velocity_kp").value)),
             format_config_command("ki", float(self.get_parameter("wheel_velocity_ki").value)),
         ]
+        self._drive_config += wheel_geometry_commands(
+            *(float(self.get_parameter(n).value) for n in (
+                "ticks_per_rev_left", "ticks_per_rev_right", "wheel_radius_left", "wheel_radius_right",
+                "wheel_separation"))
+        )
+        self.get_logger().info("ESP32 drive config: " + "; ".join(line.strip() for line in self._drive_config))
         self._last_mcu_millis: Optional[int] = None
 
         self._publisher = self.create_publisher(WheelTicks, "/wheel_ticks", 10)

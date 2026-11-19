@@ -42,14 +42,17 @@
 # =============================================================================
 
 wheel:
-  # Operator re-measure 2026-09-07 (10-rev + straight 2.00 m @ 15%)
-  radius_left: 0.03296
-  radius_right: 0.03263
-  ticks_per_rev_left: 2478.1
-  ticks_per_rev_right: 2478.1
-  # Effective separation — operator 2026-09-07:
-  # mean of two rotation-derived values (0.4274 + 0.4795) / 2 = 0.45345 ≈ 0.4535 m
-  separation: 0.4535
+  # Mirror of warotrans_hardware/config/hardware.yaml "/**" (the source the nodes and the ESP32 actually use).
+  # Radii: operator 2026-09-07 (10-rev + straight 2.00 m @ 15%) x 1.0133 from the 2026-11-18 LiDAR ICP
+  # (odom 1.3 % short); was 0.03296 / 0.03263.
+  radius_left: 0.03340
+  radius_right: 0.03306
+  # Operator 2026-11-11: 10 turns of each front wheel counted (was 2478.1 both).
+  ticks_per_rev_left: 2481.9
+  ticks_per_rev_right: 2468.6
+  # Effective separation: 2026-11-18 LiDAR ICP 2 x 360 deg, 0.378 CCW / 0.413 CW -> 0.395 m
+  # (was 0.4535 = mean of 0.4274 / 0.4795, operator 2026-09-07).
+  separation: 0.395
 
 lidar:
   # metres / radians, relative to base_link, REP-103 (+X front, +Y left, +Z up)
