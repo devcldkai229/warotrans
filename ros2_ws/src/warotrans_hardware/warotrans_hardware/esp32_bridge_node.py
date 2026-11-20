@@ -18,7 +18,7 @@ from .serial_protocol import (
     format_velocity_command,
     parse_battery_line,
     parse_config_ack,
-    parse_encoder_line,
+    parse_encoder_frame,
     wheel_geometry_commands,
 )
 
@@ -45,6 +45,16 @@ class Esp32BridgeNode(Node):
         self.declare_parameter("wheel_radius_left", 0.0)
         self.declare_parameter("wheel_radius_right", 0.0)
         self.declare_parameter("wheel_separation", 0.0)
+        self.declare_parameter("ticks_per_rev_rear_left", 0.0)
+        self.declare_parameter("ticks_per_rev_rear_right", 0.0)
+        self.declare_parameter("wheel_radius_rear_left", 0.0)
+        self.declare_parameter("wheel_radius_rear_right", 0.0)
+        # Rear encoders (2026-11-20): flip a side's rear sign without a reflash, and let the PI measure each side as
+        # the mean of front and rear wheel. Keep the feedback OFF until the rear signs and mpt are verified: a wrong
+        # sign would average the side speed to ~0 (the firmware also falls back by itself, "K FAULT rear_fb").
+        self.declare_parameter("rear_invert_left", False)
+        self.declare_parameter("rear_invert_right", False)
+        self.declare_parameter("wheel_rear_encoder_feedback", False)
         # Authority gate on (semantic traffic): the gate's own topic, and only the gate may publish it.
         self.declare_parameter("cmd_vel_topic", "/cmd_vel")
         self.declare_parameter("required_cmd_vel_publisher", "")
@@ -68,8 +78,16 @@ class Esp32BridgeNode(Node):
         self._drive_config += wheel_geometry_commands(
             *(float(self.get_parameter(n).value) for n in (
                 "ticks_per_rev_left", "ticks_per_rev_right", "wheel_radius_left", "wheel_radius_right",
-                "wheel_separation"))
+                "wheel_separation", "ticks_per_rev_rear_left", "ticks_per_rev_rear_right",
+                "wheel_radius_rear_left", "wheel_radius_rear_right"))
         )
+        # Rear signs before rear_fb: the feedback must never run one cycle on the old sign.
+        self._drive_config += [
+            format_config_command("rinv_l", 1.0 if bool(self.get_parameter("rear_invert_left").value) else 0.0),
+            format_config_command("rinv_r", 1.0 if bool(self.get_parameter("rear_invert_right").value) else 0.0),
+            format_config_command(
+                "rear_fb", 1.0 if bool(self.get_parameter("wheel_rear_encoder_feedback").value) else 0.0),
+        ]
         self.get_logger().info("ESP32 drive config: " + "; ".join(line.strip() for line in self._drive_config))
         self._last_mcu_millis: Optional[int] = None
 
@@ -230,6 +248,12 @@ class Esp32BridgeNode(Node):
                         name, value = ack
                         if name == "ERR":
                             self.get_logger().error(f"ESP32 rejected drive config '{value}'")
+                        elif name == "FAULT":
+                            # e.g. "K FAULT rear_fb": front and rear wheel of a side disagreed for 300 ms, the
+                            # firmware switched the rear feedback off (front encoders only) until it is resent.
+                            self.get_logger().error(
+                                f"ESP32 FAULT {value}: front/rear encoders disagree, rear feedback switched off "
+                                "(check the rear encoder wiring / rear_invert_*; restart the bridge to re-enable)")
                         else:
                             self.get_logger().info(f"ESP32 drive config {name}={value}")
                         continue
@@ -245,12 +269,12 @@ class Esp32BridgeNode(Node):
                         self._battery_publisher.publish(sample)
                         continue
 
-                    parsed = parse_encoder_line(raw_line)
-                    if parsed is None:
+                    frame = parse_encoder_frame(raw_line)
+                    if frame is None:
                         self._log_malformed_throttled(raw_line)
                         continue
 
-                    left_ticks, right_ticks, mcu_millis = parsed
+                    left_ticks, right_ticks, mcu_millis = frame.left, frame.right, frame.mcu_millis
                     # First telemetry after connecting, or MCU clock went backwards (ESP32
                     # reset): the firmware is running with defaults, push the tuning again.
                     if self._last_mcu_millis is None or mcu_millis < self._last_mcu_millis:
@@ -260,11 +284,19 @@ class Esp32BridgeNode(Node):
                     message.left_ticks = left_ticks
                     message.right_ticks = right_ticks
                     message.mcu_millis = mcu_millis
+                    if frame.rear_left is not None and frame.rear_right is not None:
+                        message.rear_left_ticks = frame.rear_left
+                        message.rear_right_ticks = frame.rear_right
+                        message.rear_valid = True
                     self._publisher.publish(message)
             except (serial.SerialException, OSError) as exc:
                 self._log_error_throttled(
                     f"ESP32 serial error on {self._serial_port}: {exc}"
                 )
+            except (TypeError, ValueError):
+                # destroy_node() closed the port under a blocking read (pyserial then reads fd None).
+                if not self._stop_event.is_set():
+                    raise
             finally:
                 with self._connection_lock:
                     if self._connection is connection:
@@ -282,8 +314,14 @@ class Esp32BridgeNode(Node):
                 self._stop_event.wait(1.0)
 
     def destroy_node(self) -> bool:
+        # Stop first, while the port is still open: once _stop_event is set the reader thread closes the port, and
+        # the stop then hit a closed port (TypeError in pyserial, bench test 2026-11-20). The firmware watchdog
+        # (300 ms) stops the motors anyway; this makes the stop immediate.
+        try:
+            self._send_velocity_command(0.0, 0.0)
+        except (TypeError, ValueError):
+            pass
         self._stop_event.set()
-        self._send_velocity_command(0.0, 0.0)
         with self._connection_lock:
             connection = self._connection
         if connection is not None:

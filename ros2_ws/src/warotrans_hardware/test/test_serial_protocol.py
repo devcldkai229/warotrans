@@ -117,3 +117,26 @@ def test_rejects_malformed_battery_lines():
 
 def test_battery_line_is_not_an_encoder_line():
     assert parse_encoder_line(b"B 2280 32 120345\n") is None
+
+
+def test_parse_encoder_frame_front_only_and_four_wheels():
+    from warotrans_hardware.serial_protocol import EncoderFrame, parse_encoder_frame
+
+    assert parse_encoder_frame(b"O 120 -85 5020\n") == EncoderFrame(120, -85, 5020, None, None)
+    assert parse_encoder_frame("O 1 2 -3 4 99\r\n") == EncoderFrame(1, 2, 99, -3, 4)
+    # The old 3-tuple API keeps the front wheels of a 4-wheel line.
+    assert parse_encoder_line("O 1 2 -3 4 99\n") == (1, 2, 99)
+    for bad in (b"O 1 2 3 4\n", b"O 1 2 3 4 5 6\n", b"O 1 2 x 4 5\n", b"O 1 2 3 4 -5\n"):
+        assert parse_encoder_frame(bad) is None
+
+
+def test_rear_config_commands():
+    assert format_config_command("rinv_l", 1.0) == "C rinv_l 1\n"
+    assert format_config_command("rear_fb", 0.0) == "C rear_fb 0\n"
+    lines = wheel_geometry_commands(2481.9, 2468.6, 0.0334, 0.03306, 0.395, 2400.0, 2500.0, 0.033, 0.034)
+    assert [line.split()[1] for line in lines] == ["mpt_l", "mpt_r", "mpt_rl", "mpt_rr", "sep"]
+    assert float(lines[2].split()[2]) == pytest.approx(2 * math.pi * 0.033 / 2400.0, rel=1e-8)
+
+
+def test_fault_ack():
+    assert parse_config_ack(b"K FAULT rear_fb\n") == ("FAULT", "rear_fb")

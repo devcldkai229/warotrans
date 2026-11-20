@@ -9,8 +9,11 @@ import rclpy
 from geometry_msgs.msg import TransformStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
+from std_msgs.msg import Float32MultiArray
 from tf2_ros import TransformBroadcaster
 from warotrans_msgs.msg import WheelTicks
+
+from .wheel_odom_math import SlipWindow, metres_per_tick, side_distance
 
 
 class WheelOdomNode(Node):
@@ -24,6 +27,14 @@ class WheelOdomNode(Node):
         self.declare_parameter("wheel_radius_left", 0.0)
         self.declare_parameter("wheel_radius_right", 0.0)
         self.declare_parameter("wheel_separation", 0.0)
+        # Rear encoders (2026-11-20). 0 = same as the front wheel of the side. use_rear_encoders averages front and
+        # rear wheel per side; keep it false until the rear signs (esp32_bridge_node rear_invert_*) and these
+        # values are verified on the robot. /wheel_slip is published either way.
+        self.declare_parameter("ticks_per_rev_rear_left", 0.0)
+        self.declare_parameter("ticks_per_rev_rear_right", 0.0)
+        self.declare_parameter("wheel_radius_rear_left", 0.0)
+        self.declare_parameter("wheel_radius_rear_right", 0.0)
+        self.declare_parameter("use_rear_encoders", False)
         self.declare_parameter("odom_frame", "odom")
         self.declare_parameter("base_frame", "base_footprint")
         # When EKF owns odom→base_footprint, set publish_tf:=false (topic /odom stays).
@@ -58,8 +69,26 @@ class WheelOdomNode(Node):
         self._pose_cov = self._covariance_matrix("pose_covariance_diagonal")
         self._twist_cov = self._covariance_matrix("twist_covariance_diagonal")
         self._validate_parameters()
+        g = lambda n: float(self.get_parameter(n).value)  # noqa: E731
+        self._mpt_left = metres_per_tick(self._wheel_radius_left, self._ticks_per_rev_left)
+        self._mpt_right = metres_per_tick(self._wheel_radius_right, self._ticks_per_rev_right)
+        self._mpt_rear_left = (metres_per_tick(g("wheel_radius_rear_left"), g("ticks_per_rev_rear_left"))
+                               if g("wheel_radius_rear_left") > 0.0 and g("ticks_per_rev_rear_left") > 0.0
+                               else self._mpt_left)
+        self._mpt_rear_right = (metres_per_tick(g("wheel_radius_rear_right"), g("ticks_per_rev_rear_right"))
+                                if g("wheel_radius_rear_right") > 0.0 and g("ticks_per_rev_rear_right") > 0.0
+                                else self._mpt_right)
+        self._use_rear = bool(self.get_parameter("use_rear_encoders").value)
+        self._slip_window = SlipWindow(0.5)
+        self._rear_missing_warned = False
+        self.get_logger().info(
+            f"wheel odometry: {'front + rear (mean per side)' if self._use_rear else 'front'} encoders, "
+            f"m/tick FL {self._mpt_left:.4e} FR {self._mpt_right:.4e} "
+            f"RL {self._mpt_rear_left:.4e} RR {self._mpt_rear_right:.4e}")
 
         self._odom_publisher = self.create_publisher(Odometry, "/odom", 10)
+        # [left, right] (front - rear) / larger wheel distance over 0.5 s windows: ~0 = no slip.
+        self._slip_publisher = self.create_publisher(Float32MultiArray, "/wheel_slip", 10)
         self._tf_broadcaster = (
             TransformBroadcaster(self) if self._publish_tf else None
         )
@@ -76,6 +105,7 @@ class WheelOdomNode(Node):
         )
 
         self._last_ticks: Optional[tuple[int, int]] = None
+        self._last_rear: Optional[tuple[int, int]] = None
         self._last_mcu_millis: Optional[int] = None
         self._last_stamp = None
         self._x = 0.0
@@ -127,9 +157,15 @@ class WheelOdomNode(Node):
     def _on_wheel_ticks(self, message: WheelTicks) -> None:
         now = self.get_clock().now()
         current_ticks = (int(message.left_ticks), int(message.right_ticks))
+        current_rear = ((int(message.rear_left_ticks), int(message.rear_right_ticks))
+                        if message.rear_valid else None)
+        if self._use_rear and current_rear is None and not self._rear_missing_warned:
+            self._rear_missing_warned = True
+            self.get_logger().warning("use_rear_encoders=true but the ESP32 sends no rear ticks: front only")
 
         if self._last_ticks is None:
             self._last_ticks = current_ticks
+            self._last_rear = current_rear
             self._last_mcu_millis = int(message.mcu_millis)
             self._last_stamp = now
             self._publish_odometry(now, 0.0, 0.0)
@@ -147,6 +183,7 @@ class WheelOdomNode(Node):
                     "MCU timestamp moved backwards; resetting odometry baseline"
                 )
                 self._last_ticks = current_ticks
+                self._last_rear = current_rear
                 self._last_mcu_millis = int(message.mcu_millis)
                 self._last_stamp = now
                 self._publish_odometry(now, 0.0, 0.0)
@@ -156,16 +193,15 @@ class WheelOdomNode(Node):
         delta_left_ticks = current_ticks[0] - previous_left
         delta_right_ticks = current_ticks[1] - previous_right
 
-        distance_per_left_tick = (
-            2.0 * math.pi * self._wheel_radius_left
-            / self._ticks_per_rev_left
-        )
-        distance_per_right_tick = (
-            2.0 * math.pi * self._wheel_radius_right
-            / self._ticks_per_rev_right
-        )
-        d_left = delta_left_ticks * distance_per_left_tick
-        d_right = delta_right_ticks * distance_per_right_tick
+        front_left = delta_left_ticks * self._mpt_left
+        front_right = delta_right_ticks * self._mpt_right
+        rear_left: Optional[float] = None
+        rear_right: Optional[float] = None
+        if current_rear is not None and self._last_rear is not None:
+            rear_left = (current_rear[0] - self._last_rear[0]) * self._mpt_rear_left
+            rear_right = (current_rear[1] - self._last_rear[1]) * self._mpt_rear_right
+        d_left = side_distance(front_left, rear_left, self._use_rear)
+        d_right = side_distance(front_right, rear_right, self._use_rear)
         d_s = (d_right + d_left) / 2.0
         d_theta = (d_right - d_left) / self._wheel_separation
 
@@ -184,7 +220,13 @@ class WheelOdomNode(Node):
         linear_velocity = d_s / dt if dt > 0.0 else 0.0
         angular_velocity = d_theta / dt if dt > 0.0 else 0.0
 
+        if rear_left is not None and rear_right is not None:
+            slip = self._slip_window.add(dt, front_left, rear_left, front_right, rear_right)
+            if slip is not None:
+                self._slip_publisher.publish(Float32MultiArray(data=[float(slip[0]), float(slip[1])]))
+
         self._last_ticks = current_ticks
+        self._last_rear = current_rear
         self._last_mcu_millis = int(message.mcu_millis)
         self._last_stamp = now
         self._publish_odometry(

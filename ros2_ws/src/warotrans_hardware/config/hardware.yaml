@@ -15,6 +15,12 @@
     # 0.378 m CCW / 0.413 m CW (mean 0.395). Was 0.4535 (operator 2026-09-07, mean of 0.4274 / 0.4795): the
     # mixer then turned the robot 11-19 % faster than commanded. Used by the odometry yaw and the ESP32 mixer.
     wheel_separation: 0.395
+    # Rear wheel encoders (operator 2026-11-20: LR C2/C1 GPIO12/13, RR GPIO14/15, 3V3). NOT MEASURED YET: the front
+    # values of the same side until the 2 m straight runs give the rear metres per tick (C mpt_rl / mpt_rr).
+    ticks_per_rev_rear_left: 2481.9
+    ticks_per_rev_rear_right: 2468.6
+    wheel_radius_rear_left: 0.03340
+    wheel_radius_rear_right: 0.03306
 
 esp32_bridge_node:
   ros__parameters:
@@ -36,10 +42,20 @@ esp32_bridge_node:
     wheel_velocity_closed_loop: true
     wheel_velocity_kp: 600.0
     wheel_velocity_ki: 1500.0
+    # Rear encoders, ENABLE IN THIS ORDER on the robot: (1) wheels lifted, slow forward: all four counts must rise
+    # (flip rear_invert_* where a rear count falls; no reflash); (2) measure the rear m/tick; (3) feedback on.
+    # Feedback on = the PI measures each side as the mean of front and rear wheel. With a wrong rear sign that mean
+    # is ~0 and the PI would drive full duty; the firmware then switches it off by itself ("K FAULT rear_fb").
+    rear_invert_left: false
+    rear_invert_right: false
+    wheel_rear_encoder_feedback: false
 
 wheel_odom_node:
   ros__parameters:
     # ticks_per_rev_* / wheel_radius_* / wheel_separation: the "/**" block at the top of this file.
+    # true = each side's distance is the mean of its front and rear wheel (after the rear signs / m/tick are
+    # verified, see esp32_bridge_node above). /wheel_slip (front vs rear per side) is published either way.
+    use_rear_encoders: false
     odom_frame: odom
     base_frame: base_footprint
     # true = wheel owns TF odom→base_footprint (Phase 0 default).

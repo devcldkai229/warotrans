@@ -3,21 +3,26 @@
 from __future__ import annotations
 
 import math
-from typing import Optional
+from typing import NamedTuple, Optional
 
 INT64_MIN = -(2**63)
 INT64_MAX = 2**63 - 1
 UINT32_MAX = 2**32 - 1
 
 
-def parse_encoder_line(
-    line: bytes | str,
-) -> Optional[tuple[int, int, int]]:
-    """Parse one ESP32 telemetry line.
+class EncoderFrame(NamedTuple):
+    """One ``O`` telemetry line. ``rear_left`` / ``rear_right`` are None for firmware without rear encoders."""
 
-    Returns ``(left_ticks, right_ticks, mcu_millis)`` for a valid line and
-    ``None`` for malformed or out-of-range input.
-    """
+    left: int
+    right: int
+    mcu_millis: int
+    rear_left: Optional[int] = None
+    rear_right: Optional[int] = None
+
+
+def parse_encoder_frame(line: bytes | str) -> Optional[EncoderFrame]:
+    """Parse ``O <left> <right> <millis>`` (front encoders only) or, since 2026-11-20,
+    ``O <front_left> <front_right> <rear_left> <rear_right> <millis>``. ``None`` if malformed / out of range."""
 
     if isinstance(line, bytes):
         try:
@@ -28,24 +33,38 @@ def parse_encoder_line(
         text = line.strip()
 
     fields = text.split()
-    if len(fields) != 4 or fields[0] != "O":
+    if len(fields) not in (4, 6) or fields[0] != "O":
         return None
 
     try:
-        left_ticks = int(fields[1], 10)
-        right_ticks = int(fields[2], 10)
-        mcu_millis = int(fields[3], 10)
+        values = [int(f, 10) for f in fields[1:]]
     except ValueError:
         return None
 
-    if not INT64_MIN <= left_ticks <= INT64_MAX:
-        return None
-    if not INT64_MIN <= right_ticks <= INT64_MAX:
+    *ticks, mcu_millis = values
+    if not all(INT64_MIN <= t <= INT64_MAX for t in ticks):
         return None
     if not 0 <= mcu_millis <= UINT32_MAX:
         return None
 
-    return left_ticks, right_ticks, mcu_millis
+    if len(ticks) == 2:
+        return EncoderFrame(ticks[0], ticks[1], mcu_millis)
+    return EncoderFrame(ticks[0], ticks[1], mcu_millis, ticks[2], ticks[3])
+
+
+def parse_encoder_line(
+    line: bytes | str,
+) -> Optional[tuple[int, int, int]]:
+    """Parse one ESP32 telemetry line.
+
+    Returns ``(left_ticks, right_ticks, mcu_millis)`` (front wheels) for a valid line and
+    ``None`` for malformed or out-of-range input. ``parse_encoder_frame`` also returns the rear wheels.
+    """
+
+    frame = parse_encoder_frame(line)
+    if frame is None:
+        return None
+    return frame.left, frame.right, frame.mcu_millis
 
 
 def format_velocity_command(linear_mps: float, angular_rps: float) -> str:
@@ -57,8 +76,11 @@ def format_velocity_command(linear_mps: float, angular_rps: float) -> str:
 
 
 # Runtime drive tuning understood by warotrans_low_level.ino ("C <name> <value>").
-# mpt_l / mpt_r: wheel metres per encoder tick (PI speed measurement); sep: effective wheel separation (mixer).
-CONFIG_NAMES = ("min_duty", "closed_loop", "kp", "ki", "mpt_l", "mpt_r", "sep")
+# mpt_l / mpt_r / mpt_rl / mpt_rr: wheel metres per encoder tick (PI speed measurement); sep: effective wheel
+# separation (mixer); rinv_l / rinv_r: 1 = flip the rear encoder sign of that side; rear_fb: 1 = the PI measures
+# each side as the mean of its front and rear wheel (firmware falls back with "K FAULT rear_fb" on a mismatch).
+CONFIG_NAMES = ("min_duty", "closed_loop", "kp", "ki", "mpt_l", "mpt_r", "sep",
+                "mpt_rl", "mpt_rr", "rinv_l", "rinv_r", "rear_fb")
 
 
 def format_config_command(name: str, value: float) -> str:
@@ -78,6 +100,10 @@ def wheel_geometry_commands(
     wheel_radius_left: float,
     wheel_radius_right: float,
     wheel_separation: float,
+    ticks_per_rev_rear_left: float = 0.0,
+    ticks_per_rev_rear_right: float = 0.0,
+    wheel_radius_rear_left: float = 0.0,
+    wheel_radius_rear_right: float = 0.0,
 ) -> list[str]:
     """``C mpt_l / mpt_r / sep`` lines from the wheel_odom_node values, so the ESP32 PI measures wheel speed
     with the same calibration as the odometry. A value <= 0 (not configured) sends nothing for that item and
@@ -85,7 +111,9 @@ def wheel_geometry_commands(
 
     lines = []
     for name, ticks, radius in (("mpt_l", ticks_per_rev_left, wheel_radius_left),
-                                ("mpt_r", ticks_per_rev_right, wheel_radius_right)):
+                                ("mpt_r", ticks_per_rev_right, wheel_radius_right),
+                                ("mpt_rl", ticks_per_rev_rear_left, wheel_radius_rear_left),
+                                ("mpt_rr", ticks_per_rev_rear_right, wheel_radius_rear_right)):
         if math.isfinite(ticks) and math.isfinite(radius) and ticks > 0.0 and radius > 0.0:
             lines.append(format_config_command(name, 2.0 * math.pi * radius / ticks))
     if math.isfinite(wheel_separation) and wheel_separation > 0.0:
