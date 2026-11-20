@@ -206,3 +206,4 @@ Chỉ những bước tối thiểu để pipeline Nav2 trên robot thật PASS 
    - Ghi chú launch arg `nav_start_delay_sec` bị bỏ qua vì delay hard-code 12 s.
 
 Pi cần bật nguồn và cùng mạng trước bước 2–4.
+      
