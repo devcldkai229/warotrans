@@ -35,3 +35,10 @@ def test_slip_window():
     assert right == pytest.approx(0.0)
     assert w.add(0.02, 1.0, 1.0, 1.0, 1.0) is None  # a new window started
     assert math.isfinite(left)
+
+
+def test_slip_variance_scale():
+    from warotrans_hardware.wheel_odom_math import slip_variance_scale
+
+    assert slip_variance_scale(0.05, -0.1, 0.2, 100.0) == 1.0
+    assert slip_variance_scale(0.05, -0.3, 0.2, 100.0) == 100.0

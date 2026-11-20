@@ -35,6 +35,13 @@ def slip_ratio(front_m: float, rear_m: float, min_distance_m: float = 0.01) -> f
     return (front_m - rear_m) / larger
 
 
+def slip_variance_scale(left_ratio: float, right_ratio: float, threshold: float, scale: float) -> float:
+    """Factor for the /odom twist variance: ``scale`` while either side slips more than ``threshold``, else 1.
+
+    A slipping side's encoders no longer measure ground speed, so the EKF should lean on the IMU and its model."""
+    return scale if max(abs(left_ratio), abs(right_ratio)) > threshold else 1.0
+
+
 class SlipWindow:
     """Accumulates front and rear distances of both sides and yields slip ratios once per window."""
 

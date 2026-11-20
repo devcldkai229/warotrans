@@ -249,11 +249,21 @@ class Esp32BridgeNode(Node):
                         if name == "ERR":
                             self.get_logger().error(f"ESP32 rejected drive config '{value}'")
                         elif name == "FAULT":
-                            # e.g. "K FAULT rear_fb": front and rear wheel of a side disagreed for 300 ms, the
-                            # firmware switched the rear feedback off (front encoders only) until it is resent.
+                            # The firmware STOPPED the motors and latched; a zero velocity command clears it
+                            # ("K fault_clear 1"). rear_fb: front and rear wheel of a side disagreed for 300 ms
+                            # (rear feedback also switched off until the bridge restarts); stall_l / stall_r: a
+                            # side did not follow its command at >= 70 % duty for 1 s (stalled motor or a
+                            # dead / unplugged encoder).
+                            hint = {
+                                "rear_fb": "front/rear encoders of a side disagree: check rear encoder wiring "
+                                           "and rear_invert_*",
+                                "stall_l": "left side does not move: stalled motor or dead left encoder",
+                                "stall_r": "right side does not move: stalled motor or dead right encoder",
+                            }.get(value, "see firmware")
                             self.get_logger().error(
-                                f"ESP32 FAULT {value}: front/rear encoders disagree, rear feedback switched off "
-                                "(check the rear encoder wiring / rear_invert_*; restart the bridge to re-enable)")
+                                f"ESP32 FAULT {value}: motors stopped until a zero command ({hint})")
+                        elif name == "fault_clear":
+                            self.get_logger().warning("ESP32 drive fault cleared by a zero command")
                         else:
                             self.get_logger().info(f"ESP32 drive config {name}={value}")
                         continue

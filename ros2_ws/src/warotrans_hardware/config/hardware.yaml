@@ -56,6 +56,10 @@ wheel_odom_node:
     # true = each side's distance is the mean of its front and rear wheel (after the rear signs / m/tick are
     # verified, see esp32_bridge_node above). /wheel_slip (front vs rear per side) is published either way.
     use_rear_encoders: false
+    # With use_rear_encoders: while a side's front and rear wheel differ by > 20 % (/wheel_slip), the /odom vx/vy
+    # variance is x100 so the EKF leans on the IMU instead of a slipping wheel.
+    slip_variance_threshold: 0.2
+    slip_variance_scale: 100.0
     odom_frame: odom
     base_frame: base_footprint
     # true = wheel owns TF odom→base_footprint (Phase 0 default).

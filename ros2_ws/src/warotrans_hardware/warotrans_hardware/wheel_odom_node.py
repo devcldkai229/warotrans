@@ -13,7 +13,7 @@ from std_msgs.msg import Float32MultiArray
 from tf2_ros import TransformBroadcaster
 from warotrans_msgs.msg import WheelTicks
 
-from .wheel_odom_math import SlipWindow, metres_per_tick, side_distance
+from .wheel_odom_math import SlipWindow, metres_per_tick, side_distance, slip_variance_scale
 
 
 class WheelOdomNode(Node):
@@ -35,6 +35,10 @@ class WheelOdomNode(Node):
         self.declare_parameter("wheel_radius_rear_left", 0.0)
         self.declare_parameter("wheel_radius_rear_right", 0.0)
         self.declare_parameter("use_rear_encoders", False)
+        # Slip-aware twist covariance (needs rear ticks and use_rear_encoders): while front and rear wheel of a side differ by more than
+        # slip_variance_threshold (fraction, /wheel_slip), vx/vy variance x slip_variance_scale for that window.
+        self.declare_parameter("slip_variance_threshold", 0.2)
+        self.declare_parameter("slip_variance_scale", 100.0)
         self.declare_parameter("odom_frame", "odom")
         self.declare_parameter("base_frame", "base_footprint")
         # When EKF owns odom→base_footprint, set publish_tf:=false (topic /odom stays).
@@ -80,6 +84,9 @@ class WheelOdomNode(Node):
                                 else self._mpt_right)
         self._use_rear = bool(self.get_parameter("use_rear_encoders").value)
         self._slip_window = SlipWindow(0.5)
+        self._slip_threshold = g("slip_variance_threshold")
+        self._slip_scale = g("slip_variance_scale")
+        self._twist_scale = 1.0
         self._rear_missing_warned = False
         self.get_logger().info(
             f"wheel odometry: {'front + rear (mean per side)' if self._use_rear else 'front'} encoders, "
@@ -224,6 +231,14 @@ class WheelOdomNode(Node):
             slip = self._slip_window.add(dt, front_left, rear_left, front_right, rear_right)
             if slip is not None:
                 self._slip_publisher.publish(Float32MultiArray(data=[float(slip[0]), float(slip[1])]))
+                # Only with verified rear encoders (use_rear_encoders): an unverified wrong rear sign reads as
+                # permanent slip and would take the wheel speed away from the EKF.
+                self._twist_scale = (slip_variance_scale(slip[0], slip[1], self._slip_threshold, self._slip_scale)
+                                     if self._use_rear else 1.0)
+                if self._twist_scale > 1.0:
+                    self.get_logger().warning(
+                        f"wheel slip L {slip[0]:+.2f} R {slip[1]:+.2f}: /odom twist variance x{self._twist_scale:g}",
+                        throttle_duration_sec=5.0)
 
         self._last_ticks = current_ticks
         self._last_rear = current_rear
@@ -255,7 +270,13 @@ class WheelOdomNode(Node):
         odometry.twist.twist.linear.x = linear_velocity
         odometry.twist.twist.angular.z = angular_velocity
         odometry.pose.covariance = self._pose_cov
-        odometry.twist.covariance = self._twist_cov
+        if self._twist_scale > 1.0:
+            cov = list(self._twist_cov)
+            cov[0] *= self._twist_scale  # vx
+            cov[7] *= self._twist_scale  # vy
+            odometry.twist.covariance = cov
+        else:
+            odometry.twist.covariance = self._twist_cov
         self._odom_publisher.publish(odometry)
 
         if self._tf_broadcaster is None:

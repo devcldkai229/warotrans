@@ -127,6 +127,24 @@ constexpr float rear_check_min_speed_mps = 0.03F;   // and actually moving on at
 constexpr float rear_check_max_mismatch = 0.5F;     // |front - rear| > 50 % of the faster wheel
 constexpr uint32_t rear_check_fault_ms = 300;       // continuously, before the fallback
 uint32_t rear_mismatch_since_ms = 0;                // 0 = no mismatch running
+
+// Drive fault latch (2026-11-20 review): a stalled side or a front/rear encoder mismatch STOPS the motors and
+// latches. Non-zero velocity commands are then ignored until a zero command ("V 0 0", sent by Nav2 / the gate
+// whenever they stop) clears the latch. Falling back to the front encoders alone is not treated as handled.
+bool drive_fault_latched = false;
+// Stall / dead-encoder guard (closed loop): a side commanded to move whose measured speed stays below 20 % of
+// the target (or runs the wrong way) while the PI already drives >= 70 % duty, for 1 s. Catches a stalled motor
+// and an unplugged encoder (the PI would otherwise push full duty forever).
+constexpr float stall_min_target_mps = 0.05F;
+constexpr float stall_max_speed_fraction = 0.2F;
+constexpr float stall_min_duty_fraction = 0.7F;
+constexpr uint32_t stall_fault_ms = 1000;
+uint32_t stall_left_since_ms = 0;
+uint32_t stall_right_since_ms = 0;
+// Tuning bounds: "C" values outside are refused (K ERR) instead of clamped.
+constexpr float min_duty_max = 100.0F;  // of 255; measured 35 (2026-10-16)
+constexpr float kp_max = 3000.0F;       // measured 600 (2026-11-11)
+constexpr float ki_max = 6000.0F;       // measured 1500 (2026-11-11)
 constexpr uint32_t wheel_vel_control_period_ms = 20;
 
 constexpr size_t command_buffer_size = 64;
@@ -338,10 +356,19 @@ bool handle_config_command(const char* line) {
     Serial.printf("K ERR %s\n", name);
     return true;
   }
+  // Drive configuration is only applied at rest: stop first if a command stream is running. The next velocity
+  // command then starts from rest, which restarts the speed sampler and the PI from a clean state. (The Pi
+  // sends the config right after connecting / after an ESP32 reset, when the robot is stopped anyway.)
+  if (have_wheel_targets) {
+    stop_motors();
+  }
 
   if (strcmp(name, "min_duty") == 0) {
-    const float clamped = constrain(value, 0.0F, static_cast<float>(motor_pwm_limit_duty));
-    cfg_min_start_duty = static_cast<uint32_t>(lroundf(clamped));
+    if (value < 0.0F || value > min_duty_max) {
+      Serial.printf("K ERR %s\n", name);
+      return true;
+    }
+    cfg_min_start_duty = static_cast<uint32_t>(lroundf(value));
     Serial.printf("K min_duty %lu\n", static_cast<unsigned long>(cfg_min_start_duty));
   } else if (strcmp(name, "closed_loop") == 0) {
     cfg_closed_loop = value != 0.0F;
@@ -349,10 +376,18 @@ bool handle_config_command(const char* line) {
     pid_integral_right = 0.0F;
     Serial.printf("K closed_loop %d\n", cfg_closed_loop ? 1 : 0);
   } else if (strcmp(name, "kp") == 0) {
-    cfg_kp = fmaxf(0.0F, value);
+    if (value < 0.0F || value > kp_max) {
+      Serial.printf("K ERR %s\n", name);
+      return true;
+    }
+    cfg_kp = value;
     Serial.printf("K kp %.3f\n", cfg_kp);
   } else if (strcmp(name, "ki") == 0) {
-    cfg_ki = fmaxf(0.0F, value);
+    if (value < 0.0F || value > ki_max) {
+      Serial.printf("K ERR %s\n", name);
+      return true;
+    }
+    cfg_ki = value;
     pid_integral_left = 0.0F;
     pid_integral_right = 0.0F;
     Serial.printf("K ki %.3f\n", cfg_ki);
@@ -394,12 +429,21 @@ bool handle_config_command(const char* line) {
     Serial.printf("K %s %.6e\n", name, value);
   } else if (strcmp(name, "rinv_l") == 0 || strcmp(name, "rinv_r") == 0) {
     const bool invert = value != 0.0F;
+    // Flip the raw counter together with the sign: the signed count (telemetry "O", Pi odometry) stays
+    // continuous, so neither the PI nor the Pi sees a jump.
+    portENTER_CRITICAL(&encoder_mux);
     if (name[5] == 'l') {
+      if (cfg_rear_invert_left != invert) {
+        rear_left_ticks = -rear_left_ticks;
+      }
       cfg_rear_invert_left = invert;
     } else {
+      if (cfg_rear_invert_right != invert) {
+        rear_right_ticks = -rear_right_ticks;
+      }
       cfg_rear_invert_right = invert;
     }
-    // The signed rear counters jump: restart the speed sample so the PI never sees that as motion.
+    portEXIT_CRITICAL(&encoder_mux);
     reset_wheel_speed_sampler(millis());
     pid_integral_left = 0.0F;
     pid_integral_right = 0.0F;
@@ -492,6 +536,10 @@ void stop_motors() {
   have_wheel_targets = false;
   target_left_mps = 0.0F;
   target_right_mps = 0.0F;
+  // Fault timers restart with the next drive: a stale start time would latch a fault on the first cycle.
+  rear_mismatch_since_ms = 0;
+  stall_left_since_ms = 0;
+  stall_right_since_ms = 0;
   pid_integral_left = 0.0F;
   pid_integral_right = 0.0F;
 }
@@ -563,23 +611,52 @@ bool rear_mismatch(float target_mps, float front_mps, float rear_mps) {
   return front_mps * rear_mps < 0.0F || fabsf(front_mps - rear_mps) > rear_check_max_mismatch * faster;
 }
 
-// Rear feedback on: a mismatch lasting rear_check_fault_ms turns it off (front encoders only again).
-void check_rear_feedback(uint32_t now, bool mismatch) {
-  if (!mismatch) {
-    rear_mismatch_since_ms = 0;
-    return;
+// True once `condition` has held continuously for `hold_ms` (since = 0: not holding).
+bool held_for(bool condition, uint32_t& since, uint32_t now, uint32_t hold_ms) {
+  if (!condition) {
+    since = 0;
+    return false;
   }
-  if (rear_mismatch_since_ms == 0) {
-    rear_mismatch_since_ms = now == 0 ? 1 : now;
-    return;
+  if (since == 0) {
+    since = now == 0 ? 1 : now;
+    return false;
   }
-  if (now - rear_mismatch_since_ms >= rear_check_fault_ms) {
-    cfg_rear_feedback = false;
-    rear_mismatch_since_ms = 0;
-    pid_integral_left = 0.0F;
-    pid_integral_right = 0.0F;
-    Serial.printf("K FAULT rear_fb\n");
+  return now - since >= hold_ms;
+}
+
+// Stop and latch until a zero velocity command; "K FAULT <what>" tells the Pi (logged as an error).
+void latch_drive_fault(const char* what) {
+  stop_motors();
+  drive_fault_latched = true;
+  rear_mismatch_since_ms = 0;
+  stall_left_since_ms = 0;
+  stall_right_since_ms = 0;
+  Serial.printf("K FAULT %s\n", what);
+}
+
+// Rear feedback on: a mismatch lasting rear_check_fault_ms turns the rear feedback off AND stops (latched):
+// a stuck rear wheel / motor is not solved by ignoring its encoder.
+// Returns true when it latched.
+bool check_rear_feedback(uint32_t now, bool mismatch) {
+  if (!held_for(mismatch, rear_mismatch_since_ms, now, rear_check_fault_ms)) {
+    return false;
   }
+  cfg_rear_feedback = false;
+  latch_drive_fault("rear_fb");
+  return true;
+}
+
+// A side commanded to move that does not (stalled motor, unplugged / dead encoder) while the PI already
+// pushes high duty.
+bool side_stalled(float target_mps, float measured_mps, uint32_t duty) {
+  if (fabsf(target_mps) <= stall_min_target_mps) {
+    return false;
+  }
+  if (static_cast<float>(duty) < stall_min_duty_fraction * static_cast<float>(motor_pwm_limit_duty)) {
+    return false;
+  }
+  const float along = target_mps >= 0.0F ? measured_mps : -measured_mps;
+  return along < stall_max_speed_fraction * fabsf(target_mps);
 }
 
 // One wheel of the PI loop. Works on magnitudes in the commanded direction:
@@ -633,9 +710,10 @@ void update_wheel_velocity_closed_loop(uint32_t now) {
   speed_sample_ticks = ticks;
   speed_sample_ms = now;
 
-  if (cfg_rear_feedback) {
-    check_rear_feedback(now, rear_mismatch(target_left_mps, front_left, rear_left) ||
-                                 rear_mismatch(target_right_mps, front_right, rear_right));
+  if (cfg_rear_feedback &&
+      check_rear_feedback(now, rear_mismatch(target_left_mps, front_left, rear_left) ||
+                                   rear_mismatch(target_right_mps, front_right, rear_right))) {
+    return;  // latched: motors stopped
   }
   // Side speed: mean of front and rear wheel with rear feedback on, else the front wheel (as before).
   const float meas_left = cfg_rear_feedback ? 0.5F * (front_left + rear_left) : front_left;
@@ -644,6 +722,14 @@ void update_wheel_velocity_closed_loop(uint32_t now) {
   // Feedforward (open-loop map + min_duty) + PI. With kp = ki = 0 this equals open-loop duty.
   const uint32_t duty_l = wheel_pi_duty(target_left_mps, meas_left, dt_s, pid_integral_left);
   const uint32_t duty_r = wheel_pi_duty(target_right_mps, meas_right, dt_s, pid_integral_right);
+  if (held_for(side_stalled(target_left_mps, meas_left, duty_l), stall_left_since_ms, now, stall_fault_ms)) {
+    latch_drive_fault("stall_l");
+    return;
+  }
+  if (held_for(side_stalled(target_right_mps, meas_right, duty_r), stall_right_since_ms, now, stall_fault_ms)) {
+    latch_drive_fault("stall_r");
+    return;
+  }
   write_motor_duty(left_pwm_pin, left_dir_pin, target_left_mps, duty_l,
                    LEFT_MOTOR_INVERTED);
   write_motor_duty(right_pwm_pin, right_dir_pin, target_right_mps, duty_r,
@@ -657,6 +743,18 @@ void handle_velocity_command(float linear_mps, float angular_rps) {
   }
 
   if (linear_mps == 0.0F && angular_rps == 0.0F) {
+    stop_motors();
+    valid_velocity_command = true;
+    last_valid_command_ms = millis();
+    if (drive_fault_latched) {
+      drive_fault_latched = false;
+      Serial.printf("K fault_clear 1\n");
+    }
+    return;
+  }
+
+  if (drive_fault_latched) {
+    // Stopped by a drive fault: stay stopped until a zero command acknowledges it.
     stop_motors();
     valid_velocity_command = true;
     last_valid_command_ms = millis();
@@ -721,7 +819,15 @@ void handle_velocity_command(float linear_mps, float angular_rps) {
 
 void handle_command(const char* line) {
   if (is_reset_command(line)) {
+    // Only at rest: zeroing the counters under a running PI would read as a huge speed. The Pi never sends
+    // R (its odometry only rebaselines on an ESP32 restart), so this is a bench / serial monitor command.
+    if (have_wheel_targets) {
+      Serial.printf("K ERR reset\n");
+      return;
+    }
     reset_ticks();
+    reset_wheel_speed_sampler(millis());
+    Serial.printf("K reset 1\n");
     return;
   }
   if (handle_config_command(line)) {
