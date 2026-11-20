@@ -66,16 +66,20 @@ wheel_odom_node:
     # ticks_per_rev_* / wheel_radius_* / wheel_separation: the "/**" block at the top of this file.
     # true = each side's distance is the mean of its front and rear wheel (after the rear signs / m/tick are
     # verified, see esp32_bridge_node above). /wheel_slip (front vs rear per side) is published either way.
-    use_rear_encoders: true  # 2026-11-20: signs + m/tick verified on the floor (LiDAR)
-    # With use_rear_encoders: while a side's front and rear wheel differ by > 20 % (/wheel_slip), the /odom vx/vy
-    # variance is x100 so the EKF leans on the IMU instead of a slipping wheel.
+    # 2026-11-20 tour on the floor: OFF. Turning in place the rear wheels slip unevenly (CW: rear-left 57 % of the
+    # front-left, rear-right 101 %), so the 4-wheel mean read ~14 cm of FALSE translation per 360 deg turn (front
+    # wheels only: 0.5 cm). The EKF integrated it and AMCL drifted 0.2-0.5 m / up to 80 deg after the turns: the robot
+    # shuffled back and forth at INBOUND. Front wheels only, as on 2026-11-18 (6/6 legs). Rear ticks: /wheel_slip only.
+    use_rear_encoders: false
+    # Slip-aware variance OFF (scale 1): x100 on vx/vy also dropped the vy = 0 constraint while turning, letting the
+    # EKF position float. /wheel_slip is still published for diagnostics.
     slip_variance_threshold: 0.2
-    slip_variance_scale: 100.0
+    slip_variance_scale: 1.0
     odom_frame: odom
     base_frame: base_footprint
-    # true = wheel owns TF odom→base_footprint (Phase 0 default).
-    # false when bringup enable_ekf:=true (EKF is sole TF publisher).
-    publish_tf: true
+    # publish_tf is NOT set here: hardware.launch.py passes it (true by default, false when bringup enable_ekf:=true).
+    # A value in this node block won over the launch override: on 2026-11-20 the wheel odometry AND the EKF both
+    # published odom->base_footprint (82 Hz), the pose jumped between them and AMCL drifted 0.2-0.5 m.
     # PROVISIONAL tuning (not physical constants). Large twist yaw variance so
     # EKF trusts BNO055 gyro for heading when skid-steer slips.
     pose_covariance_diagonal: [0.01, 0.01, 1000000.0, 1000000.0, 1000000.0, 0.05]
