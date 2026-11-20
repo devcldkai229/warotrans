@@ -112,9 +112,10 @@ ros2 run warotrans_simulation nav_regression.py
    - IMU đứng yên 60 s: yaw trôi < 1°. Quay xe ngược chiều kim đồng hồ: yaw tăng.
 3. Nạp firmware:
    ```bash
-   arduino-cli compile --fqbn esp32:esp32:esp32s3:CDCOnBoot=cdc warotrans_low_level
+   arduino-cli compile --fqbn esp32:esp32:esp32s3:CDCOnBoot=default warotrans_low_level
    ```
-   Core `esp32:esp32@3.0.7`. Lưu bản `.bin` cũ để rollback.
+   `CDCOnBoot=default` (USB CDC On Boot: Disabled): `Serial` goes to UART0 = the CH343 port (1a86:55d3), which is `/dev/warotrans` on the Pi. With `CDCOnBoot=cdc` the telemetry goes to the other (native USB) port and the Pi reads nothing (2026-11-20).
+   Core `esp32:esp32@3.0.7` (3.3.11 also builds, 2026-11-20). Lưu bản `.bin` cũ để rollback.
 4. Kê bánh lên, gửi `C min_duty N` để tìm duty nhỏ nhất mà bánh bắt đầu quay: một lần khi đi thẳng, một lần khi quay tại chỗ trên sàn.
    - Bật `closed_loop`, tune `kp`/`ki` bằng step test.
    - Ghi các giá trị vào `warotrans_hardware/config/hardware.yaml` và `docs/calibration.md`.

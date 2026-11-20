@@ -38,7 +38,7 @@
 | Chân strapping? | Không. Strapping là 0, 3, 45, 46 (BOOT = GPIO0) |
 | Nối linh kiện onboard? | Không. LED RGB dùng GPIO48; RESET/BOOT không dùng GPIO1 |
 | Flash/PSRAM? | Không. N16R8 dùng GPIO35/36/37 |
-| USB? | Không. USB D+/D− là GPIO20/19; firmware dùng `CDCOnBoot=cdc` |
+| USB? | Không. USB D+/D− là GPIO20/19; firmware build `CDCOnBoot=default`: `Serial` ra UART0 / cổng CH343 = `/dev/warotrans` trên Pi (2026-11-20) |
 | Trùng chân firmware đang dùng? | Không. MDD10A dùng GPIO4–7, encoder dùng GPIO8–11 |
 
 **Dự phòng:** GPIO2 (ADC1_1). Nếu đổi chân, sửa `battery_adc_pin` trong firmware.
@@ -147,7 +147,7 @@ Mọi tham số đều nằm trong `ros2_ws/src/warotrans_hardware/config/batter
 |---|---|---|
 | **V0 — Pinout** | Chụp board thật, xác nhận GPIO1 (silkscreen `1` cạnh `RX`) không bị chiếm. Lưu ảnh vào `docs/hardware/`. | Có ảnh và ghi chú |
 | **V1 — Tỉ lệ module** | Chưa nối ESP32. Cấp 3 mức điện áp vào module (pack thật hoặc nguồn bench ≤ 13 V), đo `S` bằng đồng hồ. | Tỉ lệ đo được (ví dụ 4.98–5.02) → ghi `divider_gain` |
-| **V2 — Lắp và bật firmware** | Tắt nguồn, đấu dây theo §3. Sửa `BATTERY_ADC_ENABLED 1`, compile (`arduino-cli compile --fqbn esp32:esp32:esp32s3:CDCOnBoot=cdc`), flash. Đọc serial: các dòng `B <mV> <n> <ms>` mỗi 200 ms, `n` ≈ 40. | Dòng `B` đều đặn; dòng `O` vẫn 20 ms; teleop vẫn bình thường |
+| **V2 — Lắp và bật firmware** | Tắt nguồn, đấu dây theo §3. Sửa `BATTERY_ADC_ENABLED 1`, compile (`arduino-cli compile --fqbn esp32:esp32:esp32s3:CDCOnBoot=default`), flash. Đọc serial: các dòng `B <mV> <n> <ms>` mỗi 200 ms, `n` ≈ 40. | Dòng `B` đều đặn; dòng `O` vẫn 20 ms; teleop vẫn bình thường |
 | **V3 — Hiệu chuẩn** | Đo pack tại XT60 bằng đồng hồ ở 3 mức (≈ 12.5 / 11.4 / 10.5 V hoặc nguồn bench), cùng lúc đọc `ros2 topic echo /battery/adc_sample`. Ghi `divider_gain`/`offset_v`, hoặc bảng `calibration_*`. | Sai số pack ≤ ±50 mV ở cả 3 mức |
 | **V4 — Nhiễu** | Robot bật, đứng yên 10 phút. Ghi `/battery_state.voltage`. | Độ lệch chuẩn sau lọc < 10 mV; không có `fault` |
 | **V5 — Đường OCV** | Sạc đầy, nghỉ 1 h, ghi áp. Xả từng nấc (chạy hoặc để tải), mỗi nấc nghỉ ≥ 30 phút rồi ghi áp, tới ≈ 10.5 V. So với bảng `ocv_*`, chỉnh YAML. | Có bảng OCV đo thật thay cho bảng khởi đầu |
