@@ -14,18 +14,21 @@ from __future__ import annotations
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Optional, Protocol
 
 from warotrans_fleet.command_contract import (
     ERROR_INTERNAL_ERROR,
     OUTCOME_FAILED,
     REASON_ALREADY_ACCEPTED,
+    REASON_COMMAND_EXPIRED,
     REASON_INTERNAL_ERROR,
     REASON_INVALID_PAYLOAD,
     REASON_UNSUPPORTED_COMMAND,
     CommandEnvelope,
     CommandRejected,
     extract_command_id,
+    is_expired,
     parse_envelope,
 )
 from warotrans_fleet.payload_builder import build_command_ack, build_command_result
@@ -148,8 +151,13 @@ class CommandRouter:
         log: LogSink,
         lock: Optional[threading.RLock] = None,
         ledger_capacity: int = 500,
+        wall_clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        expiry_skew_sec: float = 2.0,
     ) -> None:
         self.robot_code = robot_code
+        self._wall_clock = wall_clock
+        # < 0 tắt kiểm tra hạn (đồng hồ robot chưa đồng bộ chrony).
+        self._expiry_skew_sec = float(expiry_skew_sec)
         self.log = log
         self.lock = lock if lock is not None else threading.RLock()
         self._publisher = publisher
@@ -208,6 +216,12 @@ class CommandRouter:
             command = parse_envelope(body, expected_robot_code=self.robot_code)
         except CommandRejected as rej:
             self._reject(command_id, body, entry, rej.reason_code, rej.message)
+            return
+
+        # TRN-03: command đến muộn hơn hạn backend đặt thì không thực thi (CANCEL cũ không được hủy nhiệm vụ mới).
+        if is_expired(command, self._wall_clock(), skew_sec=self._expiry_skew_sec):
+            expired_at = command.expires_at.isoformat() if command.expires_at is not None else None
+            self._reject(command_id, body, entry, REASON_COMMAND_EXPIRED, f"expired at {expired_at}")
             return
 
         handler = self._handlers.get(command.command_type)

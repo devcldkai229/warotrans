@@ -27,6 +27,8 @@ robot_gateway:
     command_tick_hz: 5.0
     # Số commandId nhớ để chống duplicate (QoS1). Command đang chạy không bao giờ bị evict.
     command_ledger_size: 500
+    # TRN-03: NAVIGATE / CANCEL / LOCALIZE past expiresAt + this many seconds are refused (COMMAND_EXPIRED); < 0 = off.
+    command_expiry_skew_sec: 2.0
     # --- Lái tay từ web (MQTT warotrans/v1/robots/{code}/teleop → /cmd_vel) ---
     # Bỏ qua khi đang có lệnh navigate / goal Nav2. Không nhận lệnh trong teleop_deadman_sec → tự dừng.
     teleop_enabled: true

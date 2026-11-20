@@ -142,6 +142,9 @@ class RobotGatewayNode(Node):
         self.declare_parameter("terminal_status_hold_sec", 3.0)
         self.declare_parameter("command_tick_hz", 5.0)
         self.declare_parameter("command_ledger_size", 500)
+        # TRN-03: NAVIGATE / CANCEL / LOCALIZE có expiresAt đã qua quá số giây này thì bị từ chối (COMMAND_EXPIRED).
+        # < 0 tắt kiểm tra (đồng hồ robot chưa đồng bộ).
+        self.declare_parameter("command_expiry_skew_sec", 2.0)
         # Battery: warotrans_hardware battery_monitor_node (voltage-only SOC) → /battery/estimate.
         # No fresh VOLTAGE_ONLY estimate → batteryPercent null + UNAVAILABLE (never 0).
         self.declare_parameter("battery_estimate_topic", "/battery/estimate")
@@ -345,6 +348,7 @@ class RobotGatewayNode(Node):
             cancel_confirm_timeout_sec=cancel_confirm_timeout,
             terminal_status_hold_sec=terminal_hold,
             ledger_capacity=ledger_size,
+            command_expiry_skew_sec=self._float_param("command_expiry_skew_sec"),
             external_goal_active=lambda: self._nav_tracker.has_active_goal,
             route_enforcer=route_enforcer,
             traffic_mode=self._traffic_mode,

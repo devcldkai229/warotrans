@@ -6,7 +6,9 @@ Pure Python — không import ROS để unit test chạy không cần rclpy.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 if TYPE_CHECKING:
@@ -45,6 +47,15 @@ REASON_INTERNAL_ERROR = "INTERNAL_ERROR"
 REASON_ROUTE_REQUIRED = "ROUTE_REQUIRED"
 REASON_ROUTE_NOT_AUTHORIZED = "ROUTE_NOT_AUTHORIZED"
 REASON_ROUTE_GRAPH_MISMATCH = "ROUTE_GRAPH_MISMATCH"
+# TRN-03: envelope.expiresAt đã qua (command đến muộn, vd. broker giao lại sau khi mất kết nối) — không thực thi.
+REASON_COMMAND_EXPIRED = "COMMAND_EXPIRED"
+# TRN-03: CANCEL mang jobAssignmentId khác MOVE đang chạy — không hủy nhầm nhiệm vụ mới.
+REASON_JOB_MISMATCH = "JOB_MISMATCH"
+
+# Command types bị từ chối khi đã quá expiresAt. STOP / RESUME / *_AUTHORITY không bao giờ hết hạn:
+# STOP là lệnh an toàn (dừng muộn vẫn an toàn hơn không dừng), authority có expiresAt riêng trong payload.
+LOCALIZE = "LOCALIZE"
+EXPIRING_COMMAND_TYPES = frozenset({NAVIGATE_TO_POSE, CANCEL, LOCALIZE})
 
 # Active Mode (segment motion authority) — trùng AuthorityReasonCodes ở backend
 # (WaroTrans.BuildingBlocks/Mqtt/Messages/RobotCommandMessage.cs).
@@ -112,6 +123,8 @@ class CommandEnvelope:
     job_assignment_id: Optional[str]
     job_step_id: Optional[str]
     payload: Mapping[str, Any] = field(default_factory=dict)
+    # TRN-03: hạn chót backend đặt cho command (UTC). None = không hết hạn (backend cũ không gửi).
+    expires_at: Optional[datetime] = None
 
 
 @dataclass(frozen=True)
@@ -144,6 +157,26 @@ def _optional_str(body: Mapping[str, Any], key: str) -> Optional[str]:
     if not isinstance(value, str):
         raise CommandRejected(REASON_INVALID_PAYLOAD, f"'{key}' must be a string or null")
     return value or None
+
+
+def parse_timestamp(value: str) -> datetime:
+    """ISO-8601 như backend gửi ('...Z' hoặc '+00:00'). Không có múi giờ thì coi là UTC."""
+    text = value.strip()
+    if text.endswith(("Z", "z")):
+        text = text[:-1] + "+00:00"
+    # Python < 3.11 chỉ nhận tối đa 6 chữ số phần lẻ giây; .NET gửi 7.
+    match = re.match(r"^(.*?\.)(\d+)(.*)$", text)
+    if match:
+        text = f"{match.group(1)}{match.group(2)[:6].ljust(6, '0')}{match.group(3)}"
+    parsed = datetime.fromisoformat(text)
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+
+
+def is_expired(command: CommandEnvelope, now: datetime, *, skew_sec: float = 2.0) -> bool:
+    """True khi command thuộc loại có hạn, mang expiresAt và đã quá hạn (cho phép lệch đồng hồ skew_sec; < 0 = tắt)."""
+    if skew_sec < 0 or command.expires_at is None or command.command_type not in EXPIRING_COMMAND_TYPES:
+        return False
+    return now > command.expires_at + timedelta(seconds=skew_sec)
 
 
 def parse_envelope(body: Any, *, expected_robot_code: str) -> CommandEnvelope:
@@ -179,6 +212,14 @@ def parse_envelope(body: Any, *, expected_robot_code: str) -> CommandEnvelope:
     if not isinstance(payload, Mapping):
         raise CommandRejected(REASON_INVALID_PAYLOAD, "'payload' must be a JSON object")
 
+    expires_at: Optional[datetime] = None
+    raw_expires = _optional_str(body, "expiresAt")
+    if raw_expires is not None:
+        try:
+            expires_at = parse_timestamp(raw_expires)
+        except ValueError:
+            raise CommandRejected(REASON_INVALID_PAYLOAD, f"'expiresAt' is not an ISO-8601 time: {raw_expires!r}") from None
+
     return CommandEnvelope(
         schema_version=SCHEMA_VERSION,
         message_id=str(body.get("messageId") or ""),
@@ -189,6 +230,7 @@ def parse_envelope(body: Any, *, expected_robot_code: str) -> CommandEnvelope:
         job_assignment_id=_optional_str(body, "jobAssignmentId"),
         job_step_id=_optional_str(body, "jobStepId"),
         payload=dict(payload),
+        expires_at=expires_at,
     )
 
 
