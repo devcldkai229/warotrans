@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "wheel_tick_set.h"
+
 // MDD10A wiring:
 //   Left side:  PWM1 -> GPIO 4, DIR1 -> GPIO 5
 //   Right side: PWM2 -> GPIO 6, DIR2 -> GPIO 7
@@ -137,14 +139,7 @@ volatile uint8_t left_state = 0;
 volatile uint8_t right_state = 0;
 volatile uint8_t rear_left_state = 0;
 volatile uint8_t rear_right_state = 0;
-
-// Signed (encoder_sign applied, same convention as the telemetry "O" line) snapshot of all four wheels.
-struct WheelTickSet {
-  int32_t front_left;
-  int32_t front_right;
-  int32_t rear_left;
-  int32_t rear_right;
-};
+// WheelTickSet (signed snapshot of all four wheels) is in wheel_tick_set.h.
 
 portMUX_TYPE encoder_mux = portMUX_INITIALIZER_UNLOCKED;
 
