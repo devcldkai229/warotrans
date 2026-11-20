@@ -9,18 +9,26 @@
     # Operator 2026-11-11: robot pushed on the floor, 10 turns of each front (encoder) wheel counted.
     ticks_per_rev_left: 2481.9
     ticks_per_rev_right: 2468.6
-    wheel_radius_left: 0.03340  # 2026-11-18 LiDAR ICP: odom 1.3 % short over 1 m fwd/rev (was 0.03296)
-    wheel_radius_right: 0.03306  # 2026-11-18 LiDAR ICP: odom 1.3 % short over 1 m fwd/rev (was 0.03263)
-    # Effective (slip) separation for in-place turns. 2026-11-18 LiDAR ICP, 2 x 360 deg, after the radius fix:
-    # 0.378 m CCW / 0.413 m CW (mean 0.395). Was 0.4535 (operator 2026-09-07, mean of 0.4274 / 0.4795): the
-    # mixer then turned the robot 11-19 % faster than commanded. Used by the odometry yaw and the ESP32 mixer.
-    wheel_separation: 0.395
-    # Rear wheel encoders (operator 2026-11-20: LR C2/C1 GPIO12/13, RR GPIO14/15, 3V3). NOT MEASURED YET: the front
-    # values of the same side until the 2 m straight runs give the rear metres per tick (C mpt_rl / mpt_rr).
+    # 2026-11-20 LiDAR ICP, 2 x 1.9 m fwd/rev at 0.30 / 0.18 m/s (4-wheel firmware): odom 0.13 % short -> x1.0013;
+    # heading still drifted +1.19 deg/m fwd / -1.75 deg/m rev = the right side ~0.8 % faster than the encoders said
+    # (track 0.24 m assumed) -> right +0.41 %, left -0.41 %. Was 0.03340 / 0.03306 (2026-11-18).
+    # Re-check: drift 0.79 deg/m fwd, -0.62 deg/m rev, odom distance 0.00 % fwd; front wheels still ~0.37 % apart
+    # forward (0.11 % reverse) -> another +-0.125 % (forward weighted: the robot drives forward almost always).
+    wheel_radius_left: 0.03327
+    wheel_radius_right: 0.03328
+    # Effective (slip) separation for in-place turns. 2026-11-20 LiDAR ICP, 2 x 360 deg at 0.6 rad/s: 0.385 m CCW /
+    # 0.416 m CW, combined 0.400 (2026-11-18: 0.378 / 0.413 -> 0.395; before 0.4535, which turned the robot 11-19 %
+    # faster than commanded). Used by the odometry yaw and the ESP32 mixer.
+    # Final 2026-11-20: three runs 0.400 / 0.394 / 0.393 (front encoders vs LiDAR) -> 0.396.
+    wheel_separation: 0.396
+    # Rear wheel encoders (operator 2026-11-20: LR C2/C1 GPIO12/13, RR GPIO14/15, 3V3). Signs verified (all four count
+    # up driving forward). 2026-11-20 straight runs: rear/front ticks RL 0.9981, RR 1.0042 -> the rear radius below
+    # makes a rear wheel read the same distance as its front wheel. (In-place turns the rear wheels only turn 53-72 %
+    # of the front ones: skid. That is why wheel_rear_encoder_feedback stays false.)
     ticks_per_rev_rear_left: 2481.9
     ticks_per_rev_rear_right: 2468.6
-    wheel_radius_rear_left: 0.03340
-    wheel_radius_rear_right: 0.03306
+    wheel_radius_rear_left: 0.03333
+    wheel_radius_rear_right: 0.03314
 
 esp32_bridge_node:
   ros__parameters:
@@ -48,6 +56,9 @@ esp32_bridge_node:
     # is ~0 and the PI would drive full duty; the firmware then switches it off by itself ("K FAULT rear_fb").
     rear_invert_left: false
     rear_invert_right: false
+    # 2026-11-20: OFF on purpose. Straight, front and rear agree within 0.5 %; turning in place the rear wheels run
+    # 53-72 % of the front ones (CW right side 101 %): the 50 % plausibility guard would latch mid-turn, and a mean
+    # front/rear feedback would push the front wheels harder into the skid. Rear encoders feed odometry / slip only.
     wheel_rear_encoder_feedback: false
 
 wheel_odom_node:
@@ -55,7 +66,7 @@ wheel_odom_node:
     # ticks_per_rev_* / wheel_radius_* / wheel_separation: the "/**" block at the top of this file.
     # true = each side's distance is the mean of its front and rear wheel (after the rear signs / m/tick are
     # verified, see esp32_bridge_node above). /wheel_slip (front vs rear per side) is published either way.
-    use_rear_encoders: false
+    use_rear_encoders: true  # 2026-11-20: signs + m/tick verified on the floor (LiDAR)
     # With use_rear_encoders: while a side's front and rear wheel differ by > 20 % (/wheel_slip), the /odom vx/vy
     # variance is x100 so the EKF leans on the IMU instead of a slipping wheel.
     slip_variance_threshold: 0.2

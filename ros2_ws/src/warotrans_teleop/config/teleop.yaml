@@ -15,11 +15,11 @@ web_teleop_node:
     # Command setpoint for commissioning; actual robot velocity must be
     # verified from encoder odometry and Phase 7B physical testing.
     commissioning_linear_command_max: 0.32
-    # derived = 2 * linear_max / wheel_separation (0.32, 0.395); keep in sync with hardware.yaml "/**"
+    # derived = 2 * linear_max / wheel_separation (0.32, 0.396); keep in sync with hardware.yaml "/**"
     # and the firmware cfg_wheel_separation (the ESP32 clamps angular.z to this value).
-    commissioning_angular_command_max: 1.6203
+    commissioning_angular_command_max: 1.6162
 
-    wheel_separation: 0.395
+    wheel_separation: 0.396
     pwm_raw_max: 255
     # Must match firmware MOTOR_PWM_LIMIT_PERCENT (100%). Soft speed caps
     # above still keep normal teleop at ≤40% until MAX POWER is enabled.
