@@ -64,6 +64,7 @@ class StraightLineNav:
         self.detour: Optional[tuple[float, float]] = None
         # Real planner output for this goal (fixture): followed point by point, never replanned to a straight line.
         self.route: list[tuple[float, float, float]] = []
+        self.route_goal: Optional[NavGoal] = None  # the goal self.route was planned for
         self.lock = threading.Lock()
 
     def is_ready(self) -> bool:
@@ -84,8 +85,10 @@ class StraightLineNav:
 
     def _plan(self, goal: NavGoal) -> list[tuple[float, float, float]]:
         if self._robot.path_provider is not None:
-            if not self.route or self.goal is not goal:
+            # A new goal is planned afresh (as Nav2 does); the same goal keeps its route and is trimmed below.
+            if not self.route or self.route_goal is not goal:
                 self.route = self._robot.path_provider(self._robot.x, self._robot.y, goal) or []
+                self.route_goal = goal
             if self.route:
                 # From the route point nearest to the robot on: a real replan starts at the robot's pose.
                 i = min(range(len(self.route)), key=lambda k: math.hypot(self.route[k][0] - self._robot.x,
@@ -200,6 +203,10 @@ class SimRobot:
             zones=zones,
         )
         self.nav = StraightLineNav(self)
+        # RB-03 STOP / RESUME, as the gateway registers them (control_command_handlers): a held robot refuses to move.
+        from warotrans_fleet.control_command_handlers import MotionHold, ResumeCommandHandler, StopCommandHandler
+
+        self.motion_hold = MotionHold()
         self.stack = build_command_stack(
             robot_code=code,
             publisher=self,
@@ -213,7 +220,11 @@ class SimRobot:
             # Like the real gateway: real travel counts as progress, not only a shrinking straight-line distance (a
             # detour away from the goal is not a blocked robot).
             arrival_pose=lambda: (self.x, self.y, self.yaw) if self.localized else None,
+            motion_hold_active=lambda: self.motion_hold.held,
         )
+        hold_log = logging.getLogger(f"sim.{code}.hold")
+        self.stack.router.register(StopCommandHandler(self.motion_hold, self.stack.move.halt, self._on_motion_hold_changed, hold_log))
+        self.stack.router.register(ResumeCommandHandler(self.motion_hold, self._on_motion_hold_changed, hold_log))
         self._threads: list[threading.Thread] = []
 
     # ------------------------------------------------------------------ lifecycle
@@ -284,6 +295,10 @@ class SimRobot:
             self.nav.replan()
             self.publish_plan()
 
+    def _on_motion_hold_changed(self, held: bool) -> None:
+        if held:  # like the gateway: close the gate at once; RESUME reopens it only with a grant
+            self._gate.on_authority_ok(False, time.monotonic())
+
     def publish_plan(self) -> None:
         with self._lock:
             if self.nav.path:
@@ -309,7 +324,8 @@ class SimRobot:
             map_version_code=self.map_code, pose=pose, battery_percent=90.0,
             navigation_status=self.stack.move.navigation_status,
             localization_status="LOCALIZED" if self.localized else "NOT_LOCALIZED",
-            linear_velocity=0.0, angular_velocity=0.0, current_command_id=self.stack.move.active_command_id))
+            linear_velocity=0.0, angular_velocity=0.0, current_command_id=self.stack.move.active_command_id,
+            motion_hold=self.motion_hold.held))
 
     def _tick(self) -> None:
         with self._lock:
@@ -335,7 +351,7 @@ class SimRobot:
                 self.publish_authority_state()
             ok = self.client.tick(pose)
             self.gate_log.append((time.monotonic(), ok, self.client.last_block_reason))
-            gate_open = self._gate.decide(time.monotonic()).forward
+            gate_open = self._gate.decide(time.monotonic()).forward and not self.motion_hold.held
             self._tick_ok = ok
             self.nav.step(0.05, gate_open, self.speed)
             if self.client.grant is not None and self.localized:
