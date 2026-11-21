@@ -129,6 +129,36 @@ def test_steady_camera_makes_full_cfr_segments_with_measured_slot_error(tmp_path
         assert side["segment_id"] == s.segment_id and len(side["slots"]) == s.frame_count
 
 
+def test_a_slow_disk_at_rotation_does_not_hold_the_slot_loop(tmp_path, monkeypatch):
+    """Lab 2026-11-21: fsync + SHA-256 of a 36 MB segment on the SD card took ~1 s inside the slot loop -> STALL -> a
+    1 s hole in the video at every rotation. Finishing a segment now waits (here: until the loop has written two more
+    seconds of the next one); if it ran inside the loop it could never see those frames and would time out."""
+    import warotrans_camera.recorder_sink as rs
+
+    loop_moved_on = threading.Event()
+    waited = []
+    real_sha = rs.sha256_file
+
+    def slow_sha(path):
+        waited.append(loop_moved_on.wait(5.0))
+        return real_sha(path)
+
+    monkeypatch.setattr(rs, "sha256_file", slow_sha)
+    base = steady(10)
+
+    def tick(clock: FakeClock):
+        base(clock)
+        if clock.t > 1_000_000_000 + 4_000_000_000:  # two seconds into the second segment
+            loop_moved_on.set()
+
+    segments = run_sink(tmp_path, tick, seconds=6.0)
+    assert waited and all(waited), "finishing a segment blocked the slot loop"
+    assert all(s.gap_before is None for s in segments), [s.gap_before for s in segments]
+    assert [s.sequence_number for s in segments] == list(range(len(segments)))
+    for a, b in zip(segments, segments[1:]):
+        assert b.captured_from_utc_ns == a.captured_to_utc_ns  # back to back, no hole at rotation
+
+
 def test_a_slow_camera_is_padded_with_repeats_and_a_fast_one_is_thinned(tmp_path):
     def half_rate(clock: FakeClock):
         if (clock.t // 100_000_000) % 2 == 0:  # a new frame every other slot

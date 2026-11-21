@@ -50,7 +50,9 @@ class TrajectorySampler:
         if last is not None:
             dt = (wall_ns - last.wall_ns) / 1e9
             moving = abs(v or 0.0) > self.still_speed or abs(w or 0.0) > 0.05
-            due = dt >= (self.moving_period if moving else self.still_period)
+            # 10 % slack: the node offers a pose every 0.2 s by timer, and a tick that lands at 0.199 s must not wait for
+            # the next one (that halved the moving rate to ~2.5 Hz on RBT-001, lab 2026-11-21).
+            due = dt >= 0.9 * (self.moving_period if moving else self.still_period)
             if not (force or due or valid != last.valid):
                 return None, None
             if valid and last.valid and dt < 2.0 and math.hypot(x - last.x, y - last.y) > self.jump_m:

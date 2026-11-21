@@ -11,8 +11,11 @@ k/fps therefore stays within one frame of capture time, and the timing sidecar r
 stamp of the frame in it, so the backend can state the real error bound instead of assuming one.
 
 Durability: a segment is written as ``<id>.avi.partial``; on rotation it is closed, fsynced and renamed to
-``<id>.avi``, then hashed. A power cut leaves at most one ``.partial`` (recovered or discarded by the agent, never
-uploaded as complete). Segment rotation never blocks the slot loop for long: it is a file close and a rename.
+``<id>.avi``, then hashed. A power cut leaves at most one ``.partial`` per segment being finished (recovered or
+discarded by the agent, never uploaded as complete). Segment rotation never blocks the slot loop: the closed segment is
+handed to a finisher thread (close, fsync, rename, SHA-256, sidecar, callback, in segment order) and the loop opens the
+next one on the very next slot. Doing that work in the loop cost ~1 s on the Pi's SD card while uploads were reading
+it, enough to trip STALL_S and cut a 1 s hole into the video at every rotation (lab 2026-11-21).
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import queue
 import threading
 import time
 import uuid
@@ -133,6 +137,8 @@ class RecorderSink:
         self._mono, self._wall, self._sleep = clock_monotonic_ns, clock_wall_ns, sleep
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
+        self._finishing: "queue.Queue[Optional[_Open]]" = queue.Queue()
+        self._finisher: Optional[threading.Thread] = None
         self.recording_key: Optional[str] = None
         self.directory: Optional[str] = None
         self.boot_id = boot_session_id()
@@ -152,6 +158,9 @@ class RecorderSink:
         self.recording_key, self.directory, self.next_sequence = recording_key, directory, first_sequence
         self._stop.clear()
         self.source.add_viewer()
+        if self._finisher is None or not self._finisher.is_alive():
+            self._finisher = threading.Thread(target=self._finish_loop, name="recorder_finisher", daemon=True)
+            self._finisher.start()
         self._thread = threading.Thread(target=self._run, name="recorder_sink", daemon=True)
         self._thread.start()
 
@@ -162,6 +171,23 @@ class RecorderSink:
         self._thread.join(timeout)
         self._thread = None
         self.source.remove_viewer()
+        # Every segment handed over is on disk, hashed and reported before stop() returns.
+        if self._finisher is not None:
+            self._finishing.put(None)
+            self._finisher.join(timeout + 30.0)
+            self._finisher = None
+
+    def _finish_loop(self) -> None:
+        while True:
+            seg = self._finishing.get()
+            if seg is None:
+                return
+            try:
+                self._finish(seg)
+            except Exception as exc:  # never lose the thread: the next segments still need finishing
+                self.last_error = f"recorder: finishing segment {seg.sequence_number} failed: {exc}"
+                if self.log:
+                    self.log.error(self.last_error)
 
     # ------------------------------------------------------------------ loop
 
@@ -241,6 +267,10 @@ class RecorderSink:
                      slot_mono, slot_wall, gap_before=gap)
 
     def _close(self, seg: _Open) -> None:
+        """Hands the segment to the finisher thread; the slot loop never waits for the disk."""
+        self._finishing.put(seg)
+
+    def _finish(self, seg: _Open) -> None:
         if seg.writer.frame_count == 0:
             seg.writer.abort()
             os.remove(seg.partial_path)
