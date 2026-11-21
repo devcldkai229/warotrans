@@ -123,7 +123,8 @@ function poseAt(t) {
   await page.keyboard.press('.'); await page.waitForTimeout(1500)
   const s3 = await state()
   const next = truth.steps.map((s) => s.startMs).filter((x) => x > s2.cursor + 250).sort((a, b) => a - b)[0]
-  check('keys.next_step', next != null && Math.abs(s3.cursor - next) < 300 && s3.stepId === stepAt(s3.cursor)?.id,
+  // The cursor lands on the replay's step start, which can be a few ms before the DB's: compare just after it.
+  check('keys.next_step', next != null && Math.abs(s3.cursor - next) < 300 && s3.stepId === stepAt(Math.max(s3.cursor, next) + 50)?.id,
     `'.' went to ${((s3.cursor - from) / 1000).toFixed(1)}s, next step starts ${next ? ((next - from) / 1000).toFixed(1) : '-'}s, bar "${s3.stepName}"`)
 
   // Play 4 s at 1x: video and cursor advance together.
