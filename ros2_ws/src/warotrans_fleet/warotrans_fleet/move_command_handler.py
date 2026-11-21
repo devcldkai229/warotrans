@@ -36,6 +36,7 @@ from warotrans_fleet.command_contract import (
     REASON_MAP_MISMATCH,
     REASON_NAV2_UNAVAILABLE,
     REASON_NOT_LOCALIZED,
+    REASON_JOB_MISMATCH,
     REASON_UNKNOWN_TARGET,
     CommandEnvelope,
     CommandRejected,
@@ -455,7 +456,12 @@ class MoveCommandHandler:
 
     # ------------------------------------------------------------------ CANCEL (từ CancelCommandHandler)
 
-    def request_cancel(self, target_command_id: str, cancel_session: CommandSession) -> AckDecision:
+    def request_cancel(
+        self,
+        target_command_id: str,
+        cancel_session: CommandSession,
+        job_assignment_id: Optional[str] = None,
+    ) -> AckDecision:
         with self._lock:
             if self._active_traffic_mode():
                 return self._request_cancel_active(target_command_id, cancel_session)
@@ -465,6 +471,13 @@ class MoveCommandHandler:
                 raise CommandRejected(
                     REASON_UNKNOWN_TARGET,
                     f"targetCommandId {target_command_id} is not the active command (active={active})",
+                )
+            # TRN-03: CANCEL nói rõ nó thuộc nhiệm vụ nào; khác nhiệm vụ của MOVE đang chạy thì không hủy.
+            running_job = move.command.job_assignment_id
+            if job_assignment_id and running_job and job_assignment_id != running_job:
+                raise CommandRejected(
+                    REASON_JOB_MISMATCH,
+                    f"cancel is for jobAssignmentId {job_assignment_id} but the active MOVE runs {running_job}",
                 )
             return AckDecision.accept(
                 after_ack=lambda: self._request_cancel(move, _CANCEL_BY_BACKEND, cancel_session)
@@ -1067,7 +1080,7 @@ class CancelCommandHandler:
         self._move = move_handler
 
     def handle(self, command: CommandEnvelope, session: CommandSession) -> AckDecision:
-        return self._move.request_cancel(parse_cancel_target(command.payload), session)
+        return self._move.request_cancel(parse_cancel_target(command.payload), session, command.job_assignment_id)
 
 
 def _fmt(value: Optional[float]) -> str:

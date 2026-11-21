@@ -30,6 +30,8 @@ robot_gateway:
     terminal_status_hold_sec: 3.0
     command_tick_hz: 5.0
     command_ledger_size: 500
+    # TRN-03: NAVIGATE / CANCEL / LOCALIZE past expiresAt + this many seconds are refused (COMMAND_EXPIRED); < 0 = off.
+    command_expiry_skew_sec: 2.0
     # Manual drive publishes straight to cmd_vel_topic, which would bypass collision_monitor and the authority
     # gate. Off while the robot is under traffic control.
     teleop_enabled: false

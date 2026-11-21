@@ -42,6 +42,7 @@ def build_command_stack(
     cancel_confirm_timeout_sec: float = 10.0,
     terminal_status_hold_sec: float = 3.0,
     ledger_capacity: int = 500,
+    command_expiry_skew_sec: float = 2.0,
     external_goal_active: Callable[[], bool] = lambda: False,
     route_enforcer: Optional[RouteEnforcer] = None,
     traffic_mode: str = "legacy",
@@ -66,6 +67,7 @@ def build_command_stack(
         log=log,
         lock=lock,
         ledger_capacity=ledger_capacity,
+        expiry_skew_sec=command_expiry_skew_sec,
     )
     move = MoveCommandHandler(
         navigator=navigator,
