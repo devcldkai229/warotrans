@@ -118,6 +118,7 @@ def main(args=None) -> None:
             self._goal_status = GoalStatus
             self._time = Time
             self._stop = threading.Event()
+            threading.Thread(target=self._poll_run, name="evidence_run_poll", daemon=True).start()
             threading.Thread(target=self._background, name="evidence_upload", daemon=True).start()
             self._anchor()
             self.get_logger().info(f"evidence agent for {code} -> {g('recorder_url')}, spool {spool_dir}")
@@ -200,18 +201,23 @@ def main(args=None) -> None:
                 self.core.add_clock_anchor(time.monotonic_ns(), quality)
 
         # ---------------------------------------------------------------- background
-        def _background(self) -> None:
-            last_poll = 0.0
+        def _poll_run(self) -> None:
+            """The Recorder's open run every 2 s, on its own thread: an upload pass can take tens of seconds (a 30 s
+            segment at the 2 MB/s limit is ~18 s), and a run not seen for RUN_FRESH_S counts as closed, which used to stop
+            the recording while the robot stood at a stop (lab 2026-11-21)."""
             while not self._stop.is_set():
-                now = time.monotonic()
-                if now - last_poll >= 2.0:
-                    last_poll = now
-                    try:
-                        run = self.api.active_run()
-                        with self._lock:
-                            self.core.on_active_run(run)
-                    except ApiError:
-                        pass  # offline: recording follows the gateway's commands, the run binds later
+                try:
+                    run = self.api.active_run()
+                    with self._lock:
+                        self.core.on_active_run(run)
+                except ApiError:
+                    pass  # offline: recording follows the gateway's commands, the run binds later
+                except Exception as exc:  # noqa: BLE001 - never let the poll thread die
+                    self.get_logger().warning(f"evidence: active-run poll failed: {exc}")
+                self._stop.wait(2.0)
+
+        def _background(self) -> None:
+            while not self._stop.is_set():
                 try:
                     self.uploader.pump()
                 except Exception as exc:  # noqa: BLE001 - never let the upload thread die

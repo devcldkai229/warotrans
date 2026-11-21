@@ -201,6 +201,17 @@ def test_sampler_rates_validity_and_jumps():
     assert not nan.valid and nan.x == 0.0
 
 
+def test_sampler_keeps_5_hz_with_a_jittery_200_ms_timer():
+    """The node offers a pose every 0.2 s; ticks a millisecond early must still be kept (not every other one)."""
+    s = TrajectorySampler()
+    t = 1_000 * NS
+    kept = 0
+    for i in range(50):  # 10 s of driving, ticks alternately 1 ms early and on time
+        at = t + i * int(0.2 * NS) - (1_000_000 if i % 2 else 0)
+        kept += s.offer(i * 0.07, 0, 0, 0.35, 0, 0.02, True, at)[0] is not None
+    assert kept == 50
+
+
 def test_decimate_keeps_the_ends_and_the_bound():
     line = [(i * 0.01, 0.0) for i in range(5001)]
     out = decimate(line, max_points=500)
