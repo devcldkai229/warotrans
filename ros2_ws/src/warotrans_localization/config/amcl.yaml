@@ -6,9 +6,20 @@
 #   AMCL owns the map -> odom transform during navigation.
 #
 # NOTES
-#   - robot_model_type: nav2_amcl::DifferentialMotionModel (skid-steer approximation)
-#   - alpha1-5 tuned slightly higher than default for skid-steer slip
-#   - Particles limited for Pi 5 CPU budget
+#   - EKF variant (enable_ekf:=true, the default of tools/pi_run_semantic.sh). Motion comes from the EKF, whose
+#     heading is the BNO055 (within 0.07 % of the LiDAR, 2026-11-18), not from the slipping wheel yaw: alpha1-4
+#     stay low (0.15). Raising them would only spread the particles. amcl_wheel_only.yaml is the no-EKF variant.
+#   - robot_model_type: nav2_amcl::DifferentialMotionModel (the Nav2 name of ROS 1 "diff-corrected")
+#   - Light for the Pi 5 CPU (2026-11-11, commit 2cc95f2): 300-800 particles; AMCL after turns 0.02-0.04 m /
+#     <= 2.4 deg against the scan match. The update thresholds and laser model are the same as RBT-002's
+#     (amcl_rbt002.yaml), which tracks well with them.
+#   - 2026-11-20 lab (MAP-ONE-V013, INBOUND): with 0.10 m / 0.15 rad updates and the soft laser model (sigma_hit 0.2,
+#     likelihood field 2.0 m) AMCL stayed 10-14 cm behind the scan-match truth at the end of a slow docking run in, and
+#     six in-place updates only moved it 14 -> 10 cm: the gateway kept driving into the wall (NAVIGATION_BLOCKED).
+#     Now the amcl_wheel_only.yaml update / laser values (0.05 m, 0.08 rad, sigma_hit 0.1, 1.0 m); particles stay light.
+#   - Keys tuned per variant (warotrans_navigation/test/test_recovery_tree.py TUNED_PER_SOURCE): alpha1-4,
+#     update_min_d/a, sigma_hit, laser_likelihood_max_dist, min/max_particles, max_beams. Everything else must
+#     match amcl_wheel_only.yaml.
 #   - set_initial_pose: true — PROVISIONAL boot pose so map->odom exists for Nav2 activate.
 #     Operator must overwrite via RViz "2D Pose Estimate" before trusting goals.
 #
@@ -28,7 +39,9 @@ amcl:
     scan_topic: "/scan"
     laser_max_range: 12.0      # RPLIDAR A1M8 max ~12m, matches slam_toolbox
     laser_min_range: 0.15      # A1M8 min ~0.15m
-    max_beams: 60              # TUNING: subsample for CPU; A1M8 has ~360 points (60 was sparse at corners)
+    # 2026-11-19: 60 -> 90 (one beam per 4 deg; RBT-002 and amcl_wheel_only.yaml use 90). 60 was chosen with the
+    # particle cut on 2026-11-11 and is sparse at the lab's corners. CHECK the Pi load average after deploying.
+    max_beams: 90
 
     # ----- Motion model (DifferentialMotionModel for skid-steer approx) -----
     robot_model_type: "nav2_amcl::DifferentialMotionModel"
@@ -50,8 +63,8 @@ amcl:
     pf_z: 0.99                 # KLD z-score
 
     # ----- Update thresholds (small room, frequent updates) -----
-    update_min_d: 0.10         # metres moved before filter update
-    update_min_a: 0.15         # radians rotated before filter update
+    update_min_d: 0.05   # 2026-11-20 lab: was 0.10
+    update_min_a: 0.08   # 2026-11-20 lab: was 0.15
 
     # ----- Resample -----
     resample_interval: 1       # resample every N updates
@@ -65,8 +78,8 @@ amcl:
     laser_model_type: "likelihood_field"
     z_hit: 0.95
     z_rand: 0.05
-    sigma_hit: 0.2             # TUNING: laser noise std dev
-    laser_likelihood_max_dist: 2.0
+    sigma_hit: 0.1   # 2026-11-20 lab: was 0.2
+    laser_likelihood_max_dist: 1.0   # 2026-11-20 lab: was 2.0
 
     # ----- Initial pose -----
     # PROVISIONAL boot pose so map->odom exists and Nav2 planner can activate.

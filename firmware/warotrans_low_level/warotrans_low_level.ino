@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "wheel_tick_set.h"
+
 // MDD10A wiring:
 //   Left side:  PWM1 -> GPIO 4, DIR1 -> GPIO 5
 //   Right side: PWM2 -> GPIO 6, DIR2 -> GPIO 7
@@ -14,20 +16,33 @@ constexpr uint8_t right_pwm_pin = 6;
 constexpr uint8_t right_dir_pin = 7;
 
 // Encoder wiring:
-//   Left:  C2 -> GPIO 8,  C1 -> GPIO 9
-//   Right: C2 -> GPIO 10, C1 -> GPIO 11
+//   Front left:  C2 -> GPIO 8,  C1 -> GPIO 9
+//   Front right: C2 -> GPIO 10, C1 -> GPIO 11
+//   Rear left:   C2 -> GPIO 12, C1 -> GPIO 13   (added 2026-11-20, VCC 3V3)
+//   Rear right:  C2 -> GPIO 14, C1 -> GPIO 15   (added 2026-11-20, VCC 3V3)
+// The MDD10A has one channel per side: front and rear wheels of a side share the PWM, so the rear
+// encoders refine the measured side speed (and show slip); they cannot drive a wheel on its own.
 constexpr uint8_t left_encoder_c2_pin = 8;
 constexpr uint8_t left_encoder_c1_pin = 9;
 constexpr uint8_t right_encoder_c2_pin = 10;
 constexpr uint8_t right_encoder_c1_pin = 11;
+constexpr uint8_t rear_left_encoder_c2_pin = 12;
+constexpr uint8_t rear_left_encoder_c1_pin = 13;
+constexpr uint8_t rear_right_encoder_c2_pin = 14;
+constexpr uint8_t rear_right_encoder_c1_pin = 15;
 
 // COMMISSIONING SCALE — NOT a measured vehicle speed.
 // Command setpoint only; real velocity must come from encoder odometry
 // and Phase 7B physical testing.
 constexpr float commissioning_full_scale_linear = 0.32F;  // m/s at 100% duty
-constexpr float wheel_separation = 0.4535F;  // effective, operator 2026-09-07
-constexpr float commissioning_full_scale_angular =
-    2.0F * commissioning_full_scale_linear / wheel_separation;  // ~1.411 rad/s
+// Effective (slip) wheel separation of the skid-steer mixer. Runtime "C sep <m>" from hardware.yaml;
+// default = hardware.yaml 2026-11-19 (LiDAR ICP 2026-11-18: 0.378 CCW / 0.413 CW, was 0.4535).
+constexpr float wheel_separation_min = 0.25F;
+constexpr float wheel_separation_max = 0.60F;
+float cfg_wheel_separation = 0.395F;
+float commissioning_full_scale_angular() {  // ~1.62 rad/s at 0.395
+  return 2.0F * commissioning_full_scale_linear / cfg_wheel_separation;
+}
 
 // Motor polarity — commissioning configuration, flip if a side runs backwards.
 // Commissioning 2026-09-04: FORWARD(+linear) turned left and LEFT(+angular)
@@ -81,7 +96,8 @@ constexpr uint32_t motor_pwm_limit_duty =
 // DEFAULT OFF — keep current open-loop behavior until bench PID calib.
 // RISK: non-zero gains without measurement can overshoot / fight motors.
 // ROLLBACK: leave USE_WHEEL_VELOCITY_CLOSED_LOOP false, or reflash prior build.
-// Calib constants mirror ros2_ws/.../hardware.yaml (operator 2026-09-07).
+// Wheel metres per encoder tick: runtime "C mpt_l / mpt_r", computed by esp32_bridge_node from the same
+// hardware.yaml values wheel_odom_node uses, so the PI and the odometry cannot disagree again.
 // ---------------------------------------------------------------------------
 constexpr bool USE_WHEEL_VELOCITY_CLOSED_LOOP = false;
 // PROVISIONAL — require physical step-response / in-place 90° calib. Do NOT invent.
@@ -90,18 +106,58 @@ constexpr float WHEEL_VEL_KP = 0.0F;
 constexpr float WHEEL_VEL_KI = 0.0F;
 // Wheels commanded slower than this are treated as stopped (no deadband kick).
 constexpr float wheel_moving_epsilon_mps = 0.005F;
-constexpr float odom_ticks_per_rev_left = 2478.1F;
-constexpr float odom_ticks_per_rev_right = 2478.1F;
-constexpr float odom_wheel_radius_left = 0.03296F;
-constexpr float odom_wheel_radius_right = 0.03263F;
+// Defaults = hardware.yaml 2026-11-19: 2*pi*r/ticks, r 0.03340 / 0.03306 m, ticks 2481.9 / 2468.6.
+// (Before: 2478.1 ticks both sides and r 0.03296 / 0.03263: the right wheel ran 0.53 % fast -> left drift.)
+constexpr float metres_per_tick_min = 5.0e-5F;
+constexpr float metres_per_tick_max = 2.0e-4F;
+float cfg_mpt_left = 2.0F * 3.14159265358979323846F * 0.03340F / 2481.9F;
+float cfg_mpt_right = 2.0F * 3.14159265358979323846F * 0.03306F / 2468.6F;
+// Rear wheels ("C mpt_rl / mpt_rr"): same as the front wheel of the side until measured.
+float cfg_mpt_rear_left = 2.0F * 3.14159265358979323846F * 0.03340F / 2481.9F;
+float cfg_mpt_rear_right = 2.0F * 3.14159265358979323846F * 0.03306F / 2468.6F;
+// Rear encoder sign: the front sign of the side, flipped by "C rinv_l / rinv_r 1" (no reflash needed).
+bool cfg_rear_invert_left = false;
+bool cfg_rear_invert_right = false;
+// "C rear_fb 1": the PI measures each side as the mean of its front and rear wheel. OFF by default: a
+// rear encoder with the wrong sign would average the side speed to ~0 and the PI would drive full duty.
+// Plausibility guard below switches it off again by itself (K FAULT rear_fb).
+bool cfg_rear_feedback = false;
+constexpr float rear_check_min_target_mps = 0.05F;  // only judge a side that is commanded to move
+constexpr float rear_check_min_speed_mps = 0.03F;   // and actually moving on at least one wheel
+constexpr float rear_check_max_mismatch = 0.5F;     // |front - rear| > 50 % of the faster wheel
+constexpr uint32_t rear_check_fault_ms = 300;       // continuously, before the fallback
+uint32_t rear_mismatch_since_ms = 0;                // 0 = no mismatch running
+
+// Drive fault latch (2026-11-20 review): a stalled side or a front/rear encoder mismatch STOPS the motors and
+// latches. Non-zero velocity commands are then ignored until a zero command ("V 0 0", sent by Nav2 / the gate
+// whenever they stop) clears the latch. Falling back to the front encoders alone is not treated as handled.
+bool drive_fault_latched = false;
+// Stall / dead-encoder guard (closed loop): a side commanded to move whose measured speed stays below 20 % of
+// the target (or runs the wrong way) while the PI already drives >= 70 % duty, for 1 s. Catches a stalled motor
+// and an unplugged encoder (the PI would otherwise push full duty forever).
+constexpr float stall_min_target_mps = 0.05F;
+constexpr float stall_max_speed_fraction = 0.2F;
+constexpr float stall_min_duty_fraction = 0.7F;
+constexpr uint32_t stall_fault_ms = 1000;
+uint32_t stall_left_since_ms = 0;
+uint32_t stall_right_since_ms = 0;
+// Tuning bounds: "C" values outside are refused (K ERR) instead of clamped.
+constexpr float min_duty_max = 100.0F;  // of 255; measured 35 (2026-10-16)
+constexpr float kp_max = 3000.0F;       // measured 600 (2026-11-11)
+constexpr float ki_max = 6000.0F;       // measured 1500 (2026-11-11)
 constexpr uint32_t wheel_vel_control_period_ms = 20;
 
 constexpr size_t command_buffer_size = 64;
 
 volatile int32_t left_ticks = 0;
 volatile int32_t right_ticks = 0;
+volatile int32_t rear_left_ticks = 0;
+volatile int32_t rear_right_ticks = 0;
 volatile uint8_t left_state = 0;
 volatile uint8_t right_state = 0;
+volatile uint8_t rear_left_state = 0;
+volatile uint8_t rear_right_state = 0;
+// WheelTickSet (signed snapshot of all four wheels) is in wheel_tick_set.h.
 
 portMUX_TYPE encoder_mux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -141,8 +197,7 @@ float cfg_ki = WHEEL_VEL_KI;
 float target_left_mps = 0.0F;
 float target_right_mps = 0.0F;
 bool have_wheel_targets = false;
-int32_t speed_sample_left_ticks = 0;
-int32_t speed_sample_right_ticks = 0;
+WheelTickSet speed_sample_ticks = {0, 0, 0, 0};
 uint32_t speed_sample_ms = 0;
 float pid_integral_left = 0.0F;
 float pid_integral_right = 0.0F;
@@ -190,19 +245,43 @@ void IRAM_ATTR on_right_c1_change() {
                  right_encoder_c1_pin);
 }
 
+void IRAM_ATTR on_rear_left_change() {
+  update_encoder(rear_left_ticks, rear_left_state, rear_left_encoder_c2_pin,
+                 rear_left_encoder_c1_pin);
+}
+
+void IRAM_ATTR on_rear_right_change() {
+  update_encoder(rear_right_ticks, rear_right_state, rear_right_encoder_c2_pin,
+                 rear_right_encoder_c1_pin);
+}
+
 void reset_ticks() {
   portENTER_CRITICAL(&encoder_mux);
   left_ticks = 0;
   right_ticks = 0;
+  rear_left_ticks = 0;
+  rear_right_ticks = 0;
   portEXIT_CRITICAL(&encoder_mux);
 }
 
-void copy_ticks(int32_t& left, int32_t& right) {
+// All four counters read in one critical section, then signed.
+WheelTickSet signed_ticks() {
+  int32_t fl = 0;
+  int32_t fr = 0;
+  int32_t rl = 0;
+  int32_t rr = 0;
   portENTER_CRITICAL(&encoder_mux);
-  left = left_ticks;
-  right = right_ticks;
+  fl = left_ticks;
+  fr = right_ticks;
+  rl = rear_left_ticks;
+  rr = rear_right_ticks;
   portEXIT_CRITICAL(&encoder_mux);
+  const int32_t rear_left_sign = cfg_rear_invert_left ? -left_encoder_sign : left_encoder_sign;
+  const int32_t rear_right_sign = cfg_rear_invert_right ? -right_encoder_sign : right_encoder_sign;
+  return {fl * left_encoder_sign, fr * right_encoder_sign, rl * rear_left_sign, rr * rear_right_sign};
 }
+
+void reset_wheel_speed_sampler(uint32_t now);
 
 bool is_whitespace(char value) {
   return value == ' ' || value == '\t';
@@ -277,10 +356,19 @@ bool handle_config_command(const char* line) {
     Serial.printf("K ERR %s\n", name);
     return true;
   }
+  // Drive configuration is only applied at rest: stop first if a command stream is running. The next velocity
+  // command then starts from rest, which restarts the speed sampler and the PI from a clean state. (The Pi
+  // sends the config right after connecting / after an ESP32 reset, when the robot is stopped anyway.)
+  if (have_wheel_targets) {
+    stop_motors();
+  }
 
   if (strcmp(name, "min_duty") == 0) {
-    const float clamped = constrain(value, 0.0F, static_cast<float>(motor_pwm_limit_duty));
-    cfg_min_start_duty = static_cast<uint32_t>(lroundf(clamped));
+    if (value < 0.0F || value > min_duty_max) {
+      Serial.printf("K ERR %s\n", name);
+      return true;
+    }
+    cfg_min_start_duty = static_cast<uint32_t>(lroundf(value));
     Serial.printf("K min_duty %lu\n", static_cast<unsigned long>(cfg_min_start_duty));
   } else if (strcmp(name, "closed_loop") == 0) {
     cfg_closed_loop = value != 0.0F;
@@ -288,13 +376,84 @@ bool handle_config_command(const char* line) {
     pid_integral_right = 0.0F;
     Serial.printf("K closed_loop %d\n", cfg_closed_loop ? 1 : 0);
   } else if (strcmp(name, "kp") == 0) {
-    cfg_kp = fmaxf(0.0F, value);
+    if (value < 0.0F || value > kp_max) {
+      Serial.printf("K ERR %s\n", name);
+      return true;
+    }
+    cfg_kp = value;
     Serial.printf("K kp %.3f\n", cfg_kp);
   } else if (strcmp(name, "ki") == 0) {
-    cfg_ki = fmaxf(0.0F, value);
+    if (value < 0.0F || value > ki_max) {
+      Serial.printf("K ERR %s\n", name);
+      return true;
+    }
+    cfg_ki = value;
     pid_integral_left = 0.0F;
     pid_integral_right = 0.0F;
     Serial.printf("K ki %.3f\n", cfg_ki);
+  } else if (strcmp(name, "mpt_l") == 0 || strcmp(name, "mpt_r") == 0) {
+    // Out-of-range values are refused: a typo must not make the PI chase a wrong speed.
+    if (value < metres_per_tick_min || value > metres_per_tick_max) {
+      Serial.printf("K ERR %s\n", name);
+      return true;
+    }
+    if (name[4] == 'l') {
+      cfg_mpt_left = value;
+    } else {
+      cfg_mpt_right = value;
+    }
+    pid_integral_left = 0.0F;
+    pid_integral_right = 0.0F;
+    Serial.printf("K %s %.6e\n", name, value);
+  } else if (strcmp(name, "sep") == 0) {
+    if (value < wheel_separation_min || value > wheel_separation_max) {
+      Serial.printf("K ERR %s\n", name);
+      return true;
+    }
+    cfg_wheel_separation = value;
+    pid_integral_left = 0.0F;
+    pid_integral_right = 0.0F;
+    Serial.printf("K sep %.4f\n", cfg_wheel_separation);
+  } else if (strcmp(name, "mpt_rl") == 0 || strcmp(name, "mpt_rr") == 0) {
+    if (value < metres_per_tick_min || value > metres_per_tick_max) {
+      Serial.printf("K ERR %s\n", name);
+      return true;
+    }
+    if (name[5] == 'l') {
+      cfg_mpt_rear_left = value;
+    } else {
+      cfg_mpt_rear_right = value;
+    }
+    pid_integral_left = 0.0F;
+    pid_integral_right = 0.0F;
+    Serial.printf("K %s %.6e\n", name, value);
+  } else if (strcmp(name, "rinv_l") == 0 || strcmp(name, "rinv_r") == 0) {
+    const bool invert = value != 0.0F;
+    // Flip the raw counter together with the sign: the signed count (telemetry "O", Pi odometry) stays
+    // continuous, so neither the PI nor the Pi sees a jump.
+    portENTER_CRITICAL(&encoder_mux);
+    if (name[5] == 'l') {
+      if (cfg_rear_invert_left != invert) {
+        rear_left_ticks = -rear_left_ticks;
+      }
+      cfg_rear_invert_left = invert;
+    } else {
+      if (cfg_rear_invert_right != invert) {
+        rear_right_ticks = -rear_right_ticks;
+      }
+      cfg_rear_invert_right = invert;
+    }
+    portEXIT_CRITICAL(&encoder_mux);
+    reset_wheel_speed_sampler(millis());
+    pid_integral_left = 0.0F;
+    pid_integral_right = 0.0F;
+    Serial.printf("K %s %d\n", name, invert ? 1 : 0);
+  } else if (strcmp(name, "rear_fb") == 0) {
+    cfg_rear_feedback = value != 0.0F;
+    rear_mismatch_since_ms = 0;
+    pid_integral_left = 0.0F;
+    pid_integral_right = 0.0F;
+    Serial.printf("K rear_fb %d\n", cfg_rear_feedback ? 1 : 0);
   } else {
     Serial.printf("K ERR %s\n", name);
   }
@@ -313,11 +472,11 @@ bool is_reset_command(const char* line) {
 }
 
 bool motion_config_ready() {
-  return isfinite(wheel_separation) && wheel_separation > 0.0F &&
+  return isfinite(cfg_wheel_separation) && cfg_wheel_separation > 0.0F &&
          isfinite(commissioning_full_scale_linear) &&
          commissioning_full_scale_linear > 0.0F &&
-         isfinite(commissioning_full_scale_angular) &&
-         commissioning_full_scale_angular > 0.0F;
+         isfinite(commissioning_full_scale_angular()) &&
+         commissioning_full_scale_angular() > 0.0F;
 }
 
 uint32_t duty_from_wheel_speed(float wheel_speed) {
@@ -377,6 +536,10 @@ void stop_motors() {
   have_wheel_targets = false;
   target_left_mps = 0.0F;
   target_right_mps = 0.0F;
+  // Fault timers restart with the next drive: a stale start time would latch a fault on the first cycle.
+  rear_mismatch_since_ms = 0;
+  stall_left_since_ms = 0;
+  stall_right_since_ms = 0;
   pid_integral_left = 0.0F;
   pid_integral_right = 0.0F;
 }
@@ -412,17 +575,11 @@ void apply_wheel_velocities(float left_speed, float right_speed) {
                        RIGHT_MOTOR_INVERTED);
 }
 
-float ticks_to_mps(int32_t delta_ticks,
-                   float ticks_per_rev,
-                   float wheel_radius,
-                   float dt_s) {
-  if (dt_s <= 0.0F || ticks_per_rev <= 0.0F || wheel_radius <= 0.0F) {
+float ticks_to_mps(int32_t delta_ticks, float metres_per_tick, float dt_s) {
+  if (dt_s <= 0.0F || metres_per_tick <= 0.0F) {
     return 0.0F;
   }
-  const float meters =
-      (static_cast<float>(delta_ticks) / ticks_per_rev) *
-      (2.0F * 3.14159265358979323846F * wheel_radius);
-  return meters / dt_s;
+  return static_cast<float>(delta_ticks) * metres_per_tick / dt_s;
 }
 
 uint32_t clamp_duty_u32(float duty_f) {
@@ -436,13 +593,70 @@ uint32_t clamp_duty_u32(float duty_f) {
 }
 
 void reset_wheel_speed_sampler(uint32_t now) {
-  int32_t left_snapshot = 0;
-  int32_t right_snapshot = 0;
-  copy_ticks(left_snapshot, right_snapshot);
   // Same sign convention as telemetry "O" lines (encoder_sign applied).
-  speed_sample_left_ticks = left_snapshot * left_encoder_sign;
-  speed_sample_right_ticks = right_snapshot * right_encoder_sign;
+  speed_sample_ticks = signed_ticks();
   speed_sample_ms = now;
+}
+
+// Front and rear wheel of a side disagree: opposite directions, or one much slower (unplugged / wrong
+// sign / lifted wheel). Only judged while the side is commanded to move and at least one wheel turns.
+bool rear_mismatch(float target_mps, float front_mps, float rear_mps) {
+  if (fabsf(target_mps) <= rear_check_min_target_mps) {
+    return false;
+  }
+  const float faster = fmaxf(fabsf(front_mps), fabsf(rear_mps));
+  if (faster < rear_check_min_speed_mps) {
+    return false;
+  }
+  return front_mps * rear_mps < 0.0F || fabsf(front_mps - rear_mps) > rear_check_max_mismatch * faster;
+}
+
+// True once `condition` has held continuously for `hold_ms` (since = 0: not holding).
+bool held_for(bool condition, uint32_t& since, uint32_t now, uint32_t hold_ms) {
+  if (!condition) {
+    since = 0;
+    return false;
+  }
+  if (since == 0) {
+    since = now == 0 ? 1 : now;
+    return false;
+  }
+  return now - since >= hold_ms;
+}
+
+// Stop and latch until a zero velocity command; "K FAULT <what>" tells the Pi (logged as an error).
+void latch_drive_fault(const char* what) {
+  stop_motors();
+  drive_fault_latched = true;
+  rear_mismatch_since_ms = 0;
+  stall_left_since_ms = 0;
+  stall_right_since_ms = 0;
+  Serial.printf("K FAULT %s\n", what);
+}
+
+// Rear feedback on: a mismatch lasting rear_check_fault_ms turns the rear feedback off AND stops (latched):
+// a stuck rear wheel / motor is not solved by ignoring its encoder.
+// Returns true when it latched.
+bool check_rear_feedback(uint32_t now, bool mismatch) {
+  if (!held_for(mismatch, rear_mismatch_since_ms, now, rear_check_fault_ms)) {
+    return false;
+  }
+  cfg_rear_feedback = false;
+  latch_drive_fault("rear_fb");
+  return true;
+}
+
+// A side commanded to move that does not (stalled motor, unplugged / dead encoder) while the PI already
+// pushes high duty.
+bool side_stalled(float target_mps, float measured_mps, uint32_t duty) {
+  if (fabsf(target_mps) <= stall_min_target_mps) {
+    return false;
+  }
+  if (static_cast<float>(duty) < stall_min_duty_fraction * static_cast<float>(motor_pwm_limit_duty)) {
+    return false;
+  }
+  const float along = target_mps >= 0.0F ? measured_mps : -measured_mps;
+  return along < stall_max_speed_fraction * fabsf(target_mps);
 }
 
 // One wheel of the PI loop. Works on magnitudes in the commanded direction:
@@ -482,26 +696,40 @@ void update_wheel_velocity_closed_loop(uint32_t now) {
   }
   next_wheel_vel_control_ms = now + wheel_vel_control_period_ms;
 
-  int32_t left_snapshot = 0;
-  int32_t right_snapshot = 0;
-  copy_ticks(left_snapshot, right_snapshot);
-  const int32_t signed_left = left_snapshot * left_encoder_sign;
-  const int32_t signed_right = right_snapshot * right_encoder_sign;
+  const WheelTickSet ticks = signed_ticks();
   const float dt_s =
       static_cast<float>(now - speed_sample_ms) * 0.001F;
-  const float meas_left = ticks_to_mps(
-      signed_left - speed_sample_left_ticks, odom_ticks_per_rev_left,
-      odom_wheel_radius_left, dt_s);
-  const float meas_right = ticks_to_mps(
-      signed_right - speed_sample_right_ticks, odom_ticks_per_rev_right,
-      odom_wheel_radius_right, dt_s);
-  speed_sample_left_ticks = signed_left;
-  speed_sample_right_ticks = signed_right;
+  const float front_left = ticks_to_mps(
+      ticks.front_left - speed_sample_ticks.front_left, cfg_mpt_left, dt_s);
+  const float front_right = ticks_to_mps(
+      ticks.front_right - speed_sample_ticks.front_right, cfg_mpt_right, dt_s);
+  const float rear_left = ticks_to_mps(
+      ticks.rear_left - speed_sample_ticks.rear_left, cfg_mpt_rear_left, dt_s);
+  const float rear_right = ticks_to_mps(
+      ticks.rear_right - speed_sample_ticks.rear_right, cfg_mpt_rear_right, dt_s);
+  speed_sample_ticks = ticks;
   speed_sample_ms = now;
+
+  if (cfg_rear_feedback &&
+      check_rear_feedback(now, rear_mismatch(target_left_mps, front_left, rear_left) ||
+                                   rear_mismatch(target_right_mps, front_right, rear_right))) {
+    return;  // latched: motors stopped
+  }
+  // Side speed: mean of front and rear wheel with rear feedback on, else the front wheel (as before).
+  const float meas_left = cfg_rear_feedback ? 0.5F * (front_left + rear_left) : front_left;
+  const float meas_right = cfg_rear_feedback ? 0.5F * (front_right + rear_right) : front_right;
 
   // Feedforward (open-loop map + min_duty) + PI. With kp = ki = 0 this equals open-loop duty.
   const uint32_t duty_l = wheel_pi_duty(target_left_mps, meas_left, dt_s, pid_integral_left);
   const uint32_t duty_r = wheel_pi_duty(target_right_mps, meas_right, dt_s, pid_integral_right);
+  if (held_for(side_stalled(target_left_mps, meas_left, duty_l), stall_left_since_ms, now, stall_fault_ms)) {
+    latch_drive_fault("stall_l");
+    return;
+  }
+  if (held_for(side_stalled(target_right_mps, meas_right, duty_r), stall_right_since_ms, now, stall_fault_ms)) {
+    latch_drive_fault("stall_r");
+    return;
+  }
   write_motor_duty(left_pwm_pin, left_dir_pin, target_left_mps, duty_l,
                    LEFT_MOTOR_INVERTED);
   write_motor_duty(right_pwm_pin, right_dir_pin, target_right_mps, duty_r,
@@ -518,6 +746,18 @@ void handle_velocity_command(float linear_mps, float angular_rps) {
     stop_motors();
     valid_velocity_command = true;
     last_valid_command_ms = millis();
+    if (drive_fault_latched) {
+      drive_fault_latched = false;
+      Serial.printf("K fault_clear 1\n");
+    }
+    return;
+  }
+
+  if (drive_fault_latched) {
+    // Stopped by a drive fault: stay stopped until a zero command acknowledges it.
+    stop_motors();
+    valid_velocity_command = true;
+    last_valid_command_ms = millis();
     return;
   }
 
@@ -528,14 +768,14 @@ void handle_velocity_command(float linear_mps, float angular_rps) {
 
   linear_mps = constrain(linear_mps, -commissioning_full_scale_linear,
                          commissioning_full_scale_linear);
-  angular_rps = constrain(angular_rps, -commissioning_full_scale_angular,
-                          commissioning_full_scale_angular);
+  const float angular_max = commissioning_full_scale_angular();
+  angular_rps = constrain(angular_rps, -angular_max, angular_max);
 
-  // Skid-steer: left = v - w*W/2, right = v + w*W/2 (W effective 0.4535).
+  // Skid-steer: left = v - w*W/2, right = v + w*W/2 (W = effective cfg_wheel_separation).
   float left_speed =
-      linear_mps - angular_rps * wheel_separation / 2.0F;
+      linear_mps - angular_rps * cfg_wheel_separation / 2.0F;
   float right_speed =
-      linear_mps + angular_rps * wheel_separation / 2.0F;
+      linear_mps + angular_rps * cfg_wheel_separation / 2.0F;
 
   const float peak = fmaxf(fabsf(left_speed), fabsf(right_speed));
   if (peak > commissioning_full_scale_linear) {
@@ -579,7 +819,15 @@ void handle_velocity_command(float linear_mps, float angular_rps) {
 
 void handle_command(const char* line) {
   if (is_reset_command(line)) {
+    // Only at rest: zeroing the counters under a running PI would read as a huge speed. The Pi never sends
+    // R (its odometry only rebaselines on an ESP32 restart), so this is a bench / serial monitor command.
+    if (have_wheel_targets) {
+      Serial.printf("K ERR reset\n");
+      return;
+    }
     reset_ticks();
+    reset_wheel_speed_sampler(millis());
+    Serial.printf("K reset 1\n");
     return;
   }
   if (handle_config_command(line)) {
@@ -662,14 +910,25 @@ void setup_encoder_inputs() {
   pinMode(left_encoder_c1_pin, INPUT);
   pinMode(right_encoder_c2_pin, INPUT);
   pinMode(right_encoder_c1_pin, INPUT);
+  // Pull-ups on the new rear inputs: an unplugged rear encoder must not float and count noise.
+  pinMode(rear_left_encoder_c2_pin, INPUT_PULLUP);
+  pinMode(rear_left_encoder_c1_pin, INPUT_PULLUP);
+  pinMode(rear_right_encoder_c2_pin, INPUT_PULLUP);
+  pinMode(rear_right_encoder_c1_pin, INPUT_PULLUP);
 
   portENTER_CRITICAL(&encoder_mux);
   left_state =
       read_encoder_state(left_encoder_c2_pin, left_encoder_c1_pin);
   right_state =
       read_encoder_state(right_encoder_c2_pin, right_encoder_c1_pin);
+  rear_left_state =
+      read_encoder_state(rear_left_encoder_c2_pin, rear_left_encoder_c1_pin);
+  rear_right_state =
+      read_encoder_state(rear_right_encoder_c2_pin, rear_right_encoder_c1_pin);
   left_ticks = 0;
   right_ticks = 0;
+  rear_left_ticks = 0;
+  rear_right_ticks = 0;
   portEXIT_CRITICAL(&encoder_mux);
 
   attachInterrupt(digitalPinToInterrupt(left_encoder_c2_pin),
@@ -680,6 +939,14 @@ void setup_encoder_inputs() {
                   on_right_c2_change, CHANGE);
   attachInterrupt(digitalPinToInterrupt(right_encoder_c1_pin),
                   on_right_c1_change, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(rear_left_encoder_c2_pin),
+                  on_rear_left_change, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(rear_left_encoder_c1_pin),
+                  on_rear_left_change, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(rear_right_encoder_c2_pin),
+                  on_rear_right_change, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(rear_right_encoder_c1_pin),
+                  on_rear_right_change, CHANGE);
 }
 
 void report_telemetry(uint32_t now) {
@@ -689,16 +956,12 @@ void report_telemetry(uint32_t now) {
 
   next_report_ms += report_period_ms;
 
-  int32_t left_snapshot = 0;
-  int32_t right_snapshot = 0;
-  copy_ticks(left_snapshot, right_snapshot);
-
-  const long output_left =
-      static_cast<long>(left_snapshot * left_encoder_sign);
-  const long output_right =
-      static_cast<long>(right_snapshot * right_encoder_sign);
-  Serial.printf("O %ld %ld %lu\n", output_left, output_right,
-                static_cast<unsigned long>(now));
+  // "O <front_left> <front_right> <rear_left> <rear_right> <millis>" (signed ticks). Before 2026-11-20 the
+  // line had only the two front wheels; the Pi parser accepts both forms.
+  const WheelTickSet ticks = signed_ticks();
+  Serial.printf("O %ld %ld %ld %ld %lu\n", static_cast<long>(ticks.front_left),
+                static_cast<long>(ticks.front_right), static_cast<long>(ticks.rear_left),
+                static_cast<long>(ticks.rear_right), static_cast<unsigned long>(now));
 }
 
 #if BATTERY_ADC_ENABLED

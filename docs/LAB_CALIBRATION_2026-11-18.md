@@ -63,3 +63,18 @@ Cấu hình chạy:
 **Chưa xử lý:**
 - Xe lệch trái khoảng 2.2° mỗi mét khi đi thẳng, do hai bên chạy không đều. Nav2 tự bù được.
 - Sai số tới đích trên 0.12 m ở hai chặng. Khi chạy transport request, các bước docking và refine của gateway sẽ xử lý phần này.
+
+## Thay đổi 2026-11-19 (branch `fix/rbt1-imu-drive-sync`, chưa nạp, chưa đo lại)
+
+**Commit 1, chỉ code Pi:**
+- `bno055_node` kiểm tra `OPR_MODE` mỗi 1 s. Khi chip tự reset, node cấu hình lại và nối yaw mới vào yaw đã publish (`yaw_tracker.py`), nên EKF không bị nhảy hướng.
+- Bỏ mẫu có norm quaternion ngoài khoảng (0.9, 1.1).
+- `Nav2SegmentExecutor`: SPIN không có yaw hiện tại thì trả `SPIN_YAW_UNAVAILABLE`, không đoán là 0.
+
+**Commit 2, Pi và firmware ESP32 phải deploy cùng lúc:**
+- Firmware không còn hardcode ticks/bán kính (cũ: 2478.1 cả hai bên, bán kính cũ, làm bánh phải nhanh hơn 0.53 %). Pi gửi `C mpt_l`, `C mpt_r`, `C sep` tính từ block `/**` trong `hardware.yaml`. Đây cũng là nguồn mà `wheel_odom_node` dùng.
+- `wheel_separation` hiệu dụng đổi 0.4535 → **0.395**. Đo ICP ngày 18/11 sau khi sửa bán kính: 0.378 khi xoay CCW, 0.413 khi xoay CW. Teleop `commissioning_angular_command_max` đổi 1.4112 → 1.6203.
+
+**Cần đo sau khi nạp:**
+- Đi thẳng 2 m. Nếu còn lệch θ (rad/m) thì đặt ε = θ·T, với T là track đo bằng thước. Lệch trái thì nhân `wheel_radius_right` với (1 − ε/2) và `wheel_radius_left` với (1 + ε/2).
+- Xoay 2×360° mỗi chiều. Tính `sep_mới = sep · yaw_odom / yaw_LiDAR`.

@@ -49,10 +49,13 @@ robot_gateway:
     amcl_nomotion_service: "/request_nomotion_update"
     arrival_max_refines: 2
     # 2026-11-13 operator: 0.10 m / 0.15 rad, like Nav2's goal checker and the endpoints' position_tolerance.
-    arrival_refine_xy_m: 0.12      # the NAVIGATE's positionTolerance (Endpoint, 0.12 m) wins when it is sent
+    # 2026-11-20 lab (V013, real gateway, scan-match truth): 0.10 m -> 8/8 legs, 7 without any refine, true error
+    # 1.2-9.3 cm. 0.08 m -> 2 of 3 legs re-drove the docking and one ended worse (12.9 cm): AMCL is good to ~5-10 cm,
+    # so a tighter limit only adds shuffling. Set the Endpoints' positionTolerance to 0.10 as well (was 0.12).
+    arrival_refine_xy_m: 0.10      # the NAVIGATE's positionTolerance (Endpoint) wins when it is sent
     arrival_refine_yaw_rad: 0.0873 # 5 deg, operator 2026-11-15 (1 deg earlier that day; 0.15 before)
     docking_align_yaw_rad: 0.0873  # align step skipped when already within 5 deg
-    docking_approach_lateral_m: 0.06  # half the 0.12 m endpoint tolerance
+    docking_approach_lateral_m: 0.05  # half the 0.10 m endpoint tolerance
     docking_approach_yaw_rad: 0.0873
     docking_min_run_in_m: 0.25     # every endpoint: turn >= 0.25 m out, then straight in along its heading
     # 0 since 2026-11-15 08:20: re-sending the travel for a 10-13 cm miss asked RPP for a short diagonal hop, which a

@@ -70,6 +70,9 @@ ultrasonic:
 
 # GY-BNO055 mount relative to base_link (REP-103).
 # Operator 2026-10-16: center of deck layer 2; axes aligned (no rotation).
+# Operator 2026-11-20: moved onto the chassis centre (it sat slightly off before). x = y = 0 already; z and the
+# axes are re-checked on the robot (docs/calibration.md §8). The EKF fuses only yaw / yaw rate, so the position
+# does not enter any computation.
 # Evidence: docs/calibration.md §8 — 112.0 mm above wheel-axle (base_link).
 imu:
   x: 0.0

@@ -327,6 +327,8 @@ Sync: `geometry.yaml` `imu.*` → URDF `imu_link`.
 |---|---|---|---|---|
 | 2026-10-16 | +X F / +Y L / +Z U | pose recorded; NDOF runtime TBD | TBD on robot | I²C smoke PASS (CHIP_ID + accel) |
 | 2026-10-16 | +X F / +Y L / +Z U (đã lắp) | `OPR_MODE=IMUPLUS` (yaw tương đối, không dùng magnetometer) | EKF đứng yên 10 s: dxy 0.0 mm, dyaw +0.01° | `/imu/data` 50.0 Hz, `frame_id=imu_link`, acc (+0.63, −0.28, +9.9) → Z-up OK, gyro rest ≈ 0.002 rad/s. **Chưa** test yaw khi quay (±90°/360°) |
+| 2026-11-18 | như trên | LiDAR ICP 2 × 360°: gyro z +2.5 %, yaw fusion −0.75 % → `gyro_z_scale` 0.975, `yaw_scale` 1.0075 | EKF so với LiDAR: +0.07 % | `docs/LAB_CALIBRATION_2026-11-18.md` |
+| 2026-11-20 | operator dời IMU vào tâm khung xe (x = y = 0 so với `base_link`, trước đó lệch một chút); trục giả định vẫn +X F / +Y L / +Z U | **CẦN ĐO LẠI:** gia tốc lúc đứng yên ≈ (0, 0, +9.8); xoay CCW thì yaw tăng; 2 × 360° bằng LiDAR ICP để kiểm hai hệ số scale | TBD | `z` vẫn 0.112 m tới khi đo lại (EKF chỉ dùng yaw / tốc độ yaw nên x, y, z không ảnh hưởng phép tính) |
 
 ---
 
