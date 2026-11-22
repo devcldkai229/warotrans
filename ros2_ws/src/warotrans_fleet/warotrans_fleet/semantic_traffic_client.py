@@ -739,6 +739,8 @@ def collect_resources(poses: Sequence[Sequence[float]], zones: list[dict[str, An
 
 
 _STRAIGHT_WINDOW_M = 0.25
+# Mirror of SemanticReservation.EndDiscMeters: full disc near the plan's goal (docking spins).
+_END_DISC_M = 0.45
 _STRAIGHT_MAX_TURN_RAD = 15.0 * math.pi / 180.0
 
 
@@ -756,6 +758,9 @@ def _straight_heading_at(
     """Mirror of StraightHeadingAt: None where the robot may turn on the spot and needs the full disc."""
     n = len(samples)
     if n < 2:
+        return None
+    sx, sy = samples[i]
+    if reached_end and math.hypot(sx - float(poses[-1][0]), sy - float(poses[-1][1])) <= _END_DISC_M:
         return None
     k = math.ceil(_STRAIGHT_WINDOW_M / geometry.sample_step)
     before, after, here = samples[max(0, i - k)], samples[min(n - 1, i + k)], samples[i]
