@@ -94,7 +94,10 @@ COMMIT;""")
         raise SystemExit(f"{a.map_code}: expected one PUBLISHED map version in {src}, found {len(maps)}, and none seeded in {a.target_db}")
     mv = maps[0]
     map_id, wh_id = mv["id"], mv["warehouse_id"]
-    workflows = rows(src, "execution.workflows", f"code = '{a.workflow_code}' AND status = 'PUBLISHED'")
+    # The newest published version (older versions stay PUBLISHED while Jobs still point at them).
+    workflows = rows(src, "execution.workflows",
+                     f"code = '{a.workflow_code}' AND status = 'PUBLISHED' AND version_no = (SELECT max(version_no) "
+                     f"FROM execution.workflows WHERE code = '{a.workflow_code}' AND status = 'PUBLISHED')")
     if len(workflows) != 1:
         raise SystemExit(f"{a.workflow_code}: expected one PUBLISHED workflow in {src}, found {len(workflows)}")
     wf_id = workflows[0]["id"]
