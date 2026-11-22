@@ -125,6 +125,8 @@ class SemanticTrafficClient:
     _last_blocked_mono: float = -1e9
     _last_state_report_mono: float = -1e9
     _was_localized: bool = False
+    # Last pose the gate saw (x, y, yaw): the real heading at the start of the next plan.
+    _last_pose: Optional[Pose] = None
     _allowed_cache: Optional[tuple[tuple[int, str, str], frozenset[str]]] = None
     # resource_id → mono when footprint first left it (cleared only after clear_confirm_sec).
     _pending_clear: dict[str, float] = field(default_factory=dict)
@@ -152,6 +154,7 @@ class SemanticTrafficClient:
             self.command_id = command_id
             self.plan_hash = ""
             self._drop_grant("NEW_COMMAND")
+        poses = self._with_real_start_heading(poses)
         path_hash = plan_hash(poses)
         if path_hash == self.plan_hash:
             # Same path: Nav2 may re-echo /plan; do not spam while a grant for this revision still exists.
@@ -166,6 +169,25 @@ class SemanticTrafficClient:
             self.plan_poses = [tuple(map(float, p)) for p in poses]  # type: ignore[misc]
             self._allowed_cache = None
         self._publish_plan_proposal(goal=goal, command_id=command_id, job_step_id=job_step_id, job_id=job_id)
+
+    def _with_real_start_heading(self, poses: Sequence[Pose]) -> list:
+        """Nav2's /plan carries the path's own heading at its start, not the robot's. Standing at the start but facing
+        another way, the robot turns on the spot first: with the path heading the backend reserved a lane rectangle
+        there, the turning body left it (OUTSIDE_RESERVATION) and the robot never moved (MAP-ONE-V015 sim, 2026-11-23,
+        a robot at EP-INBOUND facing 0.67 rad with a plan starting at -1.57 rad). The real heading (to 0.1 rad, so the
+        plan hash does not change with every reading) makes the backend reserve the turning circle there."""
+        out = [tuple(map(float, p)) for p in poses]
+        last = self._last_pose
+        if last is None or not out:
+            return out
+        x0, y0, yaw0 = out[0]
+        if math.hypot(x0 - float(last[0]), y0 - float(last[1])) > 0.15:
+            return out
+        real = float(last[2])
+        if _angle_between(real, yaw0) <= _STRAIGHT_MAX_TURN_RAD:
+            return out
+        out[0] = (x0, y0, round(real, 1))
+        return out
 
     def _publish_plan_proposal(
         self,
@@ -437,13 +459,20 @@ class SemanticTrafficClient:
             geometry.footprint_half_width + max(0.0, self.side_margin_m),
             geometry.cell_size, out,
         )
+        # Zones: the half length + margin, as footprint_resources and the backend (ZoneReserveRadiusMeters, 0.2425 m
+        # with ZoneMargin 0.05) do. The any-heading circle (0.2875 m) counted RBT-2 at x = 1.47 on lane LTR as inside
+        # ZONE-SINGLE-CENTER (0.26 m away), a zone its grant rightly did not hold: OUTSIDE_RESERVATION, it never moved
+        # again (MAP-ONE-V015 sim, 2026-11-23).
+        zone_radius = min(radius, max(geometry.footprint_half_length, geometry.footprint_half_width) + max(0.0, self.stop_margin_m))
         for code, ring in _zone_rings(self.zones):
-            if disc_hits_ring(pose[0], pose[1], radius, ring):
+            if disc_hits_ring(pose[0], pose[1], zone_radius, ring):
                 out.add(f"zone:{code}")
         return frozenset(out)
 
     def tick(self, pose: Optional[Pose]) -> bool:
         """≥20 Hz: publish authority_ok for cmd_vel_authority_gate. Returns the decision."""
+        if pose is not None:
+            self._last_pose = pose
         reason = self.motion_block_reason(pose)
         if reason is not None:
             self.last_block_reason = reason

@@ -541,6 +541,33 @@ def test_body_with_its_braking_margin_fits_at_the_start_of_a_plan():
         assert client.tick((offset, 0.0, 0.0)) is True, offset
 
 
+def test_a_zone_beside_the_lane_is_not_counted_as_entered():
+    """MAP-ONE-V015 sim, 2026-11-23: RBT-2 on lane LTR, 0.26 m from ZONE-SINGLE-CENTER, was counted inside it by the
+    any-heading circle (0.2875 m) and never moved again. Zones use the half length + margin, as the backend grants."""
+    client, _ = _lane_grant()
+    client.zones = [{"code": "ZONE-BESIDE", "rings": [[[1.0, 0.26], [2.0, 0.26], [2.0, 1.0], [1.0, 1.0], [1.0, 0.26]]]}]
+    assert client.tick((1.5, 0.0, 0.0)) is True
+    client.zones = [{"code": "ZONE-BESIDE", "rings": [[[1.0, 0.20], [2.0, 0.20], [2.0, 1.0], [1.0, 1.0], [1.0, 0.20]]]}]
+    assert client.tick((1.5, 0.0, 0.0)) is False
+    assert client.last_block_reason == "OUTSIDE_RESERVATION"
+
+
+def test_a_plan_starts_with_the_robots_real_heading():
+    """MAP-ONE-V015 sim, 2026-11-23: Nav2's /plan starts with the path heading. A robot standing at EP-INBOUND facing
+    0.67 rad got a lane rectangle at -1.57 rad there, turned out of it and stopped (OUTSIDE_RESERVATION)."""
+    client, published, _, _ = make()
+    client.tick((1.0, 0.0, 0.67))
+    path = [(1.0, 0.0, -1.5708)] + [(1.0, -0.1 * i, -1.5708) for i in range(1, 15)]
+    client.on_plan(path, goal=path[-1], command_id=CMD)
+    assert client.plan_poses[0][2] == 0.7
+    assert client.plan_poses[1][2] == -1.5708
+    # Already facing the way (within 15 deg): the plan is left as Nav2 made it.
+    client2, _, _, _ = make()
+    client2.tick((1.0, 0.0, -1.5))
+    client2.on_plan(path, goal=path[-1], command_id=CMD)
+    assert client2.plan_poses[0][2] == -1.5708
+
+
 def test_turning_across_the_lane_rectangle_closes_the_gate():
     client, _ = _lane_grant()
     assert client.tick((1.5, 0.08, 0.0)) is True
