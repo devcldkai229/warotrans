@@ -96,6 +96,18 @@ def test_on_the_bay_axis_a_refine_is_only_the_straight_move(geometry):
     assert plan.run_in.reverse and plan.run_in.length == pytest.approx(0.0608, abs=1e-3)
 
 
+def test_a_refine_next_to_the_endpoint_tolerates_more_sideways_error():
+    # V013 EP-SHELF-A-2 (2026-11-22): 0.11 m off, nose in the bay. Backing out to the turning point needs a turn the
+    # bay does not allow; a short straight correction does not.
+    geo = DockingGeometry(bay_map(), FOOTPRINT, padding=0.02, min_run_in=0.25)
+    goal = (3.0, 1.0, math.pi / 2)
+    plan = geo.plan((3.12, 0.92, math.pi / 2 + 0.05), goal)  # 0.12 m sideways, 0.14 m from the endpoint
+    assert plan.exit is None and plan.approach is None
+    assert plan.run_in is not None and plan.run_in.end == pytest.approx(goal[:2])
+    # Farther out the old 0.08 m limit still applies: it docks along the axis again.
+    assert geo.plan((3.12, 0.60, math.pi / 2), goal).approach is not None
+
+
 def test_a_dead_end_with_no_turning_point_falls_back_to_the_plain_goal():
     w, h = 40, 40
     blocked = [True] * (w * h)

@@ -206,7 +206,11 @@ class DockingGeometry:
             ux, uy = math.cos(gyaw), math.sin(gyaw)
             rx, ry = start[0] - gx, start[1] - gy
             along, across = rx * ux + ry * uy, -rx * uy + ry * ux
-            if (abs(across) <= 0.08 and abs(_wrap(start[2] - gyaw)) <= 0.35 and abs(along) <= self.max_dist
+            # Next to the endpoint a little more sideways error is still a short straight correction. With 0.08 m
+            # only, RBT-001 stopped 0.11 m off EP-SHELF-A-2 (V013, 2026-11-22), the refine planned "back out to the
+            # turning point" with the nose in the bay, Nav2 could not turn there and the robot stood 60 s, BLOCKED.
+            lateral_limit = 0.15 if math.hypot(rx, ry) <= 0.30 else 0.08
+            if (abs(across) <= lateral_limit and abs(_wrap(start[2] - gyaw)) <= 0.35 and abs(along) <= self.max_dist
                     and self._clear_line((start[0], start[1]), (gx, gy), gyaw)):
                 return DockPlan(run_in=StraightMove((start[0], start[1]), (gx, gy), gyaw, reverse=along > 0))
 

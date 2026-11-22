@@ -388,7 +388,7 @@ class SemanticTrafficClient:
         # Bare footprint, no margin: a released cell was left with exit_margin_m to spare, so localization jitter at
         # the boundary does not latch the gate shut; actually driving back into it does.
         if self.released_resources and (
-            footprint_resources(pose[0], pose[1], g.geometry.footprint_radius, self.zones, g.geometry.cell_size)
+            footprint_resources(pose[0], pose[1], g.geometry.footprint_radius, self.zones, g.geometry.cell_size, g.geometry)
             & self.released_resources
         ):
             return "IN_RELEASED_RESOURCE"
@@ -409,7 +409,7 @@ class SemanticTrafficClient:
             g = self.grant
             assert pose is not None and g is not None
             radius = g.geometry.footprint_radius + max(0.0, self.stop_margin_m)
-            if not footprint_resources(pose[0], pose[1], radius, self.zones, g.geometry.cell_size) <= self.allowed_resources():
+            if not footprint_resources(pose[0], pose[1], radius, self.zones, g.geometry.cell_size, g.geometry) <= self.allowed_resources():
                 return "SPIN_OUTSIDE_RESERVATION"
             return None
         if kind != "backup" or distance_m < 0.0:
@@ -429,7 +429,7 @@ class SemanticTrafficClient:
         """What the robot touches now, with its stopping margin: at any heading, or at its heading with lane rectangles."""
         radius = geometry.footprint_radius + max(0.0, self.stop_margin_m)
         if geometry.lane_half_width <= 0:
-            return footprint_resources(pose[0], pose[1], radius, self.zones, geometry.cell_size)
+            return footprint_resources(pose[0], pose[1], radius, self.zones, geometry.cell_size, geometry)
         out: set[str] = set()
         rect_cells(
             pose[0], pose[1], pose[2],
@@ -538,7 +538,7 @@ class SemanticTrafficClient:
             self._pending_clear.clear()
             return []
         under = footprint_resources(
-            x, y, g.geometry.footprint_radius + max(0.0, self.exit_margin_m), self.zones, g.geometry.cell_size
+            x, y, g.geometry.footprint_radius + max(0.0, self.exit_margin_m), self.zones, g.geometry.cell_size, g.geometry
         ) & g.resource_ids
         self.entered_resources |= under
         candidates = self.entered_resources - under
@@ -549,7 +549,7 @@ class SemanticTrafficClient:
         if candidates and self.plan_poses:
             gx, gy = self.plan_poses[-1][0], self.plan_poses[-1][1]
             candidates = candidates - footprint_resources(
-                gx, gy, g.geometry.footprint_radius + max(0.0, self.goal_hold_margin_m), self.zones, g.geometry.cell_size
+                gx, gy, g.geometry.footprint_radius + max(0.0, self.goal_hold_margin_m), self.zones, g.geometry.cell_size, g.geometry
             )
         now = self.monotonic()
         # Footprint returned → cancel any pending clear for those cells.
@@ -578,7 +578,7 @@ class SemanticTrafficClient:
         radius = geometry.footprint_radius + max(0.0, self.stop_margin_m)
         out: set[str] = set()
         for px, py in sample_path(poses[nearest:], geometry.sample_step, geometry.horizon):
-            out |= footprint_resources(px, py, radius, self.zones, geometry.cell_size)
+            out |= footprint_resources(px, py, radius, self.zones, geometry.cell_size, geometry)
         return frozenset(out)
 
     def publish_cleared_resources(self, cleared: list[str], *, x: float, y: float, yaw: float, localization_ok: bool) -> None:
@@ -787,12 +787,22 @@ def rect_cells(x: float, y: float, heading: float, half_length: float, half_widt
                 into.add(cell_id(ix, iy))
 
 
-def footprint_resources(x: float, y: float, radius: float, zones: list[dict[str, Any]], cell_size: float) -> frozenset[str]:
-    """Cells and zones the robot (any heading) touches at (x, y)."""
+def footprint_resources(x: float, y: float, radius: float, zones: list[dict[str, Any]], cell_size: float,
+                        geometry: Optional["SemanticGeometry"] = None) -> frozenset[str]:
+    """Cells the robot (any heading) touches at (x, y), and the zones its body reaches.
+
+    Zones use the half length (not the any-heading circle) plus the same margin, as the backend does
+    (SemanticReservation.ZoneReserveRadiusMeters): a robot parked 0.245 m below ZONE-SINGLE-CENTER (MAP-ONE-V013
+    EP-PARKING-B) is not in that zone, and holding it there blocked the other robot (2026-11-22).
+    """
     out: set[str] = set()
     disc_cells(x, y, radius, cell_size, out)
+    zone_radius = radius
+    if geometry is not None and min(geometry.footprint_half_length, geometry.footprint_half_width) > 0:
+        zone_radius = min(radius, radius - geometry.footprint_radius
+                          + max(geometry.footprint_half_length, geometry.footprint_half_width))
     for code, ring in _zone_rings(zones):
-        if disc_hits_ring(x, y, radius, ring):
+        if disc_hits_ring(x, y, zone_radius, ring):
             out.add(f"zone:{code}")
     return frozenset(out)
 
