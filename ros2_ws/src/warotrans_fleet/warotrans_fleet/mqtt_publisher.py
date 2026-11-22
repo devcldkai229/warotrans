@@ -204,6 +204,48 @@ class ReconnectingMqttPublisher:
             pass
 
 
+@dataclass(frozen=True)
+class MqttTlsConfig:
+    """MQTT over TLS with an X.509 client certificate (AWS IoT Core: port 8883, thing certificate).
+
+    ``ca_file`` empty: the system trust store (it holds Amazon Root CA 1). Files are read by paho at connect time;
+    the key file must stay readable by the robot user only (0600).
+    """
+
+    cert_file: str
+    key_file: str
+    ca_file: str = ""
+
+    def validate(self) -> None:
+        import os
+
+        for label, path in (("mqtt_cert_file", self.cert_file), ("mqtt_key_file", self.key_file)):
+            if not path or not os.path.isfile(path):
+                raise ValueError(f"MQTT TLS: {label} {path!r} is not a file")
+        if self.ca_file and not os.path.isfile(self.ca_file):
+            raise ValueError(f"MQTT TLS: mqtt_ca_file {self.ca_file!r} is not a file")
+
+
+def with_tls(base: ClientFactory, tls: MqttTlsConfig) -> ClientFactory:
+    """Wrap a client factory so every new client speaks TLS 1.2+ and presents the client certificate."""
+    import ssl
+
+    tls.validate()
+
+    def factory(client_id: str) -> MqttClientLike:
+        client = base(client_id)
+        client.tls_set(  # type: ignore[attr-defined]
+            ca_certs=tls.ca_file or None,
+            certfile=tls.cert_file,
+            keyfile=tls.key_file,
+            cert_reqs=ssl.CERT_REQUIRED,
+            tls_version=ssl.PROTOCOL_TLS_CLIENT,
+        )
+        return client
+
+    return factory
+
+
 def default_paho_factory(client_id: str) -> MqttClientLike:
     import paho.mqtt.client as mqtt
 

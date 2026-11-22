@@ -45,7 +45,7 @@ from warotrans_fleet.amcl_readiness import AmclReadiness
 from warotrans_fleet.battery_telemetry import battery_fields
 from warotrans_fleet.localization_hysteresis import LocalizationHysteresis
 from warotrans_fleet.localization_jump import LocalizationJumpDetector
-from warotrans_fleet.mqtt_publisher import ReconnectingMqttPublisher, default_paho_factory
+from warotrans_fleet.mqtt_publisher import MqttTlsConfig, ReconnectingMqttPublisher, default_paho_factory, with_tls
 from warotrans_fleet.nav2_status_tracker import Nav2StatusTracker
 from warotrans_fleet.navigator import NavigatorPort, UnavailableNavigator
 from warotrans_fleet.route_grant import load_graph_hash
@@ -88,6 +88,12 @@ class RobotGatewayNode(Node):
         self.declare_parameter("mqtt_host", "localhost")
         self.declare_parameter("mqtt_port", 1883)
         self.declare_parameter("mqtt_client_id", "warotrans-robot-gateway")
+        # AWS IoT Core: TLS on 8883 with the robot's thing certificate; the client id is then the thing name
+        # (= robot_code), the only id its IoT policy accepts. Env: WARO_MQTT_TLS / _CA_FILE / _CERT_FILE / _KEY_FILE.
+        self.declare_parameter("mqtt_tls", False)
+        self.declare_parameter("mqtt_ca_file", "")
+        self.declare_parameter("mqtt_cert_file", "")
+        self.declare_parameter("mqtt_key_file", "")
         self.declare_parameter("topic_prefix", "warotrans/v1")
         self.declare_parameter("map_version_code", "")
         self.declare_parameter("map_frame", "map")
@@ -225,6 +231,7 @@ class RobotGatewayNode(Node):
         # session takeover (endless disconnect / zero grants / gate stuck closed).
         base_client_id = self._str_param("mqtt_client_id").strip() or "warotrans-robot-gateway"
         client_id = f"{base_client_id}-{os.getpid()}"
+        self._mqtt_tls = self._mqtt_tls_config()
 
         default_timeout = self._float_param("default_navigate_timeout_sec")
         goal_response_timeout = self._float_param("goal_response_timeout_sec")
@@ -322,8 +329,12 @@ class RobotGatewayNode(Node):
         self.mqtt = ReconnectingMqttPublisher(
             host=self._mqtt_host,
             port=self._mqtt_port,
-            client_id=f"{client_id}-{self._robot_code}",
-            client_factory=default_paho_factory,
+            # TLS (IoT Core): the thing name. A restart after an unclean kill then takes the old session over,
+            # which is what it needs; two gateways never run on one robot.
+            client_id=self._robot_code if self._mqtt_tls else f"{client_id}-{self._robot_code}",
+            client_factory=(
+                default_paho_factory if self._mqtt_tls is None else with_tls(default_paho_factory, self._mqtt_tls)
+            ),
             subscribe_topic=subscribe_topics,
             on_message=self._on_mqtt_message,
         )
@@ -483,6 +494,20 @@ class RobotGatewayNode(Node):
         )
 
     # ------------------------------------------------------------------ setup helpers
+
+    def _mqtt_tls_config(self) -> Optional[MqttTlsConfig]:
+        env = os.environ.get("WARO_MQTT_TLS", "").strip().lower()
+        if env:
+            enabled = env in ("1", "true", "yes")
+        else:
+            enabled = bool(self.get_parameter("mqtt_tls").get_parameter_value().bool_value)
+        if not enabled:
+            return None
+        return MqttTlsConfig(
+            cert_file=_env_or(self._str_param("mqtt_cert_file"), "WARO_MQTT_CERT_FILE"),
+            key_file=_env_or(self._str_param("mqtt_key_file"), "WARO_MQTT_KEY_FILE"),
+            ca_file=_env_or(self._str_param("mqtt_ca_file"), "WARO_MQTT_CA_FILE"),
+        )
 
     def _str_param(self, name: str) -> str:
         return self.get_parameter(name).get_parameter_value().string_value

@@ -4,6 +4,10 @@
 #                                                           name / ICS address / LAN scan (broker_discovery.py)
 #   BROKER=<ip|name> ~/warotrans_tools/pi_run_semantic.sh start   pin it
 #   ~/warotrans_tools/pi_run_semantic.sh status | stop
+#   MODE=cloud ~/warotrans_tools/pi_run_semantic.sh start   AWS: MQTT over TLS to AWS IoT Core with this robot's thing
+#                                                           certificate, evidence to the cloud Recorder. Reads
+#                                                           ~/.config/warotrans/cloud.env (docs in tools/cloud.env.example);
+#                                                           no broker discovery, no laptop.
 # MOTORS defaults to false: odometry live, the ESP32 bridge writes no velocity. MOTORS=true is for a supervised run
 # only, with a tested hardware E-stop in reach. BUNDLE selects the map (semantic bundle directory).
 # EKF defaults to true since the 2026-11-11 lab (docs/LAB_CALIBRATION_2026-11-11.md): the BNO055 yaw is within ~1 % of
@@ -23,11 +27,37 @@ ROBOT_CODE="${ROBOT_CODE:-RBT-001}"
 CAMERA="${CAMERA:-true}"
 EVIDENCE_ENV="$HOME/.config/warotrans/evidence.env"
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
+MODE="${MODE:-lan}"
+CLOUD_ENV="$HOME/.config/warotrans/cloud.env"
 
 case "$ACTION" in
   start)
     # The laptop's address changes with the network; a name is kept as a name (MQTT and the agent re-resolve it).
-    BROKER=$(BROKER="${BROKER:-auto}" python3 "$HOME/warotrans_tools/broker_discovery.py" resolve --retry-s 30)       || { echo "backend not found (MQTT 1883): start the backend or give BROKER=<ip>"; exit 2; }
+    case "$MODE" in
+      cloud)
+        [[ -f "$CLOUD_ENV" ]] || { echo "MODE=cloud needs $CLOUD_ENV (see tools/cloud.env.example)"; exit 2; }
+        set -a; source "$CLOUD_ENV"; set +a
+        IOT_DIR="${WARO_IOT_DIR:-$HOME/.config/warotrans/iot}"
+        export WARO_MQTT_TLS=true WARO_MQTT_PORT="${WARO_MQTT_PORT:-8883}"
+        export WARO_MQTT_CERT_FILE="${WARO_MQTT_CERT_FILE:-$IOT_DIR/$ROBOT_CODE.cert.pem}"
+        export WARO_MQTT_KEY_FILE="${WARO_MQTT_KEY_FILE:-$IOT_DIR/$ROBOT_CODE.private.key}"
+        export WARO_MQTT_CA_FILE="${WARO_MQTT_CA_FILE:-$IOT_DIR/AmazonRootCA1.pem}"
+        for f in "$WARO_MQTT_CERT_FILE" "$WARO_MQTT_KEY_FILE" "$WARO_MQTT_CA_FILE"; do
+          [[ -f "$f" ]] || { echo "MODE=cloud: missing $f"; exit 2; }
+        done
+        [[ -n "${WARO_MQTT_HOST:-}" && -n "${WARO_RECORDER_URL:-}" ]]           || { echo "$CLOUD_ENV must set WARO_MQTT_HOST (IoT ATS endpoint) and WARO_RECORDER_URL"; exit 2; }
+        # Command expiry allows 2 s of clock skew: without a synchronised clock every command would be refused.
+        if [[ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" != "yes" ]]; then
+          echo "clock not NTP-synchronised (chrony): run tools/install_chrony.sh --cloud and wait"; exit 2
+        fi
+        BROKER="$WARO_MQTT_HOST"; RECORDER_URL="$WARO_RECORDER_URL"
+        ;;
+      lan)
+        BROKER=$(BROKER="${BROKER:-auto}" python3 "$HOME/warotrans_tools/broker_discovery.py" resolve --retry-s 30)       || { echo "backend not found (MQTT 1883): start the backend or give BROKER=<ip>"; exit 2; }
+        RECORDER_URL="http://$BROKER:5095"
+        ;;
+      *) echo "MODE must be lan or cloud"; exit 2 ;;
+    esac
     [[ -f "$BUNDLE/semantic_manifest.json" ]] || { echo "no bundle at $BUNDLE"; exit 2; }
     if [[ "$(systemctl is-active warotrans-teleop 2>/dev/null)" == "active" ]]; then
       echo "warotrans-teleop is running (owns the ESP32 port, drives /cmd_vel): sudo systemctl stop warotrans-teleop"
@@ -41,7 +71,7 @@ case "$ACTION" in
       false) AMCL_PARAMS="$SRC/warotrans_localization/config/amcl_wheel_only.yaml" ;;
       *) echo "EKF must be true or false"; exit 2 ;;
     esac
-    echo "robot_code=$ROBOT_CODE domain=$ROS_DOMAIN_ID motors_enabled=$MOTORS ekf=$EKF bundle=$BUNDLE broker=$BROKER"
+    echo "robot_code=$ROBOT_CODE domain=$ROS_DOMAIN_ID motors_enabled=$MOTORS ekf=$EKF bundle=$BUNDLE mode=$MODE broker=$BROKER"
     setsid nohup ros2 launch warotrans_bringup navigation.launch.py \
       map:="$BUNDLE/map.yaml" lanes_json:="$BUNDLE/lanes.json" \
       extra_params_file:="$SRC/warotrans_navigation/config/nav2_params_lane_aware.yaml" \
@@ -58,15 +88,18 @@ case "$ACTION" in
       setsid nohup ros2 run warotrans_camera camera_stream --ros-args         --params-file "$SRC/warotrans_camera/config/camera_rbt001.yaml"         > "$LOGS/camera_${ROBOT_CODE}.log" 2>&1 < /dev/null &
       if [[ -f "$EVIDENCE_ENV" ]]; then
         set -a; source "$EVIDENCE_ENV"; set +a
-        setsid nohup ros2 run warotrans_evidence_agent evidence_agent --ros-args           --params-file "$SRC/warotrans_evidence_agent/config/evidence_agent_rbt001.yaml"           -p recorder_url:="http://$BROKER:5095" -p robot_code:="$ROBOT_CODE"           -p map_version_code:="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['mapCode'])" "$BUNDLE/semantic_manifest.json")"           > "$LOGS/evidence_${ROBOT_CODE}.log" 2>&1 < /dev/null &
+        setsid nohup ros2 run warotrans_evidence_agent evidence_agent --ros-args           --params-file "$SRC/warotrans_evidence_agent/config/evidence_agent_rbt001.yaml"           -p recorder_url:="$RECORDER_URL" -p robot_code:="$ROBOT_CODE"           -p map_version_code:="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['mapCode'])" "$BUNDLE/semantic_manifest.json")"           > "$LOGS/evidence_${ROBOT_CODE}.log" 2>&1 < /dev/null &
       else
         echo "no $EVIDENCE_ENV (WARO_EVIDENCE_TOKEN=...): camera live only, no evidence recording"
       fi
     fi
     # Follow the laptop if its address changes mid-session: 3 missed MQTT checks -> resolve again -> stop/start
     # (same environment). The restart runs detached because stop kills this watcher.
+    # Cloud: IoT Core has a fixed name, paho reconnects by itself; nothing to follow.
+    if [[ "$MODE" == "lan" ]]; then
     mkdir -p "$HOME/.cache/warotrans"; echo "$BROKER" > "$HOME/.cache/warotrans/broker"
     setsid nohup python3 "$HOME/warotrans_tools/broker_discovery.py" watch --state "$HOME/.cache/warotrans/broker"       --on-change "setsid nohup bash -c 'BROKER=auto $0 stop; sleep 3; BROKER=auto $0 start' >> $LOGS/broker_watch_${ROBOT_CODE}.log 2>&1 < /dev/null &"       >> "$LOGS/broker_watch_${ROBOT_CODE}.log" 2>&1 < /dev/null &
+    fi
     echo started
     ;;
   stop)

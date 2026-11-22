@@ -9,11 +9,26 @@
 #
 # The laptop must answer NTP: run tools/laptop_lab_network.ps1 once as admin (W32Time server + firewall).
 #
+#   sudo tools/install_chrony.sh --cloud       AWS (MODE=cloud): the backend runs in AWS, which keeps its clock on
+#                                              Amazon Time Sync; the robot follows the same source over the Internet
+#                                              (time.aws.com) plus the public pool. No laptop line, no 16 s allowance.
+#
 # Check afterwards:  chronyc tracking   (Leap status: Normal; "System time" is the offset)
 set -euo pipefail
-SERVER="${1:-${WARO_BACKEND_HOST:-LAPTOP-Q0QAV6GM.local}}"
 if [[ $EUID -ne 0 ]]; then echo "run with sudo"; exit 2; fi
 apt-get install -y chrony >/dev/null
+if [[ "${1:-}" == "--cloud" ]]; then
+  SERVER="time.aws.com"
+  cat > /etc/chrony/conf.d/warotrans.conf <<'EOF'
+# WaroTrans (AWS): the cloud backend's clock is Amazon Time Sync; time.aws.com serves the same time on the Internet.
+# Command expiry allows 2 s of skew, so the robot needs Internet time before it starts (MODE=cloud checks it).
+server time.aws.com iburst minpoll 4 maxpoll 8
+pool ntp.ubuntu.com iburst maxsources 2
+# Step the clock at boot if it is far off (no RTC), slew afterwards (never jump during a run).
+makestep 1.0 3
+EOF
+else
+SERVER="${1:-${WARO_BACKEND_HOST:-LAPTOP-Q0QAV6GM.local}}"
 cat > /etc/chrony/conf.d/warotrans.conf <<EOF
 # WaroTrans: the backend laptop (same clock as the Evidence Recorder) and the public pool; chrony picks the source with
 # the smallest error, so the pool when there is Internet (the laptop reports 10 s), the laptop alone otherwise.
@@ -27,6 +42,7 @@ maxdistance 16.0
 # Step the clock at boot if it is far off (no RTC), slew afterwards (never jump during a run).
 makestep 1.0 3
 EOF
+fi
 systemctl disable --now systemd-timesyncd 2>/dev/null || true
 systemctl enable --now chrony
 systemctl restart chrony
