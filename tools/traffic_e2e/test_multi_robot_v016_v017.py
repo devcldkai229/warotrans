@@ -96,15 +96,16 @@ def host():
     h = Host(ARTIFACTS, name="host", extra_env={
         # = launchSettings "RealRobot", minus hardware.
         "Traffic__SemanticMapDirectory": str(BUNDLE),
-        "Traffic__SemanticHorizonMeters": "1.2",
+        "Traffic__SemanticHorizonMeters": "0.6",
         "Traffic__SemanticZoneMarginMeters": "0.05",
         "Traffic__SemanticLaneHalfWidthMeters": os.environ.get("WARO_E2E_LANE_HALF", "0.25"),
         "Traffic__SemanticPrefixGrant": "true",
         "Traffic__SemanticCellSizeMeters": "0.10",
         "Traffic__SemanticPathToleranceMeters": "0.15",
+        "Traffic__StandingMarginMeters": "0.02",
         f"Traffic__RobotHomeEndpoints__E2E-{RUN}-R1": "EP-PARKING-A",
         f"Traffic__RobotHomeEndpoints__E2E-{RUN}-R2": "EP-PARKING-B",
-        "FleetIdle__AutoReturnToPark": "false",
+        "FleetIdle__AutoReturnToPark": "true",
         "FleetIdle__IdleSeconds": "3",
         "FleetIdle__FallbackEndpointCodes": "EP-QUEUE-A",
         "JobPlanning__MaxContainersPerJob": "3",

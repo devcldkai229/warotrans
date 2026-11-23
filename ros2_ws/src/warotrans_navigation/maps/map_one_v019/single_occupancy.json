@@ -1,37 +1,6 @@
 {
   "zones": [
     {
-      "id": "e1497aea-85b5-4e40-8541-686fe9d29dcc",
-      "code": "ZONE-AREA-INBOUND",
-      "name": "Area Inbound",
-      "zone_type": "SINGLE_OCCUPANCY",
-      "max_speed": null,
-      "rings": [
-        [
-          [
-            2.175,
-            0.261
-          ],
-          [
-            2.601,
-            0.261
-          ],
-          [
-            2.603,
-            0.666
-          ],
-          [
-            2.177,
-            0.666
-          ],
-          [
-            2.175,
-            0.261
-          ]
-        ]
-      ]
-    },
-    {
       "id": "2369b284-8f08-4d0a-bbe6-a78b35f96582",
       "code": "ZONE-SINGLE-CENTER",
       "name": "Single Center",
