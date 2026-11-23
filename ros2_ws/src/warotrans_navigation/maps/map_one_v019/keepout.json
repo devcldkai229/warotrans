@@ -1,0 +1,97 @@
+{
+  "zones": [
+    {
+      "id": "74436aca-8dab-498c-8a66-206871623b30",
+      "code": "ZONE-KEEP-OUT-BOUND",
+      "name": "Keep Out Bound",
+      "zone_type": "KEEP_OUT",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            1.204,
+            -0.469
+          ],
+          [
+            1.729,
+            -0.47
+          ],
+          [
+            1.733,
+            -0.479
+          ],
+          [
+            1.204,
+            -0.481
+          ],
+          [
+            1.204,
+            -0.469
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "f3972a37-742e-4523-8229-092ae3a3f748",
+      "code": "ZONE-KEEP-OUT-SHELF-B",
+      "name": "Keep Out Shelf B",
+      "zone_type": "KEEP_OUT",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            0.528,
+            0.948
+          ],
+          [
+            0.554,
+            0.946
+          ],
+          [
+            0.551,
+            0.184
+          ],
+          [
+            0.528,
+            0.183
+          ],
+          [
+            0.528,
+            0.948
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "7253b40f-bc0f-45fa-90e5-d51f6a3973c5",
+      "code": "ZONE-KEEP-OUT-ZONE-A",
+      "name": "Keep Out Zone A",
+      "zone_type": "KEEP_OUT",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            -0.908,
+            0.583
+          ],
+          [
+            -0.873,
+            0.58
+          ],
+          [
+            -0.873,
+            -0.455
+          ],
+          [
+            -0.906,
+            -0.455
+          ],
+          [
+            -0.908,
+            0.583
+          ]
+        ]
+      ]
+    }
+  ]
+}

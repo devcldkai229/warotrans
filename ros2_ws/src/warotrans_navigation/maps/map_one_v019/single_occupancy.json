@@ -1,0 +1,172 @@
+{
+  "zones": [
+    {
+      "id": "e1497aea-85b5-4e40-8541-686fe9d29dcc",
+      "code": "ZONE-AREA-INBOUND",
+      "name": "Area Inbound",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            2.175,
+            0.261
+          ],
+          [
+            2.601,
+            0.261
+          ],
+          [
+            2.603,
+            0.666
+          ],
+          [
+            2.177,
+            0.666
+          ],
+          [
+            2.175,
+            0.261
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "2369b284-8f08-4d0a-bbe6-a78b35f96582",
+      "code": "ZONE-SINGLE-CENTER",
+      "name": "Single Center",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            1.207,
+            0.178
+          ],
+          [
+            -0.13,
+            0.178
+          ],
+          [
+            -0.13,
+            -0.465
+          ],
+          [
+            0.542,
+            -0.465
+          ],
+          [
+            0.545,
+            -0.644
+          ],
+          [
+            0.862,
+            -0.879
+          ],
+          [
+            1.195,
+            -1.141
+          ],
+          [
+            1.207,
+            0.178
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "6d316b61-93ed-4e38-967c-5524a3c60794",
+      "code": "ZONE-SINGLE-OCCUPANCY---7",
+      "name": "Single-occupancy - 7",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            -1.599,
+            1.044
+          ],
+          [
+            -0.235,
+            1.047
+          ],
+          [
+            -0.232,
+            0.591
+          ],
+          [
+            -1.599,
+            0.583
+          ],
+          [
+            -1.599,
+            1.044
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "87979535-4958-4207-b71b-0503ee19bdae",
+      "code": "ZONE-SINGLE-QUEUE-A-ZONE",
+      "name": "Single Queue A Zone",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            -0.867,
+            -0.503
+          ],
+          [
+            -0.252,
+            -0.515
+          ],
+          [
+            -0.258,
+            -0.976
+          ],
+          [
+            -0.867,
+            -0.971
+          ],
+          [
+            -0.867,
+            -0.503
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "8d4a1dd8-8604-4031-abad-4171373ad60b",
+      "code": "ZONE-SINGLE-ZONE-B",
+      "name": "Single Zone B",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            -0.135,
+            1.582
+          ],
+          [
+            1.205,
+            1.582
+          ],
+          [
+            1.205,
+            0.949
+          ],
+          [
+            -0.14,
+            0.944
+          ],
+          [
+            -0.135,
+            1.582
+          ]
+        ]
+      ]
+    }
+  ],
+  "enforcement": "NOT_SUPPORTED_STAGE2"
+}
