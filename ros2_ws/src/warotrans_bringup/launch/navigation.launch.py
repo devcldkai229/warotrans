@@ -161,7 +161,17 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument(
                 "start_localization",
                 default_value="true",
-                description="Start map_server and AMCL",
+                description="Start the localizer (see localizer)",
+            ),
+            DeclareLaunchArgument(
+                "localizer",
+                default_value="amcl",
+                description="amcl (map_server + AMCL) or slam_toolbox (SLAM Toolbox localization mode, needs slam_posegraph)",
+            ),
+            DeclareLaunchArgument(
+                "slam_posegraph",
+                default_value=os.path.expanduser("~/maps/warotrans_posegraph"),
+                description="Pose graph (without .posegraph/.data) saved by /slam_toolbox/serialize_map after mapping",
             ),
             DeclareLaunchArgument(
                 "start_navigation",
@@ -320,7 +330,7 @@ def generate_launch_description() -> LaunchDescription:
                 condition=IfCondition(LaunchConfiguration("start_ultrasonic")),
             ),
 
-            # --- Localization: map_server + AMCL ---
+            # --- Localization: map_server + AMCL (localizer:=amcl, default) ---
             # AMCL owns map -> odom transform
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
@@ -331,7 +341,28 @@ def generate_launch_description() -> LaunchDescription:
                     "autostart": autostart,
                     "amcl_params_file": LaunchConfiguration("amcl_params_file"),
                 }.items(),
-                condition=IfCondition(LaunchConfiguration("start_localization")),
+                condition=IfCondition(
+                    PythonExpression(
+                        ["'", LaunchConfiguration("start_localization"), "' == 'true' and '",
+                         LaunchConfiguration("localizer"), "' == 'amcl'"]
+                    )
+                ),
+            ),
+
+            # --- Localization: SLAM Toolbox localization mode (localizer:=slam_toolbox) ---
+            # slam_toolbox owns map -> odom and publishes /map from the saved pose graph. The gateway then needs
+            # localizer:=slam_toolbox and amcl_pose_topic:=/pose.
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    _subsystem_launch("warotrans_localization", "slam_localization.launch.py")
+                ),
+                launch_arguments={"posegraph": LaunchConfiguration("slam_posegraph")}.items(),
+                condition=IfCondition(
+                    PythonExpression(
+                        ["'", LaunchConfiguration("start_localization"), "' == 'true' and '",
+                         LaunchConfiguration("localizer"), "' == 'slam_toolbox'"]
+                    )
+                ),
             ),
 
             # --- Navigation: delayed so LiDAR + AMCL TF are ready ---

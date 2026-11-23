@@ -235,6 +235,8 @@ def _robot_stack(
                         ),
                         "odom_topic": "odom",
                         "amcl_pose_topic": "amcl_pose",
+                        # Auto-localize turns on the spot past the authority gate (cmd_vel_safe is gated).
+                        "auto_localize_cmd_vel_topic": "cmd_vel",
                     },
                 ],
             )
