@@ -752,22 +752,31 @@ def collect_resources(poses: Sequence[Sequence[float]], zones: list[dict[str, An
     rings = list(_zone_rings(zones))
     samples = sample_path(poses, geometry.sample_step, max(geometry.cell_size, geometry.horizon))
     reached_end = bool(samples) and samples[-1][0] == float(poses[-1][0]) and samples[-1][1] == float(poses[-1][1])
+    full_tolerance = max(0.0, geometry.reserve_radius - geometry.footprint_radius - geometry.sample_step / 2.0)
+    traveled = 0.0
     for i, (x, y) in enumerate(samples):
+        if i > 0:
+            traveled += math.hypot(x - samples[i - 1][0], y - samples[i - 1][1])
+        # Mirror of SemanticReservation.ToleranceAt: the sideways room grows from START_TOLERANCE_M at the start.
+        radius = geometry.footprint_radius + min(full_tolerance, START_TOLERANCE_M + TOLERANCE_GROWTH_PER_M * traveled) + geometry.sample_step / 2.0
         for code, ring in rings:
             if disc_hits_ring(x, y, geometry.reserve_radius, ring):
                 out.add(f"zone:{code}")
         heading = _straight_heading_at(geometry, samples, i, poses, reached_end) if geometry.lane_half_width > 0 else None
         if heading is None:
-            disc_cells(x, y, geometry.reserve_radius, geometry.cell_size, out)
+            disc_cells(x, y, radius, geometry.cell_size, out)
         else:
             # Lengthwise as much room as the disc gives: the body with its braking margin stays inside at the plan's
             # start, where the robot stands, and at its end.
-            along = geometry.reserve_radius - geometry.footprint_radius + geometry.footprint_half_length
+            along = radius - geometry.footprint_radius + geometry.footprint_half_length
             rect_cells(x, y, heading, along, geometry.lane_half_width, geometry.cell_size, out)
     return frozenset(out)
 
 
 _STRAIGHT_WINDOW_M = 0.25
+# Mirror of SemanticReservation.StartToleranceMeters: path tolerance reserved where the plan starts.
+START_TOLERANCE_M = 0.05
+TOLERANCE_GROWTH_PER_M = 0.5
 # Mirror of SemanticReservation.EndDiscMeters: full disc near the plan's goal (docking spins).
 _END_DISC_M = 0.45
 _STRAIGHT_MAX_TURN_RAD = 15.0 * math.pi / 180.0
