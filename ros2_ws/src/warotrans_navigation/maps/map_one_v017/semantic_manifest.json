@@ -20,8 +20,8 @@
   "navRuntime": "nav2_semantic",
   "target": "real_robot",
   "sourceSnapshot": "MAP-ONE-V017",
-  "exportedAt": "2026-11-22T20:55:06.268777+00:00",
-  "semanticMapFingerprint": "afab7afba2be5461e4163561eaee9151fc4fe3f1cd644c6f636f347f8c562cb4",
+  "exportedAt": "2026-11-23T05:54:29.758499+00:00",
+  "semanticMapFingerprint": "15e789d5f9ef942c76fefc9a0622853421254df6691696803e87ee3be6d338e6",
   "plannerId": "warotrans_lane_planner::LaneAwareNavfn",
   "stage": 2,
   "policies": {

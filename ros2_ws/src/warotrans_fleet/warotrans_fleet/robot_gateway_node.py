@@ -95,6 +95,10 @@ class RobotGatewayNode(Node):
         self.declare_parameter("mqtt_cert_file", "")
         self.declare_parameter("mqtt_key_file", "")
         self.declare_parameter("topic_prefix", "warotrans/v1")
+        # Live Nav2 costmap for the admin map overlay (view only; nothing acts on it). "" disables a layer.
+        self.declare_parameter("costmap_uplink", True)
+        self.declare_parameter("global_costmap_topic", "/global_costmap/costmap")
+        self.declare_parameter("local_costmap_topic", "/local_costmap/costmap")
         self.declare_parameter("map_version_code", "")
         self.declare_parameter("map_frame", "map")
         self.declare_parameter("base_frame", "base_link")
@@ -338,6 +342,14 @@ class RobotGatewayNode(Node):
             subscribe_topic=subscribe_topics,
             on_message=self._on_mqtt_message,
         )
+
+        self._costmap_uplink = None
+        if bool(self.get_parameter("costmap_uplink").get_parameter_value().bool_value):
+            from warotrans_fleet.costmap_uplink import CostmapUplink
+
+            self._costmap_uplink = CostmapUplink(
+                self, self._robot_code, lambda leaf, body: self.mqtt.publish(self.topic(leaf), body, qos=0),
+                global_topic=self._str_param("global_costmap_topic"), local_topic=self._str_param("local_costmap_topic"))
 
         if self._traffic_mode == "active":
             self._traffic_client = self._setup_traffic_client()

@@ -13,6 +13,7 @@ that the Host grants.
 from __future__ import annotations
 
 import json
+import os
 import math
 import subprocess
 import sys
@@ -81,13 +82,20 @@ class World:
         self.api = Api(BASE)
         self.api.login()
         self.robots = {c: i for i, c in sql("select id, code from fleet.robots where code in ('RBT-001','RBT-002')")}
-        self.map_id = sql("select id from navigation.map_versions where code='MAP-ONE-V013' and status='PUBLISHED'")[0][0]
+        # The published map (V017 since 2026-11-23); WARO_REAL_MAP pins another code.
+        code = os.environ.get("WARO_REAL_MAP", "")
+        self.map_id = sql("select id from navigation.map_versions where status='PUBLISHED'"
+                          + (f" and code='{code}'" if code else "") + " order by published_at desc nulls last limit 1")[0][0]
         self.warehouse = sql(f"select warehouse_id from navigation.map_versions where id='{self.map_id}'")[0][0]
         self.eps = {c: (i, float(x), float(y)) for c, i, x, y in
                     sql(f"select code, id, x, y from navigation.endpoints where map_version_id='{self.map_id}'")}
         self.locs = {c: i for c, i in sql("select code, id from warehouse.storage_locations where is_active")}
-        self.wf = {w["code"]: w["id"] for w in self.api.call("GET", "/api/workflow-execution/workflows?pageSize=100")["items"]
-                   if w["status"] == "PUBLISHED"}
+        # Newest PUBLISHED version of each workflow code (older versions still point at old maps' endpoints).
+        self.wf = {c: i for c, i in sql("select distinct on (code) code, id from execution.workflows "
+                                        "where status='PUBLISHED' order by code, version_no desc")}
+        # Storage location -> its endpoint code on this map (SHELF-B-2 sits at EP-SHELF-B-01-02 on V017).
+        self.loc_ep = {c: e for c, e in sql("select sl.code, e.code from warehouse.storage_locations sl join "
+                                            f"navigation.endpoints e on e.id=sl.endpoint_id where e.map_version_id='{self.map_id}'")}
         self.product = sql("select id from warehouse.products order by created_at limit 1")[0][0]
 
     def robot(self, code: str) -> dict:
@@ -329,7 +337,7 @@ def scenario_A3(w: World) -> dict:
     for code, shelf in (("RBT-001", "SHELF-A-2"), ("RBT-002", "SHELF-B-2")):
         c = new_containers(w, 1, f"A3-{code}")
         voucher(w, "INBOUND", c, f"real 2-robot A3 {code}")
-        tr, js = create_tr(w, "INBOUND", [{"container": c[0], "src": "EP-INBOUND", "dst": f"EP-{shelf}", "dstLoc": shelf}],
+        tr, js = create_tr(w, "INBOUND", [{"container": c[0], "src": "EP-INBOUND", "dst": w.loc_ep[shelf], "dstLoc": shelf}],
                            f"real 2-robot A3 {code}")
         jobs.append((code, js[0]))
     for code, job in jobs:
@@ -387,7 +395,42 @@ def scenario_WATCH(w: World) -> dict:
     return run_jobs(w, "WATCH", jobs, timeout_s=1800)
 
 
-SCENARIOS = {"WATCH": scenario_WATCH, "HOME": scenario_HOME, "A1": scenario_A1, "A2": scenario_A2, "A3": scenario_A3, "B": scenario_B,
+def scenario_V1(w: World) -> dict:
+    """V017 smoke: one INBOUND per robot, one after the other (RBT-001 -> SHELF-A-1, then RBT-002 -> SHELF-C-1)."""
+    results = []
+    for code, shelf in (("RBT-001", "SHELF-A-1"), ("RBT-002", "SHELF-C-1")):
+        c = new_containers(w, 1, f"V1-{code}")
+        voucher(w, "INBOUND", c, f"real V017 V1 {code}")
+        _, js = create_tr(w, "INBOUND", [{"container": c[0], "src": "EP-INBOUND", "dst": w.loc_ep[shelf], "dstLoc": shelf}],
+                          f"real V017 V1 {code}")
+        dispatch(w, js[0], code)
+        results.append(run_jobs(w, f"V1-{code}", js))
+        if not results[-1]["pass"]:
+            break
+    res = dict(results[-1])
+    res["pass"] = all(r["pass"] for r in results) and len(results) == 2
+    res["minBodyGapM"] = min(r["minBodyGapM"] for r in results)
+    res["seconds"] = round(sum(r["seconds"] for r in results), 1)
+    res["safetyStop"] = any(r["safetyStop"] for r in results)
+    return res
+
+
+def scenario_V2(w: World) -> dict:
+    """V017 parallel: two INBOUND at once (sim scenario 1): RBT-001 INBOUND -> SHELF-C-1, RBT-002 INBOUND -> SHELF-B-2
+    (EP-SHELF-B-01-02). Both pick up at the INBOUND dead-end bay; the second waits at a queue point / yield spot."""
+    jobs = []
+    for code, shelf in (("RBT-001", "SHELF-C-1"), ("RBT-002", "SHELF-B-2")):
+        c = new_containers(w, 1, f"V2-{code}")
+        voucher(w, "INBOUND", c, f"real V017 V2 {code}")
+        tr, js = create_tr(w, "INBOUND", [{"container": c[0], "src": "EP-INBOUND", "dst": w.loc_ep[shelf], "dstLoc": shelf}],
+                           f"real V017 V2 {code}")
+        jobs.append((code, js[0]))
+    for code, job in jobs:
+        dispatch(w, job, code)
+    return run_jobs(w, "V2", [j for _, j in jobs])
+
+
+SCENARIOS = {"V1": scenario_V1, "V2": scenario_V2, "WATCH": scenario_WATCH, "HOME": scenario_HOME, "A1": scenario_A1, "A2": scenario_A2, "A3": scenario_A3, "B": scenario_B,
              "C6": lambda w: scenario_C(w, 6), "C5": lambda w: scenario_C(w, 5)}
 
 
