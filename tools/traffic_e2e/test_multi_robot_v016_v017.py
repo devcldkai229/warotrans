@@ -96,7 +96,7 @@ def host():
     h = Host(ARTIFACTS, name="host", extra_env={
         # = launchSettings "RealRobot", minus hardware.
         "Traffic__SemanticMapDirectory": str(BUNDLE),
-        "Traffic__SemanticHorizonMeters": "2.0",
+        "Traffic__SemanticHorizonMeters": "1.2",
         "Traffic__SemanticZoneMarginMeters": "0.05",
         "Traffic__SemanticLaneHalfWidthMeters": os.environ.get("WARO_E2E_LANE_HALF", "0.25"),
         "Traffic__SemanticPrefixGrant": "true",
