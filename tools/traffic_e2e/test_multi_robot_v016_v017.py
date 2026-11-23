@@ -107,7 +107,6 @@ def host():
         "FleetIdle__AutoReturnToPark": "false",
         "FleetIdle__IdleSeconds": "3",
         "FleetIdle__FallbackEndpointCodes": "EP-QUEUE-A",
-        "FleetIdle__GoalCorridors": "EP-INBOUND=1.10,-1.15,2.65,1.60",
         "JobPlanning__MaxContainersPerJob": "3",
     })
     h.start()

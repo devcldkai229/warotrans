@@ -21,7 +21,7 @@
   "target": "real_robot",
   "sourceSnapshot": "MAP-ONE-V019",
   "exportedAt": "2026-11-23T07:46:05.781934+00:00",
-  "semanticMapFingerprint": "e32e28a11aa4fa9b112b6da7fad2df01492fb14dcd3984967d455a8107366224",
+  "semanticMapFingerprint": "1e47b4448f9a373163f4711d174019a24a3df6370ac0973594020f258ebef428",
   "plannerId": "warotrans_lane_planner::LaneAwareNavfn",
   "stage": 2,
   "policies": {
