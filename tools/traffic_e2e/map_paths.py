@@ -37,7 +37,13 @@ def _read_yaml_origin(path: Path) -> tuple[float, list[float]]:
 
 
 class MapPaths:
-    def __init__(self, bundle: Path, clearance_m: float = 0.10, soft_m: float = 0.30, wrong_way_cost: float = 4.0) -> None:
+    def __init__(self, bundle: Path, clearance_m: float = 0.10, soft_m: float = 0.30, wrong_way_cost: float = 4.0,
+                 lane_prefer: float | None = None, lane_center_weight: float = 12.0) -> None:
+        """lane_prefer: like LaneAwareNavfn (lane_prefer_factor / lane_center_weight of nav2_params_lane_aware.yaml):
+        a step on a lane costs this fraction, pulled to the lane centre, and a one-way lane is never driven against
+        (crossing it near-perpendicular is allowed). None: the older model (only a penalty for the wrong way)."""
+        self.lane_prefer = lane_prefer
+        self.lane_center_weight = lane_center_weight
         self.res, origin = _read_yaml_origin(bundle / "map.yaml")
         self.ox, self.oy = origin[0], origin[1]
         occ = np.array(Image.open(bundle / "map.pgm").convert("L"))
@@ -106,6 +112,28 @@ class MapPaths:
                     return self.wrong_way_cost
         return 0.0
 
+    def _nearest_lane(self, x: float, y: float):
+        best, best_d = None, math.inf
+        for (ax, ay), (bx, by), half in self.lanes:
+            vx, vy = bx - ax, by - ay
+            seg = vx * vx + vy * vy
+            t = max(0.0, min(1.0, ((x - ax) * vx + (y - ay) * vy) / seg)) if seg > 0 else 0.0
+            d = math.hypot(x - (ax + t * vx), y - (ay + t * vy))
+            if d <= half and d < best_d:
+                best, best_d = ((ax, ay), (bx, by), half), d
+        return best, best_d
+
+    def _lane_aware_cost(self, x: float, y: float, heading: float, step: float, near: float) -> float | None:
+        lane, d = self._nearest_lane(x, y)
+        if lane is None:
+            return step * (1.0 + 12.0 * near * near)
+        (ax, ay), (bx, by), half = lane
+        along = math.cos(heading - math.atan2(by - ay, bx - ax))
+        if abs(along) >= 0.25 and along < 0:
+            return None  # against a one-way lane: LaneAwareNavfn.moveAllowed forbids it
+        off = d / half
+        return step * (1.0 + 2.0 * near * near) * self.lane_prefer * (1.0 + self.lane_center_weight * off * off)
+
     # ------------------------------------------------------------------ planning
 
     def plan(self, x0: float, y0: float, x1: float, y1: float) -> Optional[list[tuple[float, float]]]:
@@ -127,12 +155,18 @@ class MapPaths:
                 step = math.hypot(dx, dy)
                 near = max(0.0, 1.0 - self.dist[ny, nx] / self.soft_cells)
                 heading = math.atan2(-dy, dx)  # grid y grows downwards
-                cost = step * (1.0 + 2.0 * near + self._lane_penalty(wx, wy, heading))
+                if self.lane_prefer is not None:
+                    cost = self._lane_aware_cost(wx, wy, heading, step, near)
+                    if cost is None:
+                        continue
+                else:
+                    cost = step * (1.0 + 2.0 * near + self._lane_penalty(wx, wy, heading))
                 ng = g[cur] + cost
                 if ng < g.get((nx, ny), float("inf")):
                     g[(nx, ny)] = ng
                     came[(nx, ny)] = cur
-                    heapq.heappush(heap, (ng + math.hypot(goal[0] - nx, goal[1] - ny), (nx, ny)))
+                    h = math.hypot(goal[0] - nx, goal[1] - ny) * (min(1.0, self.lane_prefer) if self.lane_prefer and self.lanes else 1.0)
+                    heapq.heappush(heap, (ng + h, (nx, ny)))
         if goal not in g:
             return None
         cells = [goal]

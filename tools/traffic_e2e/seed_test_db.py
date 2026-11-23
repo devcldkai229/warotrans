@@ -43,6 +43,9 @@ def main() -> int:
     ap.add_argument("--workflow-alias", default="",
                     help="store the copied workflow under this code (and its own id) in the target: the same steps, "
                          "without the business rules the backend ties to INBOUND / OUTBOUND (vouchers, storage)")
+    ap.add_argument("--allow-draft", action="store_true",
+                    help="copy the map version whatever its status (a DRAFT under comparison) and store it PUBLISHED in "
+                         "the target only; the source is never changed")
     ap.add_argument("--cleanup-e2e-robots", action="store_true",
                     help="only delete the harness's own E2E-* robots (and their commands) from the target, then exit")
     a = ap.parse_args()
@@ -76,7 +79,10 @@ COMMIT;""")
         return 0
 
     src = a.source_db
-    maps = rows(src, "navigation.map_versions", f"code = '{a.map_code}' AND status = 'PUBLISHED'")
+    status = "" if a.allow_draft else " AND status = 'PUBLISHED'"
+    maps = rows(src, "navigation.map_versions", f"code = '{a.map_code}'{status}")
+    for m in maps:
+        m["status"] = "PUBLISHED"
     if len(maps) != 1:
         # The operator moved on to a newer map: the source no longer publishes this one. The harness pins this version
         # (fixtures, bundle, fingerprint), so a copy seeded earlier is exactly what it needs; never touch the source.
@@ -88,7 +94,10 @@ COMMIT;""")
         raise SystemExit(f"{a.map_code}: expected one PUBLISHED map version in {src}, found {len(maps)}, and none seeded in {a.target_db}")
     mv = maps[0]
     map_id, wh_id = mv["id"], mv["warehouse_id"]
-    workflows = rows(src, "execution.workflows", f"code = '{a.workflow_code}' AND status = 'PUBLISHED'")
+    # The newest published version (older versions stay PUBLISHED while Jobs still point at them).
+    workflows = rows(src, "execution.workflows",
+                     f"code = '{a.workflow_code}' AND status = 'PUBLISHED' AND version_no = (SELECT max(version_no) "
+                     f"FROM execution.workflows WHERE code = '{a.workflow_code}' AND status = 'PUBLISHED')")
     if len(workflows) != 1:
         raise SystemExit(f"{a.workflow_code}: expected one PUBLISHED workflow in {src}, found {len(workflows)}")
     wf_id = workflows[0]["id"]

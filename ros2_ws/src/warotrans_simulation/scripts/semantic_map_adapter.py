@@ -71,7 +71,12 @@ def world_to_pixel(
 # More than the footprint radius (hypot(0.18, 0.15) = 0.234 m).
 # Usual cruise of the real robot (nav2_params FollowPath desired_linear_vel; 2026-11-13: 0.10 -> 0.40 m/s, operator).
 CRUISE_SPEED_MPS = 0.35
-KEEPOUT_PLANNING_INFLATE_M = 0.25
+# 0: the planner's keep-out is the zone as drawn. The global costmap's InflationLayer already keeps the centre out of
+# the inscribed band (footprint + padding, 0.15 m) around it. Pre-inflating the mask by 0.25 m inflated keep-out TWICE:
+# on MAP-ONE-V017 the lane centres beside the shelf dividers (0.34 m from the line) sat at cost 99 (inscribed), which
+# NavFn treats as an obstacle, so robots could not plan straight down the shelf lanes (lab 2026-11-24, measured on the
+# robots' own /global_costmap/costmap).
+KEEPOUT_PLANNING_INFLATE_M = 0.0
 
 
 def rasterize_keepout(
@@ -511,8 +516,8 @@ def export_from_snapshot(
     keepout_px = rasterize_keepout(
         zones, width=width, height=height, origin_x=origin_x, origin_y=origin_y, resolution=resolution
     )
-    # keepout_planning: for the planner, which checks the centre only. Beyond the footprint radius (0.234 m), no pose
-    # of a planned path can touch the zone at any heading. Lanes beside MAP-ONE-V004's strip leave room for this.
+    # keepout_planning: for the planner (global costmap). Its InflationLayer adds the footprint margin; see
+    # KEEPOUT_PLANNING_INFLATE_M for why the mask is no longer pre-inflated.
     keepout_planning_px = rasterize_keepout(
         zones,
         width=width,

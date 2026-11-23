@@ -1,0 +1,197 @@
+{
+  "lanes": [
+    {
+      "code": "EDGE-LANE-B-BTT---10",
+      "direction": "ONE_WAY",
+      "width_meters": 0.65,
+      "coordinates": [
+        [
+          0.88,
+          0.1
+        ],
+        [
+          0.878,
+          1.034
+        ]
+      ],
+      "tangents_rad": [
+        1.572937651145167,
+        1.572937651145167
+      ],
+      "tangent_samples": [
+        {
+          "a": [
+            0.88,
+            0.1
+          ],
+          "b": [
+            0.878,
+            1.034
+          ],
+          "tangent": 1.572937651145167
+        }
+      ]
+    },
+    {
+      "code": "EDGE-LANE-B-TTB---11",
+      "direction": "ONE_WAY",
+      "width_meters": 0.65,
+      "coordinates": [
+        [
+          0.197,
+          1.03
+        ],
+        [
+          0.197,
+          0.109
+        ]
+      ],
+      "tangents_rad": [
+        -1.5707963267948966,
+        -1.5707963267948966
+      ],
+      "tangent_samples": [
+        {
+          "a": [
+            0.197,
+            1.03
+          ],
+          "b": [
+            0.197,
+            0.109
+          ],
+          "tangent": -1.5707963267948966
+        }
+      ]
+    },
+    {
+      "code": "EDGE-LANE-BTT-A---13",
+      "direction": "ONE_WAY",
+      "width_meters": 0.65,
+      "coordinates": [
+        [
+          -0.538,
+          0.104
+        ],
+        [
+          -0.538,
+          0.807
+        ]
+      ],
+      "tangents_rad": [
+        1.5707963267948966,
+        1.5707963267948966
+      ],
+      "tangent_samples": [
+        {
+          "a": [
+            -0.538,
+            0.104
+          ],
+          "b": [
+            -0.538,
+            0.807
+          ],
+          "tangent": 1.5707963267948966
+        }
+      ]
+    },
+    {
+      "code": "EDGE-LANE-LTR-BOUND---10",
+      "direction": "ONE_WAY",
+      "width_meters": 0.65,
+      "coordinates": [
+        [
+          1.18,
+          -0.808
+        ],
+        [
+          1.794,
+          -0.81
+        ]
+      ],
+      "tangents_rad": [
+        -0.0032573174700058598,
+        -0.0032573174700058598
+      ],
+      "tangent_samples": [
+        {
+          "a": [
+            1.18,
+            -0.808
+          ],
+          "b": [
+            1.794,
+            -0.81
+          ],
+          "tangent": -0.0032573174700058598
+        }
+      ]
+    },
+    {
+      "code": "EDGE-LANE-RTL-BOUND---10",
+      "direction": "ONE_WAY",
+      "width_meters": 0.65,
+      "coordinates": [
+        [
+          1.796,
+          -0.14
+        ],
+        [
+          1.174,
+          -0.14
+        ]
+      ],
+      "tangents_rad": [
+        3.141592653589793,
+        3.141592653589793
+      ],
+      "tangent_samples": [
+        {
+          "a": [
+            1.796,
+            -0.14
+          ],
+          "b": [
+            1.174,
+            -0.14
+          ],
+          "tangent": 3.141592653589793
+        }
+      ]
+    },
+    {
+      "code": "EDGE-LANE-TTB-A---11",
+      "direction": "ONE_WAY",
+      "width_meters": 0.65,
+      "coordinates": [
+        [
+          -1.24,
+          0.803
+        ],
+        [
+          -1.24,
+          -0.98
+        ]
+      ],
+      "tangents_rad": [
+        -1.5707963267948966,
+        -1.5707963267948966
+      ],
+      "tangent_samples": [
+        {
+          "a": [
+            -1.24,
+            0.803
+          ],
+          "b": [
+            -1.24,
+            -0.98
+          ],
+          "tangent": -1.5707963267948966
+        }
+      ]
+    }
+  ],
+  "margin_meters": 0.05
+}

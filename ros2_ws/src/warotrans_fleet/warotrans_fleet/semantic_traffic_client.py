@@ -125,6 +125,8 @@ class SemanticTrafficClient:
     _last_blocked_mono: float = -1e9
     _last_state_report_mono: float = -1e9
     _was_localized: bool = False
+    # Last pose the gate saw (x, y, yaw): the real heading at the start of the next plan.
+    _last_pose: Optional[Pose] = None
     _allowed_cache: Optional[tuple[tuple[int, str, str], frozenset[str]]] = None
     # resource_id → mono when footprint first left it (cleared only after clear_confirm_sec).
     _pending_clear: dict[str, float] = field(default_factory=dict)
@@ -152,6 +154,7 @@ class SemanticTrafficClient:
             self.command_id = command_id
             self.plan_hash = ""
             self._drop_grant("NEW_COMMAND")
+        poses = self._with_real_start_heading(poses)
         path_hash = plan_hash(poses)
         if path_hash == self.plan_hash:
             # Same path: Nav2 may re-echo /plan; do not spam while a grant for this revision still exists.
@@ -166,6 +169,25 @@ class SemanticTrafficClient:
             self.plan_poses = [tuple(map(float, p)) for p in poses]  # type: ignore[misc]
             self._allowed_cache = None
         self._publish_plan_proposal(goal=goal, command_id=command_id, job_step_id=job_step_id, job_id=job_id)
+
+    def _with_real_start_heading(self, poses: Sequence[Pose]) -> list:
+        """Nav2's /plan carries the path's own heading at its start, not the robot's. Standing at the start but facing
+        another way, the robot turns on the spot first: with the path heading the backend reserved a lane rectangle
+        there, the turning body left it (OUTSIDE_RESERVATION) and the robot never moved (MAP-ONE-V015 sim, 2026-11-23,
+        a robot at EP-INBOUND facing 0.67 rad with a plan starting at -1.57 rad). The real heading (to 0.1 rad, so the
+        plan hash does not change with every reading) makes the backend reserve the turning circle there."""
+        out = [tuple(map(float, p)) for p in poses]
+        last = self._last_pose
+        if last is None or not out:
+            return out
+        x0, y0, yaw0 = out[0]
+        if math.hypot(x0 - float(last[0]), y0 - float(last[1])) > 0.15:
+            return out
+        real = float(last[2])
+        if _angle_between(real, yaw0) <= _STRAIGHT_MAX_TURN_RAD:
+            return out
+        out[0] = (x0, y0, round(real, 1))
+        return out
 
     def _publish_plan_proposal(
         self,
@@ -388,7 +410,7 @@ class SemanticTrafficClient:
         # Bare footprint, no margin: a released cell was left with exit_margin_m to spare, so localization jitter at
         # the boundary does not latch the gate shut; actually driving back into it does.
         if self.released_resources and (
-            footprint_resources(pose[0], pose[1], g.geometry.footprint_radius, self.zones, g.geometry.cell_size)
+            footprint_resources(pose[0], pose[1], g.geometry.footprint_radius, self.zones, g.geometry.cell_size, g.geometry)
             & self.released_resources
         ):
             return "IN_RELEASED_RESOURCE"
@@ -409,7 +431,7 @@ class SemanticTrafficClient:
             g = self.grant
             assert pose is not None and g is not None
             radius = g.geometry.footprint_radius + max(0.0, self.stop_margin_m)
-            if not footprint_resources(pose[0], pose[1], radius, self.zones, g.geometry.cell_size) <= self.allowed_resources():
+            if not footprint_resources(pose[0], pose[1], radius, self.zones, g.geometry.cell_size, g.geometry) <= self.allowed_resources():
                 return "SPIN_OUTSIDE_RESERVATION"
             return None
         if kind != "backup" or distance_m < 0.0:
@@ -429,7 +451,7 @@ class SemanticTrafficClient:
         """What the robot touches now, with its stopping margin: at any heading, or at its heading with lane rectangles."""
         radius = geometry.footprint_radius + max(0.0, self.stop_margin_m)
         if geometry.lane_half_width <= 0:
-            return footprint_resources(pose[0], pose[1], radius, self.zones, geometry.cell_size)
+            return footprint_resources(pose[0], pose[1], radius, self.zones, geometry.cell_size, geometry)
         out: set[str] = set()
         rect_cells(
             pose[0], pose[1], pose[2],
@@ -437,13 +459,20 @@ class SemanticTrafficClient:
             geometry.footprint_half_width + max(0.0, self.side_margin_m),
             geometry.cell_size, out,
         )
+        # Zones: the half length + margin, as footprint_resources and the backend (ZoneReserveRadiusMeters, 0.2425 m
+        # with ZoneMargin 0.05) do. The any-heading circle (0.2875 m) counted RBT-2 at x = 1.47 on lane LTR as inside
+        # ZONE-SINGLE-CENTER (0.26 m away), a zone its grant rightly did not hold: OUTSIDE_RESERVATION, it never moved
+        # again (MAP-ONE-V015 sim, 2026-11-23).
+        zone_radius = min(radius, max(geometry.footprint_half_length, geometry.footprint_half_width) + max(0.0, self.stop_margin_m))
         for code, ring in _zone_rings(self.zones):
-            if disc_hits_ring(pose[0], pose[1], radius, ring):
+            if disc_hits_ring(pose[0], pose[1], zone_radius, ring):
                 out.add(f"zone:{code}")
         return frozenset(out)
 
     def tick(self, pose: Optional[Pose]) -> bool:
         """≥20 Hz: publish authority_ok for cmd_vel_authority_gate. Returns the decision."""
+        if pose is not None:
+            self._last_pose = pose
         reason = self.motion_block_reason(pose)
         if reason is not None:
             self.last_block_reason = reason
@@ -538,7 +567,7 @@ class SemanticTrafficClient:
             self._pending_clear.clear()
             return []
         under = footprint_resources(
-            x, y, g.geometry.footprint_radius + max(0.0, self.exit_margin_m), self.zones, g.geometry.cell_size
+            x, y, g.geometry.footprint_radius + max(0.0, self.exit_margin_m), self.zones, g.geometry.cell_size, g.geometry
         ) & g.resource_ids
         self.entered_resources |= under
         candidates = self.entered_resources - under
@@ -549,7 +578,7 @@ class SemanticTrafficClient:
         if candidates and self.plan_poses:
             gx, gy = self.plan_poses[-1][0], self.plan_poses[-1][1]
             candidates = candidates - footprint_resources(
-                gx, gy, g.geometry.footprint_radius + max(0.0, self.goal_hold_margin_m), self.zones, g.geometry.cell_size
+                gx, gy, g.geometry.footprint_radius + max(0.0, self.goal_hold_margin_m), self.zones, g.geometry.cell_size, g.geometry
             )
         now = self.monotonic()
         # Footprint returned → cancel any pending clear for those cells.
@@ -578,7 +607,7 @@ class SemanticTrafficClient:
         radius = geometry.footprint_radius + max(0.0, self.stop_margin_m)
         out: set[str] = set()
         for px, py in sample_path(poses[nearest:], geometry.sample_step, geometry.horizon):
-            out |= footprint_resources(px, py, radius, self.zones, geometry.cell_size)
+            out |= footprint_resources(px, py, radius, self.zones, geometry.cell_size, geometry)
         return frozenset(out)
 
     def publish_cleared_resources(self, cleared: list[str], *, x: float, y: float, yaw: float, localization_ok: bool) -> None:
@@ -739,6 +768,8 @@ def collect_resources(poses: Sequence[Sequence[float]], zones: list[dict[str, An
 
 
 _STRAIGHT_WINDOW_M = 0.25
+# Mirror of SemanticReservation.EndDiscMeters: full disc near the plan's goal (docking spins).
+_END_DISC_M = 0.45
 _STRAIGHT_MAX_TURN_RAD = 15.0 * math.pi / 180.0
 
 
@@ -756,6 +787,9 @@ def _straight_heading_at(
     """Mirror of StraightHeadingAt: None where the robot may turn on the spot and needs the full disc."""
     n = len(samples)
     if n < 2:
+        return None
+    sx, sy = samples[i]
+    if reached_end and math.hypot(sx - float(poses[-1][0]), sy - float(poses[-1][1])) <= _END_DISC_M:
         return None
     k = math.ceil(_STRAIGHT_WINDOW_M / geometry.sample_step)
     before, after, here = samples[max(0, i - k)], samples[min(n - 1, i + k)], samples[i]
@@ -787,12 +821,22 @@ def rect_cells(x: float, y: float, heading: float, half_length: float, half_widt
                 into.add(cell_id(ix, iy))
 
 
-def footprint_resources(x: float, y: float, radius: float, zones: list[dict[str, Any]], cell_size: float) -> frozenset[str]:
-    """Cells and zones the robot (any heading) touches at (x, y)."""
+def footprint_resources(x: float, y: float, radius: float, zones: list[dict[str, Any]], cell_size: float,
+                        geometry: Optional["SemanticGeometry"] = None) -> frozenset[str]:
+    """Cells the robot (any heading) touches at (x, y), and the zones its body reaches.
+
+    Zones use the half length (not the any-heading circle) plus the same margin, as the backend does
+    (SemanticReservation.ZoneReserveRadiusMeters): a robot parked 0.245 m below ZONE-SINGLE-CENTER (MAP-ONE-V013
+    EP-PARKING-B) is not in that zone, and holding it there blocked the other robot (2026-11-22).
+    """
     out: set[str] = set()
     disc_cells(x, y, radius, cell_size, out)
+    zone_radius = radius
+    if geometry is not None and min(geometry.footprint_half_length, geometry.footprint_half_width) > 0:
+        zone_radius = min(radius, radius - geometry.footprint_radius
+                          + max(geometry.footprint_half_length, geometry.footprint_half_width))
     for code, ring in _zone_rings(zones):
-        if disc_hits_ring(x, y, radius, ring):
+        if disc_hits_ring(x, y, zone_radius, ring):
             out.add(f"zone:{code}")
     return frozenset(out)
 

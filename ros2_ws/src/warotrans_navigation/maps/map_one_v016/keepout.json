@@ -1,0 +1,66 @@
+{
+  "zones": [
+    {
+      "id": "e45d9d0b-2742-4377-a98c-7b9b2d3c2238",
+      "code": "ZONE-KEEP-OUT-SHELF-B",
+      "name": "Keep Out Shelf B",
+      "zone_type": "KEEP_OUT",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            0.531,
+            1.092
+          ],
+          [
+            0.551,
+            1.092
+          ],
+          [
+            0.551,
+            0.184
+          ],
+          [
+            0.535,
+            0.185
+          ],
+          [
+            0.531,
+            1.092
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "3ff116fb-be94-461f-acc0-bb5ca4234558",
+      "code": "ZONE-KEEP-OUT-ZONE-A",
+      "name": "Keep Out Zone A",
+      "zone_type": "KEEP_OUT",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            -0.906,
+            0.697
+          ],
+          [
+            -0.873,
+            0.697
+          ],
+          [
+            -0.873,
+            -0.455
+          ],
+          [
+            -0.906,
+            -0.455
+          ],
+          [
+            -0.906,
+            0.697
+          ]
+        ]
+      ]
+    }
+  ]
+}

@@ -13,7 +13,9 @@ from typing import Any, Optional
 
 ROBOT_REPO = Path(__file__).resolve().parents[2]
 SYSTEM_REPO = Path(os.environ.get("WAROTRANS_SYSTEM_REPO", ROBOT_REPO.parent / "warotrans-system"))
-HOST_DLL = SYSTEM_REPO / "backend" / "src" / "WaroTrans.Host" / "bin" / "Debug" / "net10.0" / "WaroTrans.Host.dll"
+# WARO_E2E_HOST_DLL: a Host built to its own folder, so a developer's running Host (bin/Debug) keeps its files.
+HOST_DLL = Path(os.environ.get("WARO_E2E_HOST_DLL")
+                or SYSTEM_REPO / "backend" / "src" / "WaroTrans.Host" / "bin" / "Debug" / "net10.0" / "WaroTrans.Host.dll")
 BUNDLE = ROBOT_REPO / "ros2_ws" / "src" / "warotrans_navigation" / "maps" / "map_one_v004"
 RECORDER_DLL = (SYSTEM_REPO / "backend" / "src" / "WaroTrans.Evidence" / "Recorder" / "bin" / "Debug" / "net10.0"
                 / "WaroTrans.Evidence.Recorder.dll")
