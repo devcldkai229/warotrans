@@ -10,6 +10,7 @@ Inputs
   /navigate_to_pose/_action/status  goal outcomes as events
   /scan                          only its liveness: sensor.stale / sensor.recovered events while a run is open
   /lab/faults                    Fault Injection Lab (test robots): clock offset to add to the reported clock
+  /traffic/authority_ok + /traffic/last_block_reason   the gate: gate events (change, and every 10 s while closed)
 Output
   /evidence/recording_control    std_msgs/String JSON to the camera
 
@@ -30,7 +31,7 @@ from typing import Optional
 
 from .agent_core import AgentCore, CameraProfile
 from .recorder_api import ApiError, RecorderApi
-from .sampling import SilenceWatch, read_clock_quality
+from .sampling import GateWatch, SilenceWatch, read_clock_quality
 from .spool import Spool
 from .uploader import Uploader
 
@@ -54,7 +55,7 @@ def main(args=None) -> None:
     from rclpy.node import Node
     from rclpy.qos import QoSProfile, QoSReliabilityPolicy
     from rclpy.time import Time
-    from std_msgs.msg import String
+    from std_msgs.msg import Bool, String
     from tf2_ros import Buffer, TransformListener
 
     class EvidenceAgentNode(Node):
@@ -120,6 +121,11 @@ def main(args=None) -> None:
             self._scan_watch = SilenceWatch("lidar", limit_s=5.0)
             self.create_subscription(LaserScan, "/scan", self._on_scan, qos_profile_sensor_data)
             self._lab_clock_offset_ms = 0.0
+            self._gate_watch = GateWatch(10.0)
+            self._gate_open: Optional[bool] = None
+            self._gate_reason: Optional[str] = None
+            self.create_subscription(Bool, "/traffic/authority_ok", self._on_gate_ok, 10)
+            self.create_subscription(String, "/traffic/last_block_reason", self._on_gate_reason, 10)
             self.create_subscription(String, "/lab/faults", self._on_lab_faults,
                                      QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
                                                 durability=DurabilityPolicy.TRANSIENT_LOCAL))
@@ -168,6 +174,12 @@ def main(args=None) -> None:
                 with self._lock:
                     self.core.add_event("sensor.recovered", "HARDWARE", "INFO", back,
                                         message=f"lidar publishing again after {back['silentS']} s")
+
+        def _on_gate_ok(self, msg) -> None:
+            self._gate_open = bool(msg.data)
+
+        def _on_gate_reason(self, msg) -> None:
+            self._gate_reason = str(msg.data)
 
         def _on_lab_faults(self, msg) -> None:
             try:
@@ -220,7 +232,11 @@ def main(args=None) -> None:
 
         def _tick(self) -> None:
             stale = self._scan_watch.check(time.monotonic())
+            gate = self._gate_watch.sample(self._gate_open, self._gate_reason, time.monotonic())
             with self._lock:
+                if gate is not None:
+                    self.core.add_event("gate", "TRAFFIC", "INFO" if gate["open"] else "WARNING", gate,
+                                        message=f"gate {'open' if gate['open'] else 'closed: ' + gate['reason']}")
                 if stale is not None:
                     self.core.add_event("sensor.stale", "HARDWARE", "ERROR", stale,
                                         message=f"lidar silent for {stale['silentS']} s")

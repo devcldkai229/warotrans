@@ -150,3 +150,23 @@ class SilenceWatch:
             return None
         self._stale_since = now
         return {"sensor": self.sensor, "silentS": round(now - self._last, 1), "limitS": self.limit_s, "declared": True}
+
+
+class GateWatch:
+    """The robot's authority gate (cmd_vel allowed or not, and why): one ``gate`` event when it changes, and again
+    every ``repeat_s`` while it stays closed, so an investigation can measure how long a robot was held."""
+
+    def __init__(self, repeat_s: float = 10.0) -> None:
+        self.repeat_s = float(repeat_s)
+        self._state: Optional[tuple[bool, str]] = None
+        self._sent_at = -1e18
+
+    def sample(self, open_: Optional[bool], reason: Optional[str], now: float) -> Optional[dict]:
+        if open_ is None:
+            return None
+        state = (bool(open_), "OK" if open_ else (reason or "UNKNOWN"))
+        changed = state != self._state
+        if not changed and (state[0] or now - self._sent_at < self.repeat_s):
+            return None
+        self._state, self._sent_at = state, now
+        return {"open": state[0], "reason": state[1], "changed": changed}
