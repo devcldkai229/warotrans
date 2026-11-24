@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>warotrans_fleet_layer</name>
+  <version>0.1.0</version>
+  <description>Nav2 costmap layer: the other robots (backend fleet/poses, via the gateway's /fleet_obstacles) as lethal cells, redrawn every update with no memory.</description>
+  <maintainer email="dev@warotrans.local">WaroTrans</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>nav2_costmap_2d</depend>
+  <depend>pluginlib</depend>
+  <depend>sensor_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>geometry_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+    <nav2_costmap_2d plugin="${prefix}/fleet_layer_plugin.xml"/>
+  </export>
+</package>

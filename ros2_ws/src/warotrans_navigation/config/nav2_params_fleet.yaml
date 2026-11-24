@@ -1,0 +1,36 @@
+# Fleet mode only (loaded by pi_run_semantic.sh and RBT-002's fleet.launch.py, after nav2_params_lane_aware.yaml):
+# the OTHER robots, from the backend's fleet/poses through the gateway's /fleet_obstacles PointCloud2 (map frame).
+#   * warotrans_fleet_layer marks them in both costmaps and forgets them on the next update (no ghost marks);
+#   * the collision monitor takes the same points as a source.
+# A 2D lidar scanning ~18 cm above the floor sees little of a robot whose body is 10 cm high: two real robots came
+# within 5 cm of each other (2026-11-22 / 2026-11-23). Not in nav2_params.yaml: without the gateway (teleop, mapping)
+# the source would be silent and the collision monitor would stop the robot, and the layer needs its package built.
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      plugins: ["static_layer", "obstacle_layer", "fleet_layer", "inflation_layer"]
+      fleet_layer:
+        plugin: "warotrans_fleet_layer::FleetLayer"
+        enabled: true
+        topic: "/fleet_obstacles"
+        max_age: 1.0
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      plugins: ["obstacle_layer", "fleet_layer", "inflation_layer"]
+      fleet_layer:
+        plugin: "warotrans_fleet_layer::FleetLayer"
+        enabled: true
+        topic: "/fleet_obstacles"
+        max_age: 1.0
+
+collision_monitor:
+  ros__parameters:
+    observation_sources: ["scan", "fleet"]
+    fleet:
+      type: "pointcloud"
+      topic: "/fleet_obstacles"
+      min_height: 0.0
+      max_height: 0.5
+      enabled: true

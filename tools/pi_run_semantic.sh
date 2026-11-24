@@ -74,7 +74,7 @@ case "$ACTION" in
     echo "robot_code=$ROBOT_CODE domain=$ROS_DOMAIN_ID motors_enabled=$MOTORS ekf=$EKF bundle=$BUNDLE mode=$MODE broker=$BROKER"
     setsid nohup ros2 launch warotrans_bringup navigation.launch.py \
       map:="$BUNDLE/map.yaml" lanes_json:="$BUNDLE/lanes.json" \
-      extra_params_file:="$SRC/warotrans_navigation/config/nav2_params_lane_aware.yaml;$SRC/warotrans_navigation/config/nav2_params_rbt001.yaml" \
+      extra_params_file:="$SRC/warotrans_navigation/config/nav2_params_lane_aware.yaml;$SRC/warotrans_navigation/config/nav2_params_fleet.yaml;$SRC/warotrans_navigation/config/nav2_params_rbt001.yaml" \
       enable_costmap_filters:=true keepout_mask:="$BUNDLE/keepout.yaml" speed_mask:="$BUNDLE/speed.yaml" \
       enable_authority_gate:=true motors_enabled:="$MOTORS" start_foxglove:=false \
       enable_ekf:="$EKF" amcl_params_file:="$AMCL_PARAMS" \

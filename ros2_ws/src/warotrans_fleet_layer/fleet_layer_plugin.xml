@@ -1,0 +1,5 @@
+<library path="warotrans_fleet_layer">
+  <class type="warotrans_fleet_layer::FleetLayer" base_class_type="nav2_costmap_2d::Layer">
+    <description>The other robots as lethal cells (gateway /fleet_obstacles), redrawn each update with no memory.</description>
+  </class>
+</library>
