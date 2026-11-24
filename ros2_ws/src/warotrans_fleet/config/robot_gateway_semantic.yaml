@@ -36,6 +36,15 @@ robot_gateway:
     # gate. Off while the robot is under traffic control.
     teleop_enabled: false
     cmd_vel_topic: "cmd_vel_safe"
+    # Map building from the web (START_MAPPING / STOP_MAPPING): manual drive is allowed only while a mapping session
+    # runs, always with Drive Assist, the authority gate held open for it (a STOP still wins). AMCL + map_server are
+    # paused through lifecycle_manager_localization while slam_toolbox maps on /mapping/map; the finished map and its
+    # pose graph are also kept in mapping_local_dir/<session>.
+    mapping_enabled: true
+    mapping_localization_manager: "lifecycle_manager_localization"
+    mapping_map_topic: "/mapping/map"
+    mapping_slam_params_file: ""     # "" = warotrans_slam/config/slam_toolbox.yaml
+    mapping_local_dir: "~/maps/mapping_sessions"
     # HUMAN_CONFIRM button (handover confirm; NOT an E-stop). Default on for lab TR→button→COMPLETED.
     human_confirm_enabled: true
     human_confirm_gpiochip: 4
