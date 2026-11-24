@@ -69,7 +69,7 @@ base.NO_STOP = json.loads((BUNDLE / "no_stop.json").read_text(encoding="utf-8"))
 base.MAP_ID, base.MAP_CODE, base.FINGERPRINT = MANIFEST["mapVersionId"], MANIFEST["mapCode"], MANIFEST["semanticMapFingerprint"]
 base.PATHS = base.MapPaths(BUNDLE, lane_prefer=float(os.environ.get("WARO_E2E_LANE_PREFER", "0.15")))
 base.ARTIFACTS = ARTIFACTS
-base.WAIT_POINT_CODES = {"EP-QUEUE-A", "EP-QUEUE-B"}
+base.WAIT_POINT_CODES = set()
 RUN = base.RUN
 
 
@@ -119,7 +119,7 @@ def host():
         f"Traffic__RobotHomeEndpoints__E2E-{RUN}-R2": "EP-PARKING-B",
         "FleetIdle__AutoReturnToPark": "true",
         "FleetIdle__IdleSeconds": "8",
-        "FleetIdle__FallbackEndpointCodes": "EP-QUEUE-A",
+        "FleetIdle__FallbackEndpointCodes": "",
         "JobPlanning__MaxContainersPerJob": "1",
     })
     h.start()
@@ -147,9 +147,22 @@ def pair(api):
     return wh, base.robot(api, wh, "R1", eps["EP-PARKING-A"]), base.robot(api, wh, "R2", eps["EP-PARKING-B"])
 
 
+def _free_both_or_explain(api, r1, r2, name: str) -> None:
+    try:
+        base.free_both(api, r1, r2)
+    except AssertionError:
+        for s in (r1, r2):
+            g = s.client.grant
+            print(f"  NOT FREE {s.code[-2:]} at ({s.x:.2f}, {s.y:.2f}, {s.yaw:.2f}) block={s.client.last_block_reason} "
+                  f"grant={'rev %s cells %d' % (g.plan_revision, len(g.resource_ids)) if g else 'no'} "
+                  f"planRev={s.client.plan_revision} status={api.call('GET', f'/api/fleet/robots/{s.robot_id}')['status']}")
+        (ARTIFACTS / f"{name}_not_free_snapshot.json").write_text(json.dumps(api.snapshot(), indent=1), encoding="utf-8")
+        raise
+
+
 def scenario(api, pair, host, name: str, requests: list[list[tuple[str, str]]], timeout: float = 900) -> dict:
     wh, r1, r2 = pair
-    base.free_both(api, r1, r2)
+    _free_both_or_explain(api, r1, r2, name)
     log_before = len(host.log_text())
     jobs: list[str] = []
     for moves in requests:

@@ -272,6 +272,9 @@ def export_zone_list(zones: Iterable[dict[str, Any]], zone_type: str) -> list[di
                 entry["queueEndpointCodes"] = [str(q) for q in queues if isinstance(q, str) and q]
             elif entry.get("queueEndpointCode"):
                 entry["queueEndpointCodes"] = [entry["queueEndpointCode"]]
+            holds = policy.get("holdPoses")
+            if isinstance(holds, list):
+                entry["holdPoses"] = [[float(v) for v in h] for h in holds if isinstance(h, list) and len(h) in (2, 3)]
         out.append(entry)
     return out
 
@@ -295,6 +298,7 @@ def export_traffic_zones(zones: Iterable[dict[str, Any]], endpoints: Iterable[di
             "kind": z["kind"],
             "rings": z["rings"],
             "queueEndpointCodes": z.get("queueEndpointCodes", []),
+            "holdPoses": z.get("holdPoses", []),
             "endpointCodes": inside,
         })
     return out
@@ -655,7 +659,8 @@ def export_from_snapshot(
             "no_stop": [z["code"] for z in no_stop],
             "single_occupancy": [z["code"] for z in single],
             "traffic_zones": [
-                {"code": z["code"], "kind": z["kind"], "queues": z["queueEndpointCodes"]} for z in traffic_zones
+                {"code": z["code"], "kind": z["kind"], "queues": z["queueEndpointCodes"], "holds": z["holdPoses"]}
+                for z in traffic_zones
             ],
             "endpoints": ep_canon,
             "footprint": {"length": 0.32, "width": 0.26, "padding": 0.02},
