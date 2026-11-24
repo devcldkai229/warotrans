@@ -3,7 +3,8 @@
 Created only when the gateway runs with lab_enabled (LAB_ENABLED=true on a test robot); otherwise nothing here exists and
 lab messages are ignored. Side effects:
   IOT-01  ReconnectingMqttPublisher.cut_until(TTL end)
-  IOT-02  sllidar /stop_motor, then /start_motor at the end
+  IOT-02  the lidar driver hangs: sllidar_node is suspended (SIGSTOP) and resumed (SIGCONT) at the end, so /scan
+          really goes silent (its /stop_motor service does not stop /scan: lab 2026-11-24)
   IOT-03  /lab/faults (latched JSON) tells the evidence agent the clock offset to report
   NAV-01  MoveCommandHandler.goal_rewrite -> unreachable goal for the next N Nav2 goals
   NAV-02  CommandRouter.interceptor accepts the next NAVIGATE_TO_POSE without driving; FAILED when the TTL ends
@@ -14,6 +15,9 @@ lab messages are ignored. Side effects:
 from __future__ import annotations
 
 import json
+import os
+import signal
+import subprocess
 import threading
 import time
 from typing import Any, Callable, Optional
@@ -85,7 +89,7 @@ class LabController:
         if sid == "IOT-01":
             self._mqtt.cut_until(fault.expires_at)
         elif sid == "IOT-02":
-            self._call(self._stop_motor, "stop_motor")
+            self._signal_lidar(signal.SIGSTOP)
         elif sid == "MAP-01":
             client = self._semantic_client()
             if client is not None:
@@ -98,7 +102,7 @@ class LabController:
         if sid == "IOT-01":
             self._mqtt.cut_until(0.0)
         elif sid == "IOT-02":
-            self._call(self._start_motor, "start_motor")
+            self._signal_lidar(signal.SIGCONT)
         elif sid == "MAP-01":
             client = self._semantic_client()
             if client is not None and self._real_fingerprint is not None:
@@ -109,6 +113,21 @@ class LabController:
             if session is not None and not session.is_completed:
                 session.complete(OUTCOME_FAILED, error_code=ERROR_NAVIGATION_FAILED,
                                  error_message="navigation never started (lab freeze ended)")
+
+    def _signal_lidar(self, sig: int) -> None:
+        """Suspend / resume the lidar driver process of this robot (same user as the gateway)."""
+        try:
+            out = subprocess.run(["pgrep", "-f", "sllidar_node"], capture_output=True, text=True, timeout=5).stdout
+        except (OSError, subprocess.SubprocessError) as exc:
+            self._log.error(f"[Lab] cannot find the lidar driver: {exc}")
+            return
+        pids = [int(p) for p in out.split() if p.strip().isdigit()]
+        for pid in pids:
+            try:
+                os.kill(pid, sig)
+            except OSError as exc:
+                self._log.error(f"[Lab] signal {sig} to lidar pid {pid}: {exc}")
+        self._log.warning(f"[Lab] lidar driver {'suspended' if sig == signal.SIGSTOP else 'resumed'} (pids {pids})")
 
     def _call(self, client, name: str) -> None:
         if not client.wait_for_service(timeout_sec=1.0):
