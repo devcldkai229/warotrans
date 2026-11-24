@@ -145,6 +145,19 @@ class RobotGatewayNode(Node):
         self.declare_parameter("initial_pose_topic", "/initialpose")
         self.declare_parameter("amcl_max_xy_std_m", 0.5)
         self.declare_parameter("amcl_max_yaw_std_rad", 0.5)
+        # AUTO_LOCALIZE (auto_localize.py): scan matching against the map, global localization only when allowed.
+        # localizer: amcl | slam_toolbox (slam_toolbox localization mode: no global localization, no spin).
+        self.declare_parameter("auto_localize_enabled", True)
+        self.declare_parameter("localizer", "amcl")
+        # Relative names: /map, /scan … on the robot, /<ns>/map … for a namespaced simulated robot.
+        self.declare_parameter("auto_localize_map_topic", "map")
+        self.declare_parameter("auto_localize_scan_topic", "scan")
+        self.declare_parameter("global_localization_service", "reinitialize_global_localization")
+        # The turn on the spot drives this topic; empty = cmd_vel_topic (like manual drive). The simulation drives
+        # cmd_vel_safe through the authority gate, so it points this at the gate's output instead.
+        self.declare_parameter("auto_localize_cmd_vel_topic", "")
+        self.declare_parameter("auto_localize_spin_speed", 0.35)
+        self.declare_parameter("auto_localize_converge_timeout_sec", 10.0)
         # MOVE command
         self.declare_parameter("default_navigate_timeout_sec", 0.0)  # 0 = không timeout nếu command không gửi
         self.declare_parameter("goal_response_timeout_sec", 10.0)
@@ -775,7 +788,7 @@ class RobotGatewayNode(Node):
         return f"{self._topic_prefix.rstrip('/')}/traffic/epoch"
 
     def _register_control_commands(self) -> None:
-        """STOP / RESUME / LOCALIZE from the backend (RB-03, operator re-localize)."""
+        """STOP / RESUME / LOCALIZE / AUTO_LOCALIZE from the backend (RB-03, operator re-localize, auto-localize)."""
         from warotrans_fleet.control_command_handlers import (
             LocalizeCommandHandler,
             ResumeCommandHandler,
@@ -795,6 +808,57 @@ class RobotGatewayNode(Node):
                 map_frame=self._map_frame,
             )
         )
+        if bool(self.get_parameter("auto_localize_enabled").get_parameter_value().bool_value):
+            self._register_auto_localize(router)
+
+    def _register_auto_localize(self, router) -> None:
+        from warotrans_fleet.auto_localize import AutoLocalizeCommandHandler
+        from warotrans_fleet.auto_localize_ros import AutoLocalizeRos
+
+        scan_topic = self._str_param("auto_localize_scan_topic").strip() or self._str_param("assist_scan_topic")
+        teleop = bool(self.get_parameter("teleop_enabled").get_parameter_value().bool_value)
+        spin_topic = self._str_param("auto_localize_cmd_vel_topic").strip()
+        publish_spin = None
+        if spin_topic:
+            spin_pub = self.create_publisher(Twist, spin_topic, 10)
+
+            def publish_spin(lin: float, ang: float) -> None:
+                msg = Twist()
+                msg.linear.x = float(lin)
+                msg.angular.z = float(ang)
+                spin_pub.publish(msg)
+        elif teleop:
+            publish_spin = lambda lin, ang: self._publish_cmd_vel(lin, ang)  # noqa: E731
+        ros = AutoLocalizeRos(
+            self,
+            tf_buffer=self._tf_buffer,
+            map_frame=self._map_frame,
+            base_frame=self._base_frame,
+            readiness=self._amcl_readiness,
+            # The spin drives /cmd_vel like manual drive does, never while a STOP holds.
+            publish_cmd_vel=publish_spin,
+            motion_held=lambda: self._motion_hold.held,
+            localizer=self._str_param("localizer"),
+            map_topic=self._str_param("auto_localize_map_topic"),
+            scan_topic=scan_topic,
+            global_service=self._str_param("global_localization_service"),
+            spin_speed_rad_s=self._float_param("auto_localize_spin_speed"),
+        )
+        self._auto_localize_ros = ros
+        router.register(
+            AutoLocalizeCommandHandler(
+                busy=lambda: self._commands.move.active_command_id is not None or self._nav_tracker.has_active_goal,
+                get_points=ros.get_points,
+                get_field=ros.get_field,
+                publish_initial_pose=self._publish_initial_pose,
+                wait_converged=ros.wait_converged,
+                log=self.get_logger(),
+                global_localize=ros.global_localize if ros.can_spin else None,
+                current_pose=ros.current_pose,
+                converge_timeout_sec=self._float_param("auto_localize_converge_timeout_sec"),
+            )
+        )
+        self.get_logger().info(f"AUTO_LOCALIZE ready: localizer={ros.localizer} scan={scan_topic} spin={ros.can_spin}")
 
     def _on_motion_hold_changed(self, held: bool) -> None:
         # Close the gate at once on STOP; on RESUME the traffic client opens it again on its next tick, only if
