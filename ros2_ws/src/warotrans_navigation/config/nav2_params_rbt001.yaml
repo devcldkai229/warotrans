@@ -1,0 +1,9 @@
+# RBT-001 only (overlay after nav2_params_lane_aware.yaml). Its turning centre (base_footprint) is 0.05 m behind the
+# chassis centre (warotrans_description geometry.yaml base_footprint_to_base_link x). The recovery guard checks the
+# body where it really is: a box centred on the turning centre was 5 cm too long behind and refused BackUp near walls
+# (audit 2026-11-24, C3). RBT-002 (symmetric chassis) has its own overlay in warotrans_rbt002_bringup.
+recovery_guard:
+  ros__parameters:
+    half_length: 0.16
+    half_width: 0.13
+    center_x: 0.05

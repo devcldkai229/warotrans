@@ -72,11 +72,13 @@ def _read_map_yaml(path: Path) -> dict:
     return meta
 
 
-def export(snapshot_dir: Path, out_dir: Path) -> dict[str, Path]:
+def export(snapshot_dir: Path, out_dir: Path, allow_draft: bool = False) -> dict[str, Path]:
     snapshot_dir = snapshot_dir.resolve()
     snap = json.loads((snapshot_dir / "snapshot.json").read_text(encoding="utf-8"))
     mv = snap.get("mapVersion") or {}
-    if str(mv.get("status") or "").upper() != "PUBLISHED":
+    # A DRAFT is exported only to try it (sim harness) before it is published; the fingerprint does not depend on
+    # the status, so the bundle stays valid once the same version is published unchanged.
+    if str(mv.get("status") or "").upper() != "PUBLISHED" and not allow_draft:
         raise ValueError(f"{mv.get('code')} is {mv.get('status')}; only a PUBLISHED map can be dispatched")
 
     meta = _read_map_yaml(snapshot_dir / "map.yaml")
@@ -151,11 +153,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--snapshot", type=Path, required=True, help="samples/maps/<MapCode> (read-only)")
     parser.add_argument("--out-slug", default=None, help="maps/<slug> (default: slugified map code)")
+    parser.add_argument("--allow-draft", action="store_true", help="export a DRAFT (to try it before publishing)")
     args = parser.parse_args()
 
     snap = json.loads((args.snapshot / "snapshot.json").read_text(encoding="utf-8"))
     slug = args.out_slug or _slugify(str((snap.get("mapVersion") or {}).get("code") or args.snapshot.name))
-    paths = export(args.snapshot, PKG_ROOT / "maps" / slug)
+    paths = export(args.snapshot, PKG_ROOT / "maps" / slug, allow_draft=args.allow_draft)
     manifest = json.loads(paths["manifest"].read_text(encoding="utf-8"))
     lanes = json.loads(paths["lanes"].read_text(encoding="utf-8"))["lanes"]
     print(f"{manifest['mapCode']} ({manifest['mapVersionId']}) -> {paths['manifest'].parent}")

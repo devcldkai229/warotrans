@@ -15,7 +15,7 @@
 # AMCL's motion noise follows it, so the odometry source and what AMCL assumes about it cannot disagree.
 set -uo pipefail
 ACTION="${1:-status}"
-BUNDLE="${BUNDLE:-$HOME/ros2_ws/src/warotrans_navigation/maps/map_one_v014}"
+BUNDLE="${BUNDLE:-$HOME/ros2_ws/src/warotrans_navigation/maps/map_one_v022}"
 SRC="$HOME/ros2_ws/src"
 LOGS="$HOME/wt_logs"
 MOTORS="${MOTORS:-false}"
@@ -74,7 +74,7 @@ case "$ACTION" in
     echo "robot_code=$ROBOT_CODE domain=$ROS_DOMAIN_ID motors_enabled=$MOTORS ekf=$EKF bundle=$BUNDLE mode=$MODE broker=$BROKER"
     setsid nohup ros2 launch warotrans_bringup navigation.launch.py \
       map:="$BUNDLE/map.yaml" lanes_json:="$BUNDLE/lanes.json" \
-      extra_params_file:="$SRC/warotrans_navigation/config/nav2_params_lane_aware.yaml" \
+      extra_params_file:="$SRC/warotrans_navigation/config/nav2_params_lane_aware.yaml;$SRC/warotrans_navigation/config/nav2_params_rbt001.yaml" \
       enable_costmap_filters:=true keepout_mask:="$BUNDLE/keepout.yaml" speed_mask:="$BUNDLE/speed.yaml" \
       enable_authority_gate:=true motors_enabled:="$MOTORS" start_foxglove:=false \
       enable_ekf:="$EKF" amcl_params_file:="$AMCL_PARAMS" \

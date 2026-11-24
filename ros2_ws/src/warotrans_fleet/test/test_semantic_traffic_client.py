@@ -160,6 +160,30 @@ def test_gate_closes_beyond_the_reserved_horizon():
     assert client.last_block_reason == "OUTSIDE_RESERVATION"
 
 
+def test_held_at_the_end_of_its_grant_it_proposes_its_plan_again():
+    """A robot holding part of its plan used to wait silently at the end of it until the backend promoted it on a
+    release; a wait behind another robot's body never saw one (audit 2026-11-24, A2)."""
+    client, published, _, clock = make()
+    long_path = [(x / 2.0, 0.0, 0.0) for x in range(0, 21)]  # 10 m, horizon 4 m
+    client.on_plan(long_path, command_id=CMD)
+    assert client.on_authority_payload(grant_for(client, clock), target_command_id=CMD)
+    proposals = lambda: [b for t, b in published if t.endswith("/traffic_plan")]  # noqa: E731
+    before = len(proposals())
+
+    assert client.tick((5.5, 0.0, 0.0)) is False  # beyond the granted part
+    clock.advance(1.0)
+    client.tick((5.5, 0.0, 0.0))
+    assert len(proposals()) == before  # not at once
+    clock.advance(1.5)
+    client.tick((5.5, 0.0, 0.0))
+    assert len(proposals()) == before + 1
+    assert proposals()[-1]["planRevision"] == client.plan_revision  # the same plan, asked again
+
+    # Driving again resets the hold.
+    assert client.tick((3.5, 0.0, 0.0)) is True
+    assert client._held_since_mono is None
+
+
 def test_unknown_pose_closes_the_gate():
     client, _, _, _ = granted()
     assert client.tick(None) is False
@@ -297,16 +321,18 @@ def test_held_for_traffic_reports_recent_gate_holds_of_the_command():
     assert not client.held_for_traffic()
 
 
-def test_waiting_behind_traffic_excludes_link_authority_and_deadlock_holds():
+def test_waiting_behind_traffic_excludes_link_and_authority_holds_but_not_a_wait_for_cycle():
     client, _, _, clock = make()
     client.on_plan(PATH, command_id=CMD)
     client.tick((0.0, 0.0, 0.0))  # no grant yet: waiting for its turn
     assert client.waiting_behind_traffic()
-    for fault in ("LINK_DOWN", "AUTHORITY_SILENT", "STALE_EPOCH", "DEADLOCK_RISK/DeadlockRisk blocker=x"):
+    for fault in ("LINK_DOWN", "AUTHORITY_SILENT", "STALE_EPOCH"):
         client.last_block_reason = fault
         assert client.held_for_traffic() and not client.waiting_behind_traffic(), fault
-    client.last_block_reason = "QUEUED/Capacity blocker=x"
-    assert client.waiting_behind_traffic()
+    # A wait-for cycle is resolved by the backend (one robot gives way); it is a wait, not a fault of this robot.
+    for wait in ("QUEUED/Capacity blocker=x", "DEADLOCK_RISK/DeadlockRisk blocker=x"):
+        client.last_block_reason = wait
+        assert client.waiting_behind_traffic(), wait
 
 
 def test_expires_at_with_dotnet_seven_digit_fraction_parses():
@@ -688,12 +714,15 @@ def test_reanchor_is_rate_limited_and_never_reuses_cells_the_backend_kept_from_i
     assert client.on_authority_payload(
         grant_for(client, clock, authority="auth-2", seq=2, resources=remaining), target_command_id=CMD
     )
-    # Outside what it holds now: shut, and no new revision every 2 s (the end of a prefix grant looks the same).
+    # Outside what it holds now: shut, and no new revision every 2 s (the end of a prefix grant looks the same). It
+    # does ask again with the same plan revision (A2: a held robot must not wait silently for a release).
+    revision = client.plan_revision
     assert client.tick(jumped) is False
     assert client.last_block_reason == "OUTSIDE_RESERVATION"
     clock.advance(client.propose_retry_sec + 0.1)
     assert client.tick(jumped) is False
-    assert len(_proposals(published)) == count
+    assert client.plan_revision == revision
+    assert all(p["planRevision"] == revision for p in _proposals(published)[count:])
 
 
 def test_cells_around_the_goal_are_held_until_the_command_ends():

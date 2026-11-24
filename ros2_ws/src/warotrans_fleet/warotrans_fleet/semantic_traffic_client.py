@@ -123,6 +123,10 @@ class SemanticTrafficClient:
     _progress_seq: int = 0
     _last_propose_mono: float = -1e9
     _last_blocked_mono: float = -1e9
+    #: Since when the gate holds the robot without a break (None while it may drive).
+    _held_since_mono: Optional[float] = None
+    #: Held this long with a grant (end of what it holds), the robot proposes its plan again.
+    held_repropose_sec: float = 2.0
     _last_state_report_mono: float = -1e9
     _was_localized: bool = False
     # Last pose the gate saw (x, y, yaw): the real heading at the start of the next plan.
@@ -477,6 +481,8 @@ class SemanticTrafficClient:
         if reason is not None:
             self.last_block_reason = reason
             self._last_blocked_mono = self.monotonic()
+            if self._held_since_mono is None:
+                self._held_since_mono = self.monotonic()
             # No grant (the EXTEND was lost, or it was revoked) or a lapsed one: propose again so the backend can answer.
             # The reason text of a missing grant is whatever dropped it last, so it cannot be matched by name. The
             # backend ignores a proposal for a NAVIGATE that is no longer open, so this cannot revive a finished command.
@@ -484,6 +490,13 @@ class SemanticTrafficClient:
                 self._maybe_repropose()
             elif self.link_up and reason == "IN_RELEASED_RESOURCE" and pose is not None:
                 self._maybe_reanchor(pose)
+            elif self.link_up and self.monotonic() - self._held_since_mono >= self.held_repropose_sec:
+                # Held WITH a grant (at the end of what it holds: OUTSIDE_RESERVATION): ask again. It used to wait only
+                # for the backend to promote it on a release, and a wait behind another robot's body never saw one:
+                # the robot stood still until its command timed out (audit 2026-11-24, A2).
+                self._maybe_repropose()
+        else:
+            self._held_since_mono = None
         self._set_ok(reason is None)
         return reason is None
 
@@ -546,9 +559,10 @@ class SemanticTrafficClient:
         """The gate held the robot during the current command within the last ``window_sec``."""
         return self.command_id is not None and self.monotonic() - self._last_blocked_mono <= window_sec
 
-    #: Holds that are not a wait behind another robot: the link or the backend's authority is gone, or the backend sees
-    #: a wait-for cycle. Time held for these still counts against the command's timeout.
-    FAULT_BLOCK_PREFIXES = ("LINK_DOWN", "AUTHORITY_SILENT", "STALE_EPOCH", "DEADLOCK_RISK")
+    #: Holds that are not a wait behind another robot: the link or the backend's authority is gone. Time held for these
+    #: still counts against the command's timeout. A wait-for cycle (DEADLOCK_RISK) does not: the backend resolves it
+    #: (one robot gives way) and does not count it either (RobotCommandTimeoutMonitorHostedService.TrafficWaiters).
+    FAULT_BLOCK_PREFIXES = ("LINK_DOWN", "AUTHORITY_SILENT", "STALE_EPOCH")
 
     def waiting_behind_traffic(self, window_sec: float = 5.0) -> bool:
         """Held for traffic, and the reason is another robot's space (queue, capacity, outside the granted part)."""
