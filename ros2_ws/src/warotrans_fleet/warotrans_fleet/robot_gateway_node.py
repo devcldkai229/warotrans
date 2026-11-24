@@ -158,6 +158,18 @@ class RobotGatewayNode(Node):
         self.declare_parameter("auto_localize_cmd_vel_topic", "")
         self.declare_parameter("auto_localize_spin_speed", 0.35)
         self.declare_parameter("auto_localize_converge_timeout_sec", 10.0)
+        # Map building from the web (mapping_session.py): START_MAPPING / STOP_MAPPING. While a session runs, manual
+        # drive is allowed even with teleop_enabled false (forced Drive Assist), and the authority gate is held open
+        # for it (a STOP still wins). slam_toolbox publishes on mapping_map_topic, never on the operational /map.
+        self.declare_parameter("mapping_enabled", True)
+        self.declare_parameter("mapping_map_topic", "/mapping/map")
+        # Lifecycle manager of map_server + AMCL (warotrans_localization); "" = nothing to pause.
+        self.declare_parameter("mapping_localization_manager", "lifecycle_manager_localization")
+        self.declare_parameter("mapping_slam_params_file", "")  # "" = warotrans_slam/config/slam_toolbox.yaml
+        self.declare_parameter("mapping_local_dir", "~/maps/mapping_sessions")
+        self.declare_parameter("mapping_first_map_timeout_sec", 30.0)
+        self.declare_parameter("mapping_preview_period_sec", 1.0)
+        self.declare_parameter("mapping_map_every_sec", 2.0)
         # MOVE command
         self.declare_parameter("default_navigate_timeout_sec", 0.0)  # 0 = không timeout nếu command không gửi
         self.declare_parameter("goal_response_timeout_sec", 10.0)
@@ -288,12 +300,15 @@ class RobotGatewayNode(Node):
                 max_xy_std_m=self._float_param("amcl_max_xy_std_m"),
                 max_yaw_std_rad=self._float_param("amcl_max_yaw_std_rad"),
             )
-            self.create_subscription(
-                PoseWithCovarianceStamped,
-                self._str_param("initial_pose_topic"),
-                self._on_initial_pose,
-                10,
-            )
+        # After a mapping session the old pose means nothing: not LOCALIZED until a new /initialpose.
+        self._relocalize_required = False
+        self._mapping = None
+        self.create_subscription(
+            PoseWithCovarianceStamped,
+            self._str_param("initial_pose_topic"),
+            self._on_initial_pose,
+            10,
+        )
         # amcl publishes amcl_pose reliable + transient_local; sensor-data QoS is best-effort and still matches.
         self.create_subscription(
             PoseWithCovarianceStamped,
@@ -318,6 +333,7 @@ class RobotGatewayNode(Node):
         route_enforcer = None if self._traffic_mode == "semantic_active" else self._setup_route_enforcer()
 
         self._teleop_enabled = bool(self.get_parameter("teleop_enabled").get_parameter_value().bool_value)
+        self._mapping_enabled = bool(self.get_parameter("mapping_enabled").get_parameter_value().bool_value)
         human_env = os.environ.get("WARO_HUMAN_CONFIRM_ENABLED", "").strip().lower()
         if human_env in ("1", "true", "yes", "on"):
             self._human_confirm_enabled = True
@@ -338,7 +354,7 @@ class RobotGatewayNode(Node):
             self.topic("command"),
             self.topic("interaction_request"),
             self.topic("interaction_result"),
-        ] + ([self.topic("teleop")] if self._teleop_enabled else []) + (
+        ] + ([self.topic("teleop")] if self._teleop_enabled or self._mapping_enabled else []) + (
             [self._epoch_topic(), self.topic("traffic_plan_reject")]
             if self._traffic_mode == "semantic_active"
             else []
@@ -408,7 +424,7 @@ class RobotGatewayNode(Node):
         self._register_control_commands()
 
         self._teleop: Optional[TeleopController] = None
-        if self._teleop_enabled:
+        if self._teleop_enabled or self._mapping_enabled:
             self._cmd_vel_pub = self.create_publisher(Twist, self._str_param("cmd_vel_topic"), 10)
             self._footprint = Footprint(
                 half_length=self._float_param("assist_half_length"),
@@ -803,13 +819,15 @@ class RobotGatewayNode(Node):
         router.register(
             LocalizeCommandHandler(
                 self._publish_initial_pose,
-                busy=lambda: self._commands.move.active_command_id is not None or self._nav_tracker.has_active_goal,
+                busy=lambda: self._motion_busy() or self._mapping_active(),
                 log=self.get_logger(),
                 map_frame=self._map_frame,
             )
         )
         if bool(self.get_parameter("auto_localize_enabled").get_parameter_value().bool_value):
             self._register_auto_localize(router)
+        if self._mapping_enabled:
+            self._register_mapping(router)
 
     def _register_auto_localize(self, router) -> None:
         from warotrans_fleet.auto_localize import AutoLocalizeCommandHandler
@@ -845,9 +863,8 @@ class RobotGatewayNode(Node):
             spin_speed_rad_s=self._float_param("auto_localize_spin_speed"),
         )
         self._auto_localize_ros = ros
-        router.register(
-            AutoLocalizeCommandHandler(
-                busy=lambda: self._commands.move.active_command_id is not None or self._nav_tracker.has_active_goal,
+        self._auto_localize_handler = AutoLocalizeCommandHandler(
+                busy=lambda: self._motion_busy() or self._mapping_active(),
                 get_points=ros.get_points,
                 get_field=ros.get_field,
                 publish_initial_pose=self._publish_initial_pose,
@@ -856,9 +873,90 @@ class RobotGatewayNode(Node):
                 global_localize=ros.global_localize if ros.can_spin else None,
                 current_pose=ros.current_pose,
                 converge_timeout_sec=self._float_param("auto_localize_converge_timeout_sec"),
-            )
         )
+        router.register(self._auto_localize_handler)
         self.get_logger().info(f"AUTO_LOCALIZE ready: localizer={ros.localizer} scan={scan_topic} spin={ros.can_spin}")
+
+    def _register_mapping(self, router) -> None:
+        from warotrans_fleet.mapping_ros import MappingRos
+        from warotrans_fleet.mapping_session import MappingController, StartMappingHandler, StopMappingHandler
+
+        use_sim_time = bool(self.get_parameter("use_sim_time").get_parameter_value().bool_value)
+        ros = MappingRos(
+            self,
+            tf_buffer=self._tf_buffer,
+            map_frame=self._map_frame,
+            base_frame=self._base_frame,
+            map_topic=self._str_param("mapping_map_topic"),
+            localization_manager=self._str_param("mapping_localization_manager"),
+            slam_params_file=self._str_param("mapping_slam_params_file"),
+            use_sim_time=use_sim_time,
+            local_dir=self._str_param("mapping_local_dir"),
+        )
+        self._mapping = MappingController(
+            pause_localization=ros.pause_localization,
+            resume_localization=ros.resume_localization,
+            start_slam=ros.start_slam,
+            stop_slam=ros.stop_slam,
+            latest_map=ros.latest_map,
+            current_pose=ros.current_pose,
+            publish_preview=lambda body: self.mqtt.publish(self.topic("mapping"), body, qos=0),
+            publish_upload=lambda body: self.mqtt.publish(self.topic("mapping_upload"), body, qos=1),
+            on_finished=self._on_mapping_finished,
+            log=self.get_logger(),
+            save_local=ros.save_local,
+            save_posegraph=ros.save_posegraph,
+            first_map_timeout_sec=self._float_param("mapping_first_map_timeout_sec"),
+            preview_period_sec=self._float_param("mapping_preview_period_sec"),
+            map_every_sec=self._float_param("mapping_map_every_sec"),
+        )
+        router.register(StartMappingHandler(self._mapping, busy=self._mapping_start_busy))
+        router.register(StopMappingHandler(self._mapping))
+        if self._enable_authority_gate:
+            # The gate needs a fresh authority_ok (max age ~0.3 s, wall clock) to pass manual drive while mapping;
+            # a sim-time timer falls behind that under a slow Gazebo.
+            from rclpy.clock import Clock, ClockType
+
+            self.create_timer(0.05, self._mapping_gate_tick, clock=Clock(clock_type=ClockType.STEADY_TIME))
+        self.get_logger().info(
+            f"MAPPING ready: map_topic={self._str_param('mapping_map_topic')} "
+            f"localization_manager={self._str_param('mapping_localization_manager') or '-'} sim_time={use_sim_time}"
+        )
+
+    def _motion_busy(self) -> bool:
+        return self._commands.move.active_command_id is not None or self._nav_tracker.has_active_goal
+
+    def _mapping_active(self) -> bool:
+        return self._mapping is not None and self._mapping.active
+
+    def _mapping_drivable(self) -> bool:
+        return self._mapping is not None and self._mapping.drivable
+
+    def _mapping_start_busy(self) -> bool:
+        auto = getattr(self, "_auto_localize_handler", None)
+        return self._motion_busy() or (auto is not None and auto.running)
+
+    def _mapping_gate_tick(self) -> None:
+        if self._mapping_drivable():
+            self._publish_authority_ok(True)
+
+    def _on_mapping_finished(self) -> None:
+        # Worker thread. The robot drove away from its old pose: require a new one before any MOVE.
+        self._relocalize_required = True
+        if self._amcl_readiness is not None:
+            self._amcl_readiness.reset()
+        if self._teleop is not None and not self._teleop_enabled:
+            self._teleop.stop()
+        if self._enable_authority_gate:
+            self._publish_authority_ok(False)
+
+    def _handle_teleop(self, body: dict) -> None:
+        assert self._teleop is not None
+        if self._teleop_enabled:
+            self._teleop.handle(body)
+        elif self._mapping_drivable():
+            # Manual drive outside traffic control only to build a map, always with Drive Assist.
+            self._teleop.handle({**body, "assist": True})
 
     def _on_motion_hold_changed(self, held: bool) -> None:
         # Close the gate at once on STOP; on RESUME the traffic client opens it again on its next tick, only if
@@ -892,6 +990,9 @@ class RobotGatewayNode(Node):
     def _publish_authority_ok(self, ok: bool) -> None:
         from std_msgs.msg import Bool, String
 
+        # Map building: manual drive has the gate (the robot is out of traffic until the session ends).
+        if self._mapping_drivable():
+            ok = True
         # RB-03: a STOP hold wins over any grant: the gate drops every velocity until RESUME.
         if self._motion_hold.held:
             ok = False
@@ -1143,6 +1244,8 @@ class RobotGatewayNode(Node):
         stop = getattr(self, "_fleet_uplink_stop", None)
         if stop is not None:
             stop.set()
+        if self._mapping is not None:
+            self._mapping.shutdown()
         if self._teleop is not None:
             self._teleop.stop()
         if self._button_input is not None:
@@ -1209,7 +1312,7 @@ class RobotGatewayNode(Node):
                     continue
                 self._commands.router.handle_message(body)
             elif kind == "teleop" and self._teleop is not None:
-                self._teleop.handle(body)
+                self._handle_teleop(body)
             elif kind == "interaction_request":
                 self._handle_interaction_request(body)
             elif kind == "interaction_result":
@@ -1289,6 +1392,9 @@ class RobotGatewayNode(Node):
             self._amcl_readiness.on_amcl_pose(list(msg.pose.covariance))
 
     def _on_initial_pose(self, _msg: PoseWithCovarianceStamped) -> None:
+        if self._relocalize_required and not self._mapping_active():
+            self._relocalize_required = False
+            self.get_logger().info("pose given after map building: localization may be reported again")
         if self._amcl_readiness is not None:
             self._amcl_readiness.on_initial_pose()
             self.get_logger().info("operator initial pose received (/initialpose)")
@@ -1339,6 +1445,9 @@ class RobotGatewayNode(Node):
             q = transform.transform.rotation
             yaw = quaternion_to_yaw(q.x, q.y, q.z, q.w)
             pose = {"x": float(t.x), "y": float(t.y), "yaw": float(yaw)}
+            if self._mapping_active() or self._relocalize_required:
+                # Mapping: the pose is in the map being built. After it: an old pose. Neither is LOCALIZED.
+                return pose, "UNKNOWN"
             if self._amcl_readiness is not None:
                 reason = self._amcl_readiness.blocking_reason()
                 if reason != self._amcl_block_reason:
@@ -1397,7 +1506,7 @@ class RobotGatewayNode(Node):
             robot_code=self._robot_code,
             boot_id=self._seq.boot_id,
             sequence=seq,
-            map_version_code=self._map_version_code,
+            map_version_code="MAPPING" if self._mapping_active() else self._map_version_code,
             pose=pose,
             battery_percent=None,
             navigation_status=self._navigation_status(),

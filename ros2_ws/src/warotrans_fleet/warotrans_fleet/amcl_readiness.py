@@ -31,6 +31,11 @@ class AmclReadiness:
         # Whatever AMCL reported so far is from before this pose.
         self._xy_std = self._yaw_std = None
 
+    def reset(self) -> None:
+        """Forget the operator pose: after map building the robot drove off its old pose (a new one is required)."""
+        self._operator_pose = False
+        self._xy_std = self._yaw_std = None
+
     def on_amcl_pose(self, covariance: Sequence[float]) -> None:
         """Row-major 6x6 (x, y, z, roll, pitch, yaw) covariance of PoseWithCovariance."""
         if len(covariance) < 36:
