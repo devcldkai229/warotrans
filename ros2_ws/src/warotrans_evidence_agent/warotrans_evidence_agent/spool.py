@@ -154,6 +154,10 @@ class Spool:
         self._q("UPDATE segments SET attempts=attempts+1, next_attempt_at=?, last_error=? WHERE segment_id=?",
                 (self._clock() + backoff_s, error[:300], segment_id))
 
+    def segment_attempts(self, segment_id: str) -> int:
+        rows = self._q("SELECT attempts FROM segments WHERE segment_id=?", (segment_id,))
+        return int(rows[0][0]) if rows else 0
+
     def due_uploads(self, recording_key: str) -> list[dict]:
         rows = self._q("SELECT info FROM segments WHERE recording_key=? AND registered=1 AND uploaded=0 AND next_attempt_at<=?"
                        " ORDER BY sequence_number", (recording_key, self._clock()))

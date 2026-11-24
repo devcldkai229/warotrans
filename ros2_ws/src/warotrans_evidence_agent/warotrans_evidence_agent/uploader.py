@@ -19,6 +19,10 @@ from .spool import Spool
 
 #: The camera closes its last segment a moment after the agent stopped the recording: finalize only after this.
 FINALIZE_SETTLE_S = 10.0
+#: The Recorder does not know the segment (404/410): asking again never helps. It is parked this long, not retried
+#: every few seconds (lab 2026-11-24: ~70 such recordings from earlier days took every upload slot, 2,475 attempts
+#: each, and the Recorder answered 429; no segment of a new trip was ever uploaded).
+ABANDON_S = 30 * 24 * 3600.0
 
 SEGMENT_FIELDS = ("segment_id", "sequence_number", "start_monotonic_ns", "end_monotonic_ns", "duration_ms",
                   "frame_count", "dropped_frame_count", "duplicated_frame_count", "max_slot_error_ms",
@@ -79,7 +83,9 @@ class Uploader:
         for rec in self.spool.recordings(("FINALIZED",), due_only=True):
             if rec.recording_id is not None:
                 stats["registered"] += self._register(rec)
-        for rec in self.spool.recordings(("RECORDING", "ENDED", "FINALIZED")):
+        # Newest first: the trip that just ran is the one someone will replay; an old backlog waits behind it.
+        for rec in sorted(self.spool.recordings(("RECORDING", "ENDED", "FINALIZED")), key=lambda r: r.started_at_ns,
+                          reverse=True):
             if rec.recording_id is None or stats["uploaded"] >= max_uploads:
                 continue
             for info in self.spool.due_uploads(rec.key)[: max_uploads - stats["uploaded"]]:
@@ -159,7 +165,12 @@ class Uploader:
             if exc.code in ("already_uploaded", "quarantined"):
                 self.spool.mark_uploaded(sid)  # nothing more this robot can do for it
                 return 0
-            self.spool.segment_failed(sid, str(exc), backoff(0))
+            if exc.status in (404, 410):
+                self.spool.segment_failed(sid, f"abandoned: {exc}", ABANDON_S)
+                self._warn(f"evidence: the Recorder does not know segment {sid}; parked ({exc.status})")
+                return 0
+            # Growing backoff (was a fixed 5 s whatever the number of failures).
+            self.spool.segment_failed(sid, str(exc), backoff(self.spool.segment_attempts(sid)))
             return 0
         try:
             self._put(grant, info["path"], self.rate_limit_bps)

@@ -324,3 +324,26 @@ def test_finalize_waits_for_the_last_segment_and_a_late_one_still_goes_up(tmp_pa
     spool._q("UPDATE recordings SET next_attempt_at = 0")
     up.pump()
     assert ("register", [2]) in api.calls
+
+
+def test_a_segment_the_recorder_does_not_know_is_parked_and_the_newest_trip_goes_first(tmp_path, spool):
+    """Lab 2026-11-24: an old backlog answered 404 forever and took every upload slot; new trips never went up."""
+
+    class Api404(FakeApi):
+        def upload_grant(self, segment_id):
+            if segment_id.endswith("000000000007"):
+                raise ApiError(404, {"title": "segment_not_found"}, "grant")
+            return super().upload_grant(segment_id)
+
+    api, puts = Api404(), []
+    up = Uploader(spool, api, put=lambda g, p, b: puts.append(p), delete_uploaded=False, settle_s=0)
+    spool.add_recording("old", 1 * NS, "boot", None, str(tmp_path), PROFILE)
+    spool.add_segment(segment(tmp_path, "old", 7))
+    spool.add_recording("new", 9 * NS, "boot", None, str(tmp_path), PROFILE)
+    spool.add_segment(segment(tmp_path, "new", 0))
+    up.pump(max_uploads=1)
+    assert puts and "new-0" in puts[0], "the newest recording uploads first"
+    spool._q("UPDATE segments SET next_attempt_at = 0 WHERE uploaded = 0")
+    up.pump(max_uploads=1)
+    row = spool._q("SELECT next_attempt_at, last_error FROM segments WHERE segment_id LIKE '%000000000007'")[0]
+    assert row[1].startswith("abandoned") and row[0] > 24 * 3600, "parked, not retried every few seconds"
