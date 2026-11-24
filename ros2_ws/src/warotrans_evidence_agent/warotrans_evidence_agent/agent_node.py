@@ -8,6 +8,8 @@ Inputs
   /odom                          measured velocities
   /plan                          Nav2's global plan (every replan kept)
   /navigate_to_pose/_action/status  goal outcomes as events
+  /scan                          only its liveness: sensor.stale / sensor.recovered events while a run is open
+  /lab/faults                    Fault Injection Lab (test robots): clock offset to add to the reported clock
 Output
   /evidence/recording_control    std_msgs/String JSON to the camera
 
@@ -18,6 +20,7 @@ from a parameter file in a repository.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import math
 import os
@@ -27,7 +30,7 @@ from typing import Optional
 
 from .agent_core import AgentCore, CameraProfile
 from .recorder_api import ApiError, RecorderApi
-from .sampling import read_clock_quality
+from .sampling import SilenceWatch, read_clock_quality
 from .spool import Spool
 from .uploader import Uploader
 
@@ -45,6 +48,8 @@ def main(args=None) -> None:
     import rclpy
     from action_msgs.msg import GoalStatus, GoalStatusArray
     from nav_msgs.msg import Odometry, Path
+    from rclpy.qos import DurabilityPolicy, qos_profile_sensor_data
+    from sensor_msgs.msg import LaserScan
     from rclpy.executors import ExternalShutdownException
     from rclpy.node import Node
     from rclpy.qos import QoSProfile, QoSReliabilityPolicy
@@ -112,6 +117,12 @@ def main(args=None) -> None:
             self.create_subscription(Odometry, "/odom", self._on_odom, 10)
             self.create_subscription(Path, "/plan", self._on_plan, 5)
             self.create_subscription(GoalStatusArray, "/navigate_to_pose/_action/status", self._on_nav_status, 10)
+            self._scan_watch = SilenceWatch("lidar", limit_s=5.0)
+            self.create_subscription(LaserScan, "/scan", self._on_scan, qos_profile_sensor_data)
+            self._lab_clock_offset_ms = 0.0
+            self.create_subscription(String, "/lab/faults", self._on_lab_faults,
+                                     QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
+                                                durability=DurabilityPolicy.TRANSIENT_LOCAL))
             self.create_timer(0.2, self._sample_pose)
             self.create_timer(1.0, self._tick)
             self.create_timer(60.0, self._anchor)
@@ -150,6 +161,22 @@ def main(args=None) -> None:
                 with self._lock:
                     self.core.add_event("camera.error", "CAMERA", "WARNING", status, message=f"Camera: {error[:200]}")
             self._camera_error = error
+
+        def _on_scan(self, _msg) -> None:
+            back = self._scan_watch.heard(time.monotonic())
+            if back is not None:
+                with self._lock:
+                    self.core.add_event("sensor.recovered", "HARDWARE", "INFO", back,
+                                        message=f"lidar publishing again after {back['silentS']} s")
+
+        def _on_lab_faults(self, msg) -> None:
+            try:
+                offset_ms = float(json.loads(msg.data).get("clockOffsetSec") or 0.0) * 1000.0
+            except (ValueError, AttributeError, TypeError):
+                return
+            if offset_ms != self._lab_clock_offset_ms:
+                self._lab_clock_offset_ms = offset_ms
+                self._anchor()  # the reported clock moves now, as a stepped clock would
 
         def _on_odom(self, msg) -> None:
             self._v = msg.twist.twist.linear.x
@@ -192,13 +219,24 @@ def main(args=None) -> None:
                 self.core.on_pose(*self._pose())
 
         def _tick(self) -> None:
+            stale = self._scan_watch.check(time.monotonic())
             with self._lock:
+                if stale is not None:
+                    self.core.add_event("sensor.stale", "HARDWARE", "ERROR", stale,
+                                        message=f"lidar silent for {stale['silentS']} s")
                 self.core.tick()
 
         def _anchor(self) -> None:
             quality = read_clock_quality()
+            if self._lab_clock_offset_ms:
+                quality = dataclasses.replace(quality, offset_ms=(quality.offset_ms or 0.0) + self._lab_clock_offset_ms)
             with self._lock:
                 self.core.add_clock_anchor(time.monotonic_ns(), quality)
+                # The same reading as a journal event while a trip runs (investigations read events, not anchors).
+                self.core.add_event("clock.anchor", "SYSTEM", "INFO",
+                                    {"offsetMs": quality.offset_ms, "errorBoundMs": quality.error_bound_ms,
+                                     "synchronized": quality.synchronized, "source": quality.source},
+                                    message=f"robot clock offset {quality.offset_ms} ms ({quality.source})")
 
         # ---------------------------------------------------------------- background
         def _poll_run(self) -> None:

@@ -199,6 +199,8 @@ class MoveCommandHandler:
         self._traffic_wait_active = traffic_wait_active
         self._motion_hold_active = motion_hold_active
         self._max_traffic_retries = int(max_traffic_retries)
+        # Fault Injection Lab (NAV-01): returns a goal to send instead of the real one, or None. None in production.
+        self.goal_rewrite: Optional[Callable[[], Optional[tuple[float, float]]]] = None
         self._obstacle_wait_sec = float(obstacle_wait_sec)
         # The goal checker passes while the robot still coasts: the heading that counts is the one it stops at.
         self._arrival_settle_sec = float(arrival_settle_sec)
@@ -534,6 +536,11 @@ class MoveCommandHandler:
                 move.deadline_tick_at = now
             t = move.target
             gx, gy = self._nav2_goal_xy(t.x, t.y, t.yaw)
+            diverted = self.goal_rewrite() if self.goal_rewrite is not None else None
+            if diverted is not None:
+                # Fault Injection Lab NAV-01: Nav2 gets an unreachable goal and really aborts; the retry loop re-sends.
+                self._log.warning(f"[LabGoalDiverted] commandId={move.command_id} goal -> {diverted}")
+                gx, gy = diverted
             goal = NavGoal(command_id=move.command_id, frame_id=t.frame_id, x=gx, y=gy, yaw=t.yaw,
                            position_tolerance=t.position_tolerance)
             self._log.info(

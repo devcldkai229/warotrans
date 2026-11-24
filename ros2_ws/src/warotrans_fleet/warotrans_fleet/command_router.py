@@ -164,6 +164,13 @@ class CommandRouter:
         self._handlers: dict[str, CommandHandler] = {}
         self._ledger: "OrderedDict[str, _LedgerEntry]" = OrderedDict()
         self._ledger_capacity = max(1, int(ledger_capacity))
+        # Fault Injection Lab hooks (None in production): take a command instead of its handler, and see every result.
+        self.interceptor: Optional[Callable[[CommandEnvelope, "CommandSession"], Optional[AckDecision]]] = None
+        self.after_result: Optional[Callable[[dict[str, Any]], None]] = None
+
+    def publish_raw_result(self, payload: dict[str, Any]) -> None:
+        """Lab only: publish a result payload as is (bypasses the ledger)."""
+        self._publisher.publish_result(payload)
 
     def register(self, handler: CommandHandler) -> None:
         if handler.command_type in self._handlers:
@@ -237,7 +244,8 @@ class CommandRouter:
 
         session = CommandSession(command=command, _router=self, _entry=entry)
         try:
-            decision = handler.handle(command, session)
+            intercepted = self.interceptor(command, session) if self.interceptor is not None else None
+            decision = intercepted if intercepted is not None else handler.handle(command, session)
         except CommandRejected as rej:
             decision = AckDecision.reject(rej.reason_code, rej.message)
         except Exception as exc:  # noqa: BLE001 — trả INTERNAL_ERROR thay vì nuốt lỗi
@@ -337,6 +345,11 @@ class CommandRouter:
 
     def _publish_result(self, payload: dict[str, Any]) -> None:
         self._publisher.publish_result(payload)
+        if self.after_result is not None:
+            try:
+                self.after_result(payload)
+            except Exception as exc:  # noqa: BLE001 - a lab hook never breaks command handling
+                self.log.warning(f"[LabHookError] after_result {type(exc).__name__}: {exc}")
         self.log.info(
             f"[CommandResultPublished] commandId={payload['commandId']} outcome={payload['outcome']} "
             f"errorCode={payload.get('errorCode')}"

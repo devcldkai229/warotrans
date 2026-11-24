@@ -222,6 +222,8 @@ class RobotGatewayNode(Node):
         # Traffic mode: "legacy" (RouteEnforcer + NAVIGATE route grant, mặc định) hoặc "active"
         # (segment motion authority — TrafficClient). Chỉ là param; legacy giữ nguyên hành vi cũ.
         self.declare_parameter("traffic_mode", "legacy")
+        # Fault Injection Lab (test robots only): obey the backend's lab topic. Env LAB_ENABLED overrides.
+        self.declare_parameter("lab_enabled", False)
         self.declare_parameter("authority_loss_timeout_sec", 3.0)
         self.declare_parameter("enable_authority_gate", False)  # gate is a separate launch node
         self.declare_parameter("authority_state_path", "")  # "" = file tạm mặc định của AuthorityStore
@@ -350,7 +352,12 @@ class RobotGatewayNode(Node):
             else int(self.get_parameter("human_confirm_gpio_pin").get_parameter_value().integer_value)
         )
 
-        subscribe_topics = [
+        lab_env = os.environ.get("LAB_ENABLED", "").strip().lower()
+        self._lab_enabled = lab_env in ("1", "true", "yes", "on") if lab_env else bool(
+            self.get_parameter("lab_enabled").get_parameter_value().bool_value
+        )
+        self._lab = None
+        subscribe_topics = ([self.topic("lab")] if self._lab_enabled else []) + [
             self.topic("command"),
             self.topic("interaction_request"),
             self.topic("interaction_result"),
@@ -504,6 +511,12 @@ class RobotGatewayNode(Node):
                 self._active_command_last, self._active_command_sent_at = data, now
 
         self.create_timer(0.5, _publish_active_command)
+
+        if self._lab_enabled:
+            from warotrans_fleet.lab_controller import LabController
+
+            self._lab = LabController(self, mqtt=self.mqtt, router=self._commands.router, move=self._commands.move,
+                                      semantic_client=lambda: self._semantic_client)
 
         self.mqtt.start()
 
@@ -1287,6 +1300,8 @@ class RobotGatewayNode(Node):
         # MQTT network thread: chỉ enqueue, không xử lý.
         if topic == self.topic("command"):
             self._inbox.put(("command", body))
+        elif self._lab_enabled and topic == self.topic("lab"):
+            self._inbox.put(("lab", body))
         elif topic == self.topic("teleop") and self._teleop is not None:
             self._inbox.put(("teleop", body))
         elif topic == self.topic("interaction_request"):
@@ -1311,6 +1326,8 @@ class RobotGatewayNode(Node):
                 if self._traffic_mode == "semantic_active" and self._handle_semantic_authority_command(body):
                     continue
                 self._commands.router.handle_message(body)
+            elif kind == "lab" and self._lab is not None:
+                self._lab.on_message(body)
             elif kind == "teleop" and self._teleop is not None:
                 self._handle_teleop(body)
             elif kind == "interaction_request":

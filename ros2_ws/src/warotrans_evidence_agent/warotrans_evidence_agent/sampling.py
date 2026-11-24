@@ -122,3 +122,31 @@ def read_clock_quality(timeout: float = 2.0) -> ClockQuality:
         return ClockQuality("timedatectl", synced, None, 50.0 if synced else None)
     except (OSError, subprocess.SubprocessError):
         return ClockQuality("none", False, None, None)
+
+
+class SilenceWatch:
+    """A sensor that should publish continuously: one ``sensor.stale`` when it falls silent past ``limit_s`` and one
+    ``sensor.recovered`` when it speaks again (never one per tick). Before the first message nothing is reported: a
+    sensor that never started is a configuration problem, not a stall."""
+
+    def __init__(self, sensor: str, limit_s: float = 5.0) -> None:
+        self.sensor = sensor
+        self.limit_s = float(limit_s)
+        self._last: Optional[float] = None
+        self._stale_since: Optional[float] = None
+
+    def heard(self, now: float) -> Optional[dict]:
+        """A message arrived. Returns the recovery event payload if it had been reported stale."""
+        out = None
+        if self._stale_since is not None and self._last is not None:
+            out = {"sensor": self.sensor, "silentS": round(now - self._last, 1), "declared": True}
+        self._last = now
+        self._stale_since = None
+        return out
+
+    def check(self, now: float) -> Optional[dict]:
+        """Returns the stale event payload once, when the silence passes the limit."""
+        if self._last is None or self._stale_since is not None or now - self._last < self.limit_s:
+            return None
+        self._stale_since = now
+        return {"sensor": self.sensor, "silentS": round(now - self._last, 1), "limitS": self.limit_s, "declared": True}
