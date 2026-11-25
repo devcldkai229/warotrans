@@ -504,7 +504,67 @@ def scenario_S6(w: World) -> dict:
     return run_jobs(w, "S6", jobs, timeout_s=1800)
 
 
-SCENARIOS = {"S6": scenario_S6, "S1": scenario_S1, "S2": scenario_S2, "S3": scenario_S3, "S4": scenario_S4, "S5": scenario_S5,
+V024_SHELVES = ["SHELF-A-1-V2", "SHELF-A-2-V2", "SHELF-B", "SHELF-C"]
+
+
+def _stored(w: World, n: int) -> list[tuple[str, str]]:
+    """n STORED boxes on the V024 shelves, spread over the shelves (round robin), oldest first."""
+    per = {sh: [c for c, in sql("select c.id from warehouse.containers c join warehouse.storage_locations sl on "
+                                f"sl.id=c.current_storage_location_id where c.status='STORED' and sl.code='{sh}' "
+                                "order by c.created_at")] for sh in V024_SHELVES}
+    out: list[tuple[str, str]] = []
+    while len(out) < n and any(per.values()):
+        for sh in V024_SHELVES:
+            if per[sh] and len(out) < n:
+                out.append((per[sh].pop(0), sh))
+    if len(out) < n:
+        raise AssertionError(f"only {len(out)} STORED boxes on the V024 shelves, {n} needed")
+    return out
+
+
+def _queue_all(w: World, name: str, jobs: list[str]) -> dict:
+    for j in jobs:
+        w.api.call("POST", f"/api/workflow-execution/jobs/{j}/enqueue", {})
+    return run_jobs(w, name, jobs, timeout_s=2400)
+
+
+def scenario_M1(w: World) -> dict:
+    """One INBOUND request of 6 boxes: two trips of 3, both robots pick up at INBOUND and store at the same time."""
+    new = new_containers(w, 6, "M1")
+    voucher(w, "INBOUND", new, "real V024 M1")
+    shelves = ["SHELF-A-1-V2", "SHELF-A-2-V2", "SHELF-B", "SHELF-C", "SHELF-A-1-V2", "SHELF-B"]
+    _, jobs = create_tr(w, "INBOUND", [{"container": c, "src": "EP-INBOUND", "dst": w.loc_ep[s], "dstLoc": s}
+                                        for c, s in zip(new, shelves)], "real V024 M1")
+    return _queue_all(w, "M1", jobs)
+
+
+def scenario_M2(w: World) -> dict:
+    """One INTERNAL_RELOCATION request of 6 boxes, each to another V024 shelf."""
+    boxes = _stored(w, 6)
+    nxt = {"SHELF-A-1-V2": "SHELF-C", "SHELF-A-2-V2": "SHELF-B", "SHELF-B": "SHELF-A-1-V2", "SHELF-C": "SHELF-A-2-V2"}
+    _, jobs = create_tr(w, "INTERNAL_RELOCATION", [{"container": c, "src": w.loc_ep[sh], "srcLoc": sh,
+                                                    "dst": w.loc_ep[nxt[sh]], "dstLoc": nxt[sh]} for c, sh in boxes],
+                        "real V024 M2")
+    return _queue_all(w, "M2", jobs)
+
+
+def scenario_M3(w: World) -> dict:
+    """One OUTBOUND_RETRIEVAL request of 6 boxes (phieu xuat) from the V024 shelves to EP-OUTBOUND."""
+    boxes = _stored(w, 6)
+    voucher(w, "OUTBOUND", [c for c, _ in boxes], "real V024 M3")
+    _, jobs = create_tr(w, "OUTBOUND_RETRIEVAL", [{"container": c, "src": w.loc_ep[sh], "srcLoc": sh, "dst": "EP-OUTBOUND"}
+                                                  for c, sh in boxes], "real V024 M3")
+    return _queue_all(w, "M3", jobs)
+
+
+def scenario_M4(w: World) -> dict:
+    """Two INBOUND requests with quality inspection (one box each), queued together: both robots stop at
+    EP-QUALITY-INSPECTION in turn."""
+    jobs = [_inbound(w, None, "SHELF-C", "M4-1", check_quality=True), _inbound(w, None, "SHELF-A-2-V2", "M4-2", check_quality=True)]
+    return _queue_all(w, "M4", jobs)
+
+
+SCENARIOS = {"M1": scenario_M1, "M2": scenario_M2, "M3": scenario_M3, "M4": scenario_M4, "S6": scenario_S6, "S1": scenario_S1, "S2": scenario_S2, "S3": scenario_S3, "S4": scenario_S4, "S5": scenario_S5,
              "V1": scenario_V1, "V2": scenario_V2, "WATCH": scenario_WATCH, "HOME": scenario_HOME, "A1": scenario_A1, "A2": scenario_A2, "A3": scenario_A3, "B": scenario_B,
              "C6": lambda w: scenario_C(w, 6), "C5": lambda w: scenario_C(w, 5)}
 
