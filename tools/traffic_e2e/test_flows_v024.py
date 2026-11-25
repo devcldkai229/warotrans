@@ -191,7 +191,9 @@ def scenario(api, pair, host, name: str, requests: list[list[tuple[str, str]]], 
     log_before = len(host.log_text())
     jobs: list[str] = []
     for moves in requests:
-        _, js = base.request(api, wh, moves, check_quality=check_quality)
+        # A request may carry its own "through quality inspection" flag: ("QC", [moves]).
+        qc, moves = (True, moves[1]) if moves and moves[0] == "QC" else (check_quality, moves)
+        _, js = base.request(api, wh, moves, check_quality=qc)
         jobs += js
     t0 = time.time()
     w = base.Watch(api, [r1, r2], name).start()
@@ -288,3 +290,35 @@ def test_u3_two_through_inspection(api, pair, host):
     """Lab U3: both robots go through QUALITY-INSPECTION; the second waits at EP-QUEUE, not inside ZONE-CENTER."""
     scenario(api, pair, host, "U3_two_inspection", [[("EP-INBOUND", "EP-SHELF-C")], [("EP-INBOUND", "EP-SHELF-A-2")]],
              check_quality=True)
+
+
+# ---------------------------------------------------------------- deadlock patterns foreseen on V024 (2026-11-25)
+def test_d1_swap_shelf_b_and_c(api, pair, host):
+    """D1: two relocations that swap SHELF-B and SHELF-C at once: each robot's goal is where the other one stands."""
+    scenario(api, pair, host, "D1_swap_b_c", [[("EP-SHELF-B", "EP-SHELF-C")], [("EP-SHELF-C", "EP-SHELF-B")]])
+
+
+def test_d2_shelf_b_out_while_in(api, pair, host):
+    """D2: one robot leaves SHELF-B (lane B-2, ZONE-CENTER) while the other comes up to SHELF-B (lane B-1)."""
+    scenario(api, pair, host, "D2_b_out_in", [[("EP-SHELF-B", "EP-SHELF-A-2")], [("EP-INBOUND", "EP-SHELF-B")]])
+
+
+def test_d3_inspection_splits_the_room(api, pair, host):
+    """D3: one robot stands at QUALITY-INSPECTION (middle of the west room) while the other comes from SHELF-A
+    through the room down to OUTBOUND."""
+    scenario(api, pair, host, "D3_qi_room", [("QC", [("EP-INBOUND", "EP-SHELF-C")]), [("EP-SHELF-A-1", "EP-OUTBOUND")]])
+
+
+def test_d4_head_on_at_the_shelf_a_gap(api, pair, host):
+    """D4: one robot leaves SHELF-A by lane A-2 into the west room, the other crosses the room up to lane A-1."""
+    scenario(api, pair, host, "D4_a_gap", [[("EP-SHELF-A-2", "EP-SHELF-C")], [("EP-SHELF-C", "EP-SHELF-A-1")]])
+
+
+def test_d5_yard_both_ways(api, pair, host):
+    """D5: one robot from OUTBOUND east through the yard up BOUND-2, the other down BOUND-1 east to INBOUND."""
+    scenario(api, pair, host, "D5_yard", [[("EP-OUTBOUND", "EP-SHELF-B")], [("EP-SHELF-C", "EP-INBOUND")]])
+
+
+def test_d6_both_to_inspection_and_back_home(api, pair, host):
+    """D6: both robots through QUALITY-INSPECTION to the far shelves, then both park (parking pool, EP-QUEUE pocket)."""
+    scenario(api, pair, host, "D6_qi_both_park", [("QC", [("EP-INBOUND", "EP-SHELF-A-1")]), ("QC", [("EP-INBOUND", "EP-SHELF-B")])])
