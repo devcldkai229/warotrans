@@ -1,0 +1,106 @@
+{
+  "zones": [
+    {
+      "id": "496fc8c2-58d8-48cf-ab0d-fec8aae9e989",
+      "code": "ZONE-SINGLE-SHELF-B",
+      "name": "SINGLE-SHELF-B",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            2.213,
+            -1.198
+          ],
+          [
+            2.879,
+            -1.202
+          ],
+          [
+            2.879,
+            -2.847
+          ],
+          [
+            2.213,
+            -2.847
+          ],
+          [
+            2.213,
+            -1.198
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "047acfa8-d558-4cf4-856e-88442c68f9aa",
+      "code": "ZONE-SINGLE-ZONE-CENTER",
+      "name": "SINGLE-ZONE-CENTER",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            0.857,
+            -1.088
+          ],
+          [
+            1.487,
+            -1.088
+          ],
+          [
+            1.489,
+            -2.523
+          ],
+          [
+            0.194,
+            -2.523
+          ],
+          [
+            0.197,
+            -1.913
+          ],
+          [
+            0.85,
+            -1.913
+          ],
+          [
+            0.857,
+            -1.088
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "6656ec7d-14fa-4af5-bb69-add3ec084873",
+      "code": "ZONE-SINGLE-ZONE-SHELF-A",
+      "name": "SINGLE-ZONE-SHELF-A",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            1.962,
+            0.178
+          ],
+          [
+            1.962,
+            -1.095
+          ],
+          [
+            2.88,
+            -1.099
+          ],
+          [
+            2.867,
+            0.169
+          ],
+          [
+            1.962,
+            0.178
+          ]
+        ]
+      ]
+    }
+  ],
+  "enforcement": "NOT_SUPPORTED_STAGE2"
+}

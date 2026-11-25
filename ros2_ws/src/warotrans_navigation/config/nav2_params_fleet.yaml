@@ -14,11 +14,19 @@ global_costmap:
         enabled: true
         topic: "/fleet_obstacles"
         max_age: 1.0
+        # Planning only: INSCRIBED (253) is not inflated, so no 0.35 m halo and no wide detour around a robot still far
+        # away (lab 2026-11-25). Grown by 0.20 m (our nose is 0.21 m ahead of base_footprint, our sides 0.13 m) so the
+        # planned centre line keeps our body off theirs. Traffic on the Host keeps the two robots apart anyway.
+        mark_cost: 253
+        grow_m: 0.20
 
 local_costmap:
   local_costmap:
     ros__parameters:
-      plugins: ["obstacle_layer", "fleet_layer", "inflation_layer"]
+      # The other robots are drawn AFTER the inflation layer: LETHAL on their body (+2 cm) only, no 0.35 m halo. RPP's
+      # collision check still stops this robot before its footprint meets theirs; the collision monitor and the gap
+      # stop stay. Lab 2026-11-25: passing a robot standing at EP-QUEUE hung until that robot turned away.
+      plugins: ["obstacle_layer", "inflation_layer", "fleet_layer"]
       fleet_layer:
         plugin: "warotrans_fleet_layer::FleetLayer"
         enabled: true

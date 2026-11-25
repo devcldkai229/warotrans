@@ -19,7 +19,7 @@ from typing import Any, Iterable, Optional
 #: A pose older than this (backend age + transport) is not drawn: the robot may be elsewhere by now.
 MAX_POSE_AGE_SEC = 2.0
 #: Added around each body: the other robot's localization error and the time since its pose.
-DEFAULT_MARGIN_M = 0.05
+DEFAULT_MARGIN_M = 0.02
 #: Spacing of the points over a body; the costmap cell is 0.05 m.
 DEFAULT_STEP_M = 0.04
 #: Height of the points: inside the collision monitor's min/max height and the costmap's obstacle heights.
@@ -90,6 +90,32 @@ def fleet_points(robots: Iterable[OtherRobot], margin: float = DEFAULT_MARGIN_M,
     for r in robots:
         out.extend((x, y, POINT_Z_M) for x, y in footprint_points(r, margin, step))
     return out
+
+
+#: "Waiting behind a robot": another robot's centre within this distance of ours, and within ±AHEAD_HALF_ANGLE_DEG of
+#: our heading (lab 2026-11-25: waiting for the other robot was reported as NAVIGATION_BLOCKED).
+AHEAD_RADIUS_M = 0.8
+AHEAD_HALF_ANGLE_DEG = 70.0
+
+
+def robot_ahead(robots: Iterable[OtherRobot], pose: Optional[tuple[float, float, float]],
+                radius: float = AHEAD_RADIUS_M, half_angle_deg: float = AHEAD_HALF_ANGLE_DEG) -> bool:
+    """True when another robot stands close in front of `pose` (x, y, yaw); False without a pose."""
+    if pose is None:
+        return False
+    x, y, yaw = pose
+    limit = math.radians(half_angle_deg)
+    for r in robots:
+        dx, dy = r.x - x, r.y - y
+        d = math.hypot(dx, dy)
+        if d > radius:
+            continue
+        if d < 1e-6:
+            return True
+        bearing = math.atan2(dy, dx) - yaw
+        if abs(math.atan2(math.sin(bearing), math.cos(bearing))) <= limit:
+            return True
+    return False
 
 
 def pointcloud2_fields_xyz(points: list[tuple[float, float, float]]) -> tuple[bytes, int]:
