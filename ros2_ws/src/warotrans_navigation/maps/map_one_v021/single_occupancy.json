@@ -1,0 +1,110 @@
+{
+  "zones": [
+    {
+      "id": "e4407981-2672-4bcf-9d75-57273cd4c24c",
+      "code": "ZONE-SINGLE-CENTER",
+      "name": "Single Center",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            1.207,
+            0.178
+          ],
+          [
+            -0.13,
+            0.178
+          ],
+          [
+            -0.13,
+            -0.465
+          ],
+          [
+            0.542,
+            -0.465
+          ],
+          [
+            0.545,
+            -0.644
+          ],
+          [
+            0.836,
+            -0.644
+          ],
+          [
+            1.204,
+            -1.173
+          ],
+          [
+            1.207,
+            0.178
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "5b906982-b4a0-4f3a-b8a0-de8e15c0d6e1",
+      "code": "ZONE-SINGLE-OCCUPANCY---7",
+      "name": "Single-occupancy - 7",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            -1.599,
+            1.044
+          ],
+          [
+            -0.235,
+            1.047
+          ],
+          [
+            -0.232,
+            0.591
+          ],
+          [
+            -1.599,
+            0.583
+          ],
+          [
+            -1.599,
+            1.044
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "3ced1767-ad01-449d-8c51-27e80c33a164",
+      "code": "ZONE-SINGLE-ZONE-B",
+      "name": "Single Zone B",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            -0.135,
+            1.582
+          ],
+          [
+            1.205,
+            1.582
+          ],
+          [
+            1.205,
+            0.949
+          ],
+          [
+            -0.14,
+            0.944
+          ],
+          [
+            -0.135,
+            1.582
+          ]
+        ]
+      ]
+    }
+  ],
+  "enforcement": "NOT_SUPPORTED_STAGE2"
+}

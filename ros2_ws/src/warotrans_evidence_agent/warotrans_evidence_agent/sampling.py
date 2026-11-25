@@ -122,3 +122,72 @@ def read_clock_quality(timeout: float = 2.0) -> ClockQuality:
         return ClockQuality("timedatectl", synced, None, 50.0 if synced else None)
     except (OSError, subprocess.SubprocessError):
         return ClockQuality("none", False, None, None)
+
+
+class SilenceWatch:
+    """A sensor that should publish continuously: one ``sensor.stale`` when it falls silent past ``limit_s`` and one
+    ``sensor.recovered`` when it speaks again (never one per tick). Before the first message nothing is reported: a
+    sensor that never started is a configuration problem, not a stall."""
+
+    def __init__(self, sensor: str, limit_s: float = 5.0) -> None:
+        self.sensor = sensor
+        self.limit_s = float(limit_s)
+        self._last: Optional[float] = None
+        self._stale_since: Optional[float] = None
+
+    def heard(self, now: float) -> Optional[dict]:
+        """A message arrived. Returns the recovery event payload if it had been reported stale."""
+        out = None
+        if self._stale_since is not None and self._last is not None:
+            out = {"sensor": self.sensor, "silentS": round(now - self._last, 1), "declared": True}
+        self._last = now
+        self._stale_since = None
+        return out
+
+    def check(self, now: float) -> Optional[dict]:
+        """Returns the stale event payload once, when the silence passes the limit."""
+        if self._last is None or self._stale_since is not None or now - self._last < self.limit_s:
+            return None
+        self._stale_since = now
+        return {"sensor": self.sensor, "silentS": round(now - self._last, 1), "limitS": self.limit_s, "declared": True}
+
+
+class GateWatch:
+    """The robot's authority gate (cmd_vel allowed or not, and why): one ``gate`` event when it changes, and again
+    every ``repeat_s`` while it stays closed, so an investigation can measure how long a robot was held."""
+
+    def __init__(self, repeat_s: float = 10.0) -> None:
+        self.repeat_s = float(repeat_s)
+        self._state: Optional[tuple[bool, str]] = None
+        self._sent_at = -1e18
+
+    def sample(self, open_: Optional[bool], reason: Optional[str], now: float) -> Optional[dict]:
+        if open_ is None:
+            return None
+        state = (bool(open_), "OK" if open_ else (reason or "UNKNOWN"))
+        changed = state != self._state
+        if not changed and (state[0] or now - self._sent_at < self.repeat_s):
+            return None
+        self._state, self._sent_at = state, now
+        return {"open": state[0], "reason": state[1], "changed": changed}
+
+
+def nav_goal_payload(goal_id: str, command: Optional[dict]) -> dict:
+    """Payload of a nav2.goal.* event: the goal Nav2 really got and the step's endpoint, from the gateway's
+    /fleet/active_command. A goal far from the endpoint means the robot was sent somewhere else (lab 2026-11-24 NAV-01:
+    the AI saw 4 aborts but not that the goal lay off the map)."""
+    out: dict = {"goalId": goal_id}
+    if not isinstance(command, dict):
+        return out
+    out["commandId"] = command.get("commandId")
+    goal, end = command.get("nav2Goal"), command.get("endpoint")
+    if isinstance(goal, dict):
+        out["goal"] = {k: goal.get(k) for k in ("x", "y", "yaw")}
+    if isinstance(end, dict):
+        out["endpoint"] = {k: end.get(k) for k in ("x", "y")}
+    try:
+        out["goalOffEndpointM"] = round(math.hypot(float(goal["x"]) - float(end["x"]),
+                                                   float(goal["y"]) - float(end["y"])), 3)
+    except (TypeError, KeyError, ValueError):
+        pass
+    return out

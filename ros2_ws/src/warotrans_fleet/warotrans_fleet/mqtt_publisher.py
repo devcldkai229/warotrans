@@ -76,6 +76,8 @@ class ReconnectingMqttPublisher:
         self._thread: Optional[threading.Thread] = None
         self._connected = threading.Event()
         self._client: Optional[MqttClientLike] = None
+        # Fault Injection Lab (IOT-01): off the broker until this time.monotonic() value.
+        self._cut_until = 0.0
 
     @property
     def is_connected(self) -> bool:
@@ -98,6 +100,13 @@ class ReconnectingMqttPublisher:
             self._thread.join(timeout=timeout)
         self._thread = None
 
+    def cut_until(self, monotonic_deadline: float) -> None:
+        """Lab only: drop the connection now and stay off the broker until the deadline (then reconnect)."""
+        self._cut_until = float(monotonic_deadline)
+
+    def _is_cut(self) -> bool:
+        return time.monotonic() < self._cut_until
+
     def publish(self, topic: str, payload: dict[str, Any], qos: int = 0) -> bool:
         """Non-blocking enqueue. Returns False if the queue is full (drop)."""
         try:
@@ -110,6 +119,9 @@ class ReconnectingMqttPublisher:
     def _run(self) -> None:
         backoff = self._reconnect_backoff_sec
         while not self._stop.is_set():
+            if self._is_cut():
+                self._stop.wait(0.5)
+                continue
             try:
                 client = self._client_factory(self._client_id)
                 self._client = client
@@ -179,6 +191,8 @@ class ReconnectingMqttPublisher:
             # (authority_ok stuck False → gate blocks all cmd_vel).
             if not self._connected.is_set():
                 raise ConnectionError("MQTT connection lost")
+            if self._is_cut():
+                raise ConnectionError("MQTT link cut by the Fault Injection Lab")
             try:
                 item = self._queue.get(timeout=0.2)
             except queue.Empty:

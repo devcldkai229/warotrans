@@ -125,6 +125,8 @@ class _ActiveMove:
     # Obstacle window: last_progress_at slides forward while the gate holds the robot, so a traffic wait is not counted.
     last_tick_at: Optional[float] = None
     progress_pose: Optional[tuple[float, float]] = None
+    # The pose last sent to Nav2 (x, y, yaw), for local observers: evidence pairs each Nav2 outcome with its goal.
+    nav_goal: Optional[tuple[float, float, float]] = None
     progress_best_yaw_err: Optional[float] = None
     last_stage: Optional[int] = None
     # First planner failure since the last progress. A closed gate cannot cause "no path", so this ignores holds.
@@ -199,6 +201,8 @@ class MoveCommandHandler:
         self._traffic_wait_active = traffic_wait_active
         self._motion_hold_active = motion_hold_active
         self._max_traffic_retries = int(max_traffic_retries)
+        # Fault Injection Lab (NAV-01): returns a goal to send instead of the real one, or None. None in production.
+        self.goal_rewrite: Optional[Callable[[], Optional[tuple[float, float]]]] = None
         self._obstacle_wait_sec = float(obstacle_wait_sec)
         # The goal checker passes while the robot still coasts: the heading that counts is the one it stops at.
         self._arrival_settle_sec = float(arrival_settle_sec)
@@ -246,8 +250,14 @@ class MoveCommandHandler:
             if move is None:
                 return None
             c = move.command
-            return {"commandId": c.command_id, "type": c.command_type, "jobAssignmentId": c.job_assignment_id,
-                    "jobStepId": c.job_step_id}
+            out = {"commandId": c.command_id, "type": c.command_type, "jobAssignmentId": c.job_assignment_id,
+                   "jobStepId": c.job_step_id,
+                   "endpoint": {"x": round(move.target.x, 3), "y": round(move.target.y, 3),
+                                "frame": move.target.frame_id}}
+            if move.nav_goal is not None:
+                gx, gy, gyaw = move.nav_goal
+                out["nav2Goal"] = {"x": round(gx, 3), "y": round(gy, 3), "yaw": round(gyaw, 4)}
+            return out
 
     @property
     def navigation_status(self) -> str:
@@ -534,6 +544,12 @@ class MoveCommandHandler:
                 move.deadline_tick_at = now
             t = move.target
             gx, gy = self._nav2_goal_xy(t.x, t.y, t.yaw)
+            diverted = self.goal_rewrite() if self.goal_rewrite is not None else None
+            if diverted is not None:
+                # Fault Injection Lab NAV-01: Nav2 gets an unreachable goal and really aborts; the retry loop re-sends.
+                self._log.warning(f"[LabGoalDiverted] commandId={move.command_id} goal -> {diverted}")
+                gx, gy = diverted
+            move.nav_goal = (gx, gy, t.yaw)
             goal = NavGoal(command_id=move.command_id, frame_id=t.frame_id, x=gx, y=gy, yaw=t.yaw,
                            position_tolerance=t.position_tolerance)
             self._log.info(
