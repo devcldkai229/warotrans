@@ -33,7 +33,8 @@ RELOCATION = "E2E_RELOCATION"  # INTERNAL_RELOCATION without its business rules
 OUTBOUND = "E2E_OUTBOUND"  # OUTBOUND_RETRIEVAL without its business rules
 
 
-def _request(api, warehouse_id: str, moves: list[tuple[str, str]], enqueue: bool = True) -> tuple[str, list[str]]:
+def _request(api, warehouse_id: str, moves: list[tuple[str, str]], enqueue: bool = True,
+             check_quality: bool = False) -> tuple[str, list[str]]:
     eps = base.endpoints()
     cat = api.call("POST", "/api/warehouse/product-categories", {"code": f"E2E-{base.RUN}-{uuid.uuid4().hex[:4]}", "name": "E2E"})["id"]
     prod = api.call("POST", "/api/warehouse/products", {"categoryId": cat, "sku": f"E2E-{uuid.uuid4().hex[:8]}", "name": "E2E box"})["id"]
@@ -46,7 +47,7 @@ def _request(api, warehouse_id: str, moves: list[tuple[str, str]], enqueue: bool
         code = RELOCATION
     wf = next(w for w in api.call("GET", "/api/workflow-execution/workflows?pageSize=100")["items"] if w["code"] == code)["id"]
     tr = api.call("POST", "/api/transportation/transport-requests", {
-        "warehouseId": warehouse_id, "mapVersionId": base.MAP_ID, "workflowId": wf, "workflowInputs": {"checkQuality": False},
+        "warehouseId": warehouse_id, "mapVersionId": base.MAP_ID, "workflowId": wf, "workflowInputs": {"checkQuality": check_quality},
         "note": f"E2E flows v024 {base.RUN}",
         "details": [{"sequenceNo": i + 1, "containerId": c, "sourceEndpointId": eps[s][0], "destinationEndpointId": eps[d][0]}
                     for i, (c, (s, d)) in enumerate(zip(containers, moves))]})["id"]
@@ -67,6 +68,32 @@ base.PATHS = base.MapPaths(BUNDLE, lane_prefer=float(os.environ.get("WARO_E2E_LA
 base.ARTIFACTS = ARTIFACTS
 base.WAIT_POINT_CODES = set()
 RUN = base.RUN
+
+_staff_handovers = base.Watch.staff
+
+
+def _staff(self, jobs: list[str]) -> None:
+    """Handovers as before, plus the quality inspection (HUMAN_INTERACTION ...INSPECTION...): staff passes the box."""
+    _staff_handovers(self, jobs)
+    for job_id in jobs:
+        try:
+            job = self.api.call("GET", f"/api/workflow-execution/jobs/{job_id}")
+        except AssertionError:
+            continue
+        for task in job.get("tasks") or []:
+            for step in task.get("steps") or []:
+                if (step.get("status") == "WAITING" and step.get("stepType") == "HUMAN_INTERACTION"
+                        and "INSPECTION" in str(step.get("stepKey")).upper()):
+                    container = (step.get("resolvedInputs") or {}).get("containerId") or task.get("containerId")
+                    try:
+                        self.api.call("POST", f"/api/workflow-execution/job-steps/{step['id']}/confirm",
+                                      {"containerId": container, "inspectionResult": "PASSED", "note": "sim staff"})
+                        self.confirmations += 1
+                    except AssertionError as refused:
+                        self.notes.append(f"inspection retry: {str(refused)[:160]}")
+
+
+base.Watch.staff = _staff
 
 
 def _zone_at(x: float, y: float) -> dict | None:
@@ -110,13 +137,13 @@ def host():
         "Traffic__SemanticPrefixGrant": os.environ.get("WARO_E2E_PREFIX_GRANT", "true"),
         "Traffic__SemanticCellSizeMeters": "0.10",
         "Traffic__SemanticPathToleranceMeters": "0.15",
-        f"Traffic__RobotHomeEndpoints__E2E-{RUN}-R1": "EP-PARKING-A",
-        f"Traffic__RobotHomeEndpoints__E2E-{RUN}-R2": "EP-PARKING-B",
+        # One parking pool (no fixed homes); QUALITY-INSPECTION waits at EP-QUEUE like INBOUND / OUTBOUND.
         "FleetIdle__AutoReturnToPark": "true",
         "FleetIdle__IdleSeconds": "3",
         "FleetIdle__FallbackEndpointCodes": "EP-QUEUE",
-        "FleetIdle__GoalQueueEndpoints": "EP-INBOUND=EP-QUEUE,EP-OUTBOUND=EP-QUEUE",
-        "FleetIdle__GoalCorridors": "EP-INBOUND=1.80,-3.95,2.75,-3.00;EP-OUTBOUND=-0.40,-3.95,0.45,-3.00",
+        "FleetIdle__GoalQueueEndpoints": "EP-INBOUND=EP-QUEUE,EP-OUTBOUND=EP-QUEUE,EP-QUALITY-INSPECTION=EP-QUEUE",
+        "FleetIdle__GoalCorridors": "EP-INBOUND=1.80,-3.95,2.75,-3.00;EP-OUTBOUND=-0.40,-3.95,0.45,-3.00;"
+                                    "EP-QUALITY-INSPECTION=0.25,-0.95,0.75,-0.30",
         "JobPlanning__MaxContainersPerJob": "3",  # as in the lab: M1 = two Jobs of three boxes
     })
     h.start()
@@ -157,13 +184,14 @@ def _free_both_or_explain(api, r1, r2, name: str) -> None:
         raise
 
 
-def scenario(api, pair, host, name: str, requests: list[list[tuple[str, str]]], timeout: float = 900) -> dict:
+def scenario(api, pair, host, name: str, requests: list[list[tuple[str, str]]], timeout: float = 900,
+             check_quality: bool = False) -> dict:
     wh, r1, r2 = pair
     _free_both_or_explain(api, r1, r2, name)
     log_before = len(host.log_text())
     jobs: list[str] = []
     for moves in requests:
-        _, js = base.request(api, wh, moves)
+        _, js = base.request(api, wh, moves, check_quality=check_quality)
         jobs += js
     t0 = time.time()
     w = base.Watch(api, [r1, r2], name).start()
@@ -246,3 +274,17 @@ def test_m1_six_boxes_inbound(api, pair, host):
                                                   ("EP-INBOUND", "EP-SHELF-B"), ("EP-INBOUND", "EP-SHELF-C"),
                                                   ("EP-INBOUND", "EP-SHELF-A-1"), ("EP-INBOUND", "EP-SHELF-B")]],
              timeout=1500)
+
+
+def test_u2_six_relocations(api, pair, host):
+    """Lab U2: one INTERNAL_RELOCATION request of 6 boxes, 2 to each shelf (two Jobs of 3). In the lab RBT-002 waited
+    inside ZONE-CENTER (it only touched it at EP-SHELF-C) and RBT-001 could not finish at SHELF-B: DEADLOCK_RISK 2.5 min."""
+    scenario(api, pair, host, "U2_six_reloc", [[("EP-SHELF-A-1", "EP-SHELF-C"), ("EP-SHELF-A-1", "EP-SHELF-C"),
+                                                ("EP-SHELF-B", "EP-SHELF-A-2"), ("EP-SHELF-B", "EP-SHELF-A-2"),
+                                                ("EP-SHELF-C", "EP-SHELF-B"), ("EP-SHELF-C", "EP-SHELF-B")]], timeout=1500)
+
+
+def test_u3_two_through_inspection(api, pair, host):
+    """Lab U3: both robots go through QUALITY-INSPECTION; the second waits at EP-QUEUE, not inside ZONE-CENTER."""
+    scenario(api, pair, host, "U3_two_inspection", [[("EP-INBOUND", "EP-SHELF-C")], [("EP-INBOUND", "EP-SHELF-A-2")]],
+             check_quality=True)
