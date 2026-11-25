@@ -1,3 +1,66 @@
 {
-  "zones": []
+  "zones": [
+    {
+      "id": "f3f5166e-d1fc-414e-a791-6567f81ebf45",
+      "code": "ZONE-NO-STOP-LANE-A2-EXIT",
+      "name": "No stop: end of lane SHELF-A-2",
+      "zone_type": "NO_STOP",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            0.65,
+            -0.3
+          ],
+          [
+            1.05,
+            -0.3
+          ],
+          [
+            1.05,
+            0.05
+          ],
+          [
+            0.65,
+            0.05
+          ],
+          [
+            0.65,
+            -0.3
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "6f58c1f2-c9aa-4f0e-a036-e5566f376bda",
+      "code": "ZONE-NO-STOP-YARD",
+      "name": "No stop: yard between the BOUND lanes",
+      "zone_type": "NO_STOP",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            0.45,
+            -3.95
+          ],
+          [
+            1.8,
+            -3.95
+          ],
+          [
+            1.8,
+            -3.25
+          ],
+          [
+            0.45,
+            -3.25
+          ],
+          [
+            0.45,
+            -3.95
+          ]
+        ]
+      ]
+    }
+  ]
 }
