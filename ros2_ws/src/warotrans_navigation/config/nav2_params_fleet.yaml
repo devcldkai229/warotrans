@@ -23,7 +23,10 @@ global_costmap:
 local_costmap:
   local_costmap:
     ros__parameters:
-      plugins: ["obstacle_layer", "fleet_layer", "inflation_layer"]
+      # The other robots are drawn AFTER the inflation layer: LETHAL on their body (+2 cm) only, no 0.35 m halo. RPP's
+      # collision check still stops this robot before its footprint meets theirs; the collision monitor and the gap
+      # stop stay. Lab 2026-11-25: passing a robot standing at EP-QUEUE hung until that robot turned away.
+      plugins: ["obstacle_layer", "inflation_layer", "fleet_layer"]
       fleet_layer:
         plugin: "warotrans_fleet_layer::FleetLayer"
         enabled: true
