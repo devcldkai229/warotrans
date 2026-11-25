@@ -101,7 +101,7 @@ class RobotGatewayNode(Node):
         self.declare_parameter("fleet_obstacles", True)
         self.declare_parameter("fleet_obstacles_topic", "/fleet_obstacles")
         self.declare_parameter("fleet_obstacles_hz", 5.0)
-        self.declare_parameter("fleet_obstacles_margin_m", 0.05)
+        self.declare_parameter("fleet_obstacles_margin_m", 0.02)
         self.declare_parameter("global_costmap_topic", "/global_costmap/costmap")
         self.declare_parameter("local_costmap_topic", "/local_costmap/costmap")
         self.declare_parameter("map_version_code", "")
@@ -436,6 +436,7 @@ class RobotGatewayNode(Node):
             arrival_max_refines=int(self.get_parameter("arrival_max_refines").value),
             goal_base_offset=self._goal_base_offset,
         )
+        self._commands.move.fleet_robot_ahead = self._fleet_robot_ahead
         self._register_control_commands()
 
         self._teleop: Optional[TeleopController] = None
@@ -1265,6 +1266,16 @@ class RobotGatewayNode(Node):
             f"[GoalBaseOffset] {nav2_frame}->{self._base_frame} x={self._goal_base_offset_cache:.3f} m"
         )
         return self._goal_base_offset_cache
+
+    def _fleet_robot_ahead(self) -> bool:
+        """Another fleet robot stands close in front: the MOVE is waiting for it, not blocked (obstacle window)."""
+        from warotrans_fleet.fleet_obstacles import robot_ahead
+
+        fleet = getattr(self, "_fleet_obstacles", None)
+        if fleet is None:
+            return False
+        others = fleet.current()
+        return bool(others) and robot_ahead(others, self._traffic_pose())
 
     def _traffic_pose(self) -> Optional[tuple[float, float, float]]:
         pose, status = self._lookup_map_pose()

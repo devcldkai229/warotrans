@@ -572,3 +572,51 @@ def test_legacy_mode_abort_is_reported_even_if_a_hold_is_signalled():
     h.nav.accept()
     h.nav.finish(STATUS_ABORTED)
     assert h.recorder.results[0]["errorCode"] == "NAVIGATION_FAILED"
+
+
+def test_waiting_behind_a_fleet_robot_is_not_an_obstacle_block():
+    """Lab 2026-11-25 V024: the other robot stood close ahead for over a minute; that is a wait, not NAVIGATION_BLOCKED."""
+    ahead = {"value": True}
+    h = Harness(obstacle_wait_sec=60.0)
+    h.move.fleet_robot_ahead = lambda: ahead["value"]
+    h.send(navigate(CMD, timeoutSeconds=900))
+    h.nav.accept()
+    h.nav.feedback(2.0)
+    for _ in range(5):
+        h.tick(20.0)
+    assert h.recorder.kinds().count("nav2_cancel") == 0 and h.recorder.results == []
+
+    # The other robot drove on: the 100 s spent behind it do not count, the robot gets a full window.
+    ahead["value"] = False
+    h.tick(30.0)
+    assert h.recorder.results == [] and h.move.active_command_id == CMD
+
+
+def test_waiting_behind_a_fleet_robot_ends_after_the_cap():
+    """A robot that never moves away is still reported, after fleet_hold_max_sec (180 s) plus the obstacle window."""
+    h = Harness(obstacle_wait_sec=60.0)
+    h.move.fleet_robot_ahead = lambda: True
+    h.send(navigate(CMD, timeoutSeconds=900))
+    h.nav.accept()
+    h.nav.feedback(2.0)
+    for _ in range(9):
+        h.tick(20.0)  # 180 s held
+    assert h.recorder.kinds().count("nav2_cancel") == 0
+    h.tick(59.0)
+    assert h.recorder.kinds().count("nav2_cancel") == 0
+    h.tick(2.0)
+    assert h.recorder.kinds().count("nav2_cancel") == 1
+
+
+def test_a_failing_fleet_hook_is_not_a_hold():
+    h = Harness(obstacle_wait_sec=60.0)
+
+    def boom() -> bool:
+        raise RuntimeError("no fleet data")
+
+    h.move.fleet_robot_ahead = boom
+    h.send(navigate(CMD, timeoutSeconds=900))
+    h.nav.accept()
+    h.nav.feedback(2.0)
+    h.tick(61.0)
+    assert h.recorder.kinds().count("nav2_cancel") == 1

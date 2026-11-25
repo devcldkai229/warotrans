@@ -25,9 +25,19 @@ void FleetLayer::onInitialize()
   declareParameter("enabled", rclcpp::ParameterValue(true));
   declareParameter("topic", rclcpp::ParameterValue(std::string("/fleet_obstacles")));
   declareParameter("max_age", rclcpp::ParameterValue(1.0));
+  // The cost the other robots are drawn with, and how far around each of their points. LETHAL (254) is inflated by the
+  // inflation layer (0.35 m on our maps), so the planner drove wide around a robot still far away (lab 2026-11-25).
+  // INSCRIBED (253) grown by our own inscribed radius keeps the bodies apart without that halo.
+  declareParameter("mark_cost", rclcpp::ParameterValue(static_cast<int>(nav2_costmap_2d::LETHAL_OBSTACLE)));
+  declareParameter("grow_m", rclcpp::ParameterValue(0.0));
   node->get_parameter(name_ + ".enabled", enabled_);
   node->get_parameter(name_ + ".topic", topic_);
   node->get_parameter(name_ + ".max_age", max_age_);
+  int mark_cost = nav2_costmap_2d::LETHAL_OBSTACLE;
+  node->get_parameter(name_ + ".mark_cost", mark_cost);
+  mark_cost_ = static_cast<unsigned char>(std::clamp(mark_cost, 1, static_cast<int>(nav2_costmap_2d::LETHAL_OBSTACLE)));
+  node->get_parameter(name_ + ".grow_m", grow_m_);
+  grow_m_ = std::max(0.0, grow_m_);
   clock_ = node->get_clock();
   received_ = clock_->now();
   sub_ = node->create_subscription<sensor_msgs::msg::PointCloud2>(
@@ -35,8 +45,8 @@ void FleetLayer::onInitialize()
     std::bind(&FleetLayer::onCloud, this, std::placeholders::_1));
   current_ = true;
   RCLCPP_INFO(
-    node->get_logger(), "FleetLayer %s: other robots from %s (max age %.1f s)", name_.c_str(),
-    topic_.c_str(), max_age_);
+    node->get_logger(), "FleetLayer %s: other robots from %s (max age %.1f s, cost %d, grown %.2f m)", name_.c_str(),
+    topic_.c_str(), max_age_, static_cast<int>(mark_cost_), grow_m_);
 }
 
 void FleetLayer::onCloud(sensor_msgs::msg::PointCloud2::ConstSharedPtr msg)
@@ -91,10 +101,10 @@ void FleetLayer::updateBounds(
   double nmin_x = std::numeric_limits<double>::max(), nmin_y = std::numeric_limits<double>::max();
   double nmax_x = std::numeric_limits<double>::lowest(), nmax_y = std::numeric_limits<double>::lowest();
   for (const auto & p : points_) {
-    nmin_x = std::min(nmin_x, p.x);
-    nmin_y = std::min(nmin_y, p.y);
-    nmax_x = std::max(nmax_x, p.x);
-    nmax_y = std::max(nmax_y, p.y);
+    nmin_x = std::min(nmin_x, p.x - grow_m_);
+    nmin_y = std::min(nmin_y, p.y - grow_m_);
+    nmax_x = std::max(nmax_x, p.x + grow_m_);
+    nmax_y = std::max(nmax_y, p.y + grow_m_);
   }
   if (had_bounds_) {
     *min_x = std::min(*min_x, last_min_x_);
@@ -123,16 +133,30 @@ void FleetLayer::updateCosts(
   if (!enabled_) {
     return;
   }
+  const double res = master_grid.getResolution();
+  const int reach = res > 0.0 ? static_cast<int>(std::ceil(grow_m_ / res)) : 0;
+  const double reach2 = grow_m_ * grow_m_ + 1e-9;
   for (const auto & p : points_) {
     unsigned int mx = 0, my = 0;
     if (!master_grid.worldToMap(p.x, p.y, mx, my)) {
       continue;
     }
-    const int i = static_cast<int>(mx), j = static_cast<int>(my);
-    if (i < min_i || i >= max_i || j < min_j || j >= max_j) {
-      continue;
+    for (int dj = -reach; dj <= reach; ++dj) {
+      for (int di = -reach; di <= reach; ++di) {
+        if ((di * res) * (di * res) + (dj * res) * (dj * res) > reach2) {
+          continue;
+        }
+        const int i = static_cast<int>(mx) + di, j = static_cast<int>(my) + dj;
+        if (i < min_i || i >= max_i || j < min_j || j >= max_j) {
+          continue;
+        }
+        // Never lower what another layer marked (a wall stays a wall), and treat unknown as free.
+        const unsigned char old = master_grid.getCost(i, j);
+        if (old == nav2_costmap_2d::NO_INFORMATION || old < mark_cost_) {
+          master_grid.setCost(i, j, mark_cost_);
+        }
+      }
     }
-    master_grid.setCost(mx, my, nav2_costmap_2d::LETHAL_OBSTACLE);
   }
 }
 

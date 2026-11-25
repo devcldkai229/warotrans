@@ -128,6 +128,9 @@ class _ActiveMove:
     # The pose last sent to Nav2 (x, y, yaw), for local observers: evidence pairs each Nav2 outcome with its goal.
     nav_goal: Optional[tuple[float, float, float]] = None
     progress_best_yaw_err: Optional[float] = None
+    # Time the obstacle window was paused because another fleet robot stood close ahead (capped by fleet_hold_max_sec).
+    fleet_held_sec: float = 0.0
+    fleet_held_logged: bool = False
     last_stage: Optional[int] = None
     # First planner failure since the last progress. A closed gate cannot cause "no path", so this ignores holds.
     planner_failing_since: Optional[float] = None
@@ -179,6 +182,7 @@ class MoveCommandHandler:
         arrival_refine_yaw_rad: float = 0.087,
         arrival_max_refines: int = 0,
         goal_base_offset: Callable[[], float] = lambda: 0.0,
+        fleet_hold_max_sec: float = 180.0,
     ) -> None:
         self._navigator = navigator
         # 2026-11-11 lab: the robot turns about a point behind the chassis centre. Nav2 drives base_footprint (that
@@ -204,6 +208,11 @@ class MoveCommandHandler:
         # Fault Injection Lab (NAV-01): returns a goal to send instead of the real one, or None. None in production.
         self.goal_rewrite: Optional[Callable[[], Optional[tuple[float, float]]]] = None
         self._obstacle_wait_sec = float(obstacle_wait_sec)
+        # Lab 2026-11-25 (V024): a robot standing behind another fleet robot is waiting, not blocked. While this hook
+        # says another robot stands close ahead, the obstacle window does not run, for at most fleet_hold_max_sec per
+        # MOVE (after that the wait is reported as usual so an operator looks at it). None: no fleet obstacles.
+        self.fleet_robot_ahead: Optional[Callable[[], bool]] = None
+        self._fleet_hold_max_sec = max(0.0, float(fleet_hold_max_sec))
         # The goal checker passes while the robot still coasts: the heading that counts is the one it stops at.
         self._arrival_settle_sec = float(arrival_settle_sec)
         self._localization_provider = localization_provider
@@ -841,6 +850,25 @@ class MoveCommandHandler:
         except Exception:  # noqa: BLE001 — unknown → not a hold
             return False
 
+    def _held_by_fleet_robot(self, move: _ActiveMove, since_tick: float) -> bool:
+        if self.fleet_robot_ahead is None or move.fleet_held_sec >= self._fleet_hold_max_sec:
+            return False
+        try:
+            ahead = bool(self.fleet_robot_ahead())
+        except Exception:  # noqa: BLE001 — unknown → not a hold
+            return False
+        if not ahead:
+            move.fleet_held_logged = False
+            return False
+        move.fleet_held_sec = min(self._fleet_hold_max_sec, move.fleet_held_sec + max(0.0, since_tick))
+        if not move.fleet_held_logged:
+            move.fleet_held_logged = True
+            self._log.info(
+                f"[HeldByRobot] commandId={move.command_id} another robot stands close ahead; obstacle window paused "
+                f"({move.fleet_held_sec:.0f}/{self._fleet_hold_max_sec:.0f}s)"
+            )
+        return True
+
     def _obstacle_window_expired(self, move: _ActiveMove, now: float) -> bool:
         """Tick-driven, so the limit holds however long Nav2 spends in its own recovery tree before it aborts."""
         since_tick = now - move.last_tick_at if move.last_tick_at is not None else 0.0
@@ -848,6 +876,9 @@ class MoveCommandHandler:
         if move.last_progress_at is None:
             return False
         if self._traffic_hold_is_active():
+            move.last_progress_at = min(now, move.last_progress_at + since_tick)
+            return False
+        if self._held_by_fleet_robot(move, since_tick):
             move.last_progress_at = min(now, move.last_progress_at + since_tick)
             return False
         try:
