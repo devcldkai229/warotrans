@@ -28,6 +28,9 @@ Point = Sequence[float]
 class GuardConfig:
     half_length: float = 0.16  # geometry.yaml chassis
     half_width: float = 0.13
+    # Chassis centre ahead of base_footprint (the turning centre). RBT-001: 0.05 (geometry.yaml base_footprint_to_base_link
+    # x): a box centred on the turning centre was 5 cm too long behind it and refused BackUp near walls (audit C3).
+    center_x: float = 0.0
     padding: float = 0.02  # costmap footprint_padding: the collision monitor's polygon includes it
     min_points: int = 4  # collision monitor FootprintApproach.min_points
     scan_max_age_sec: float = 0.5
@@ -36,9 +39,15 @@ class GuardConfig:
     spin_step_rad: float = math.radians(3.0)
 
 
-def _inside(cfg: GuardConfig, x: float, y: float) -> bool:
+def _extent(cfg: GuardConfig) -> tuple[float, float, float]:
+    """(front, rear, half width) of the padded body from the turning centre: front ahead of it, rear behind it."""
     hl, hw = cfg.half_length + cfg.padding, cfg.half_width + cfg.padding
-    return -hl <= x <= hl and abs(y) <= hw
+    return cfg.center_x + hl, hl - cfg.center_x, hw
+
+
+def _inside(cfg: GuardConfig, x: float, y: float) -> bool:
+    front, rear, hw = _extent(cfg)
+    return -rear <= x <= front and abs(y) <= hw
 
 
 def count_in_footprint(cfg: GuardConfig, points: Iterable[Point]) -> int:
@@ -51,15 +60,15 @@ def backup_blocking_points(cfg: GuardConfig, points: Iterable[Point], distance: 
     Points ahead of the centre are left out: reversing moves away from them. If they are inside the polygon the
     collision monitor still decides, command by command, so this can never move the robot past the monitor.
     """
-    hl, hw = cfg.half_length + cfg.padding, cfg.half_width + cfg.padding
-    rear_limit = -hl - max(0.0, distance) - cfg.backup_margin_m
+    _, rear, hw = _extent(cfg)
+    rear_limit = -rear - max(0.0, distance) - cfg.backup_margin_m
     return sum(1 for p in points if rear_limit <= p[0] < 0.0 and abs(p[1]) <= hw)
 
 
 def spin_blocking_points(cfg: GuardConfig, points: Iterable[Point], angle: float) -> int:
     """Points the padded footprint sweeps turning by ``angle`` (+ = left, - = right). Points are base frame."""
-    hl, hw = cfg.half_length + cfg.padding, cfg.half_width + cfg.padding
-    reach = math.hypot(hl, hw)
+    front, rear, hw = _extent(cfg)
+    reach = math.hypot(max(front, rear), hw)
     steps = max(1, math.ceil(abs(angle) / cfg.spin_step_rad))
     rotations = [(math.cos(angle * i / steps), math.sin(angle * i / steps)) for i in range(0, steps + 1)]
     n = 0
@@ -142,16 +151,18 @@ if _HAS_RCLPY:  # pragma: no cover - needs rclpy; the decisions are tested throu
             self._global = str(self.get_parameter("global_frame").value)
             # Body size per robot (RBT-002 is 0.30 x 0.264 m): defaults are RBT-001's, overlays set the others.
             defaults = GuardConfig()
-            for name in ("half_length", "half_width", "padding", "max_backup_m"):
+            for name in ("half_length", "half_width", "padding", "max_backup_m", "center_x"):
                 self.declare_parameter(name, float(getattr(defaults, name)))
             self._cfg = GuardConfig(
                 half_length=float(self.get_parameter("half_length").value),
                 half_width=float(self.get_parameter("half_width").value),
                 padding=float(self.get_parameter("padding").value),
                 max_backup_m=float(self.get_parameter("max_backup_m").value),
+                center_x=float(self.get_parameter("center_x").value),
             )
             self.get_logger().info(
-                f"footprint half {self._cfg.half_length:.3f} x {self._cfg.half_width:.3f} m, padding {self._cfg.padding:.3f} m"
+                f"footprint half {self._cfg.half_length:.3f} x {self._cfg.half_width:.3f} m, padding {self._cfg.padding:.3f} m,"
+                f" centre {self._cfg.center_x:+.3f} m ahead of {self._base}"
             )
             self._group = ReentrantCallbackGroup()
             self._tf = Buffer()

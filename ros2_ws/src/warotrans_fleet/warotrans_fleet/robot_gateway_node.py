@@ -97,6 +97,11 @@ class RobotGatewayNode(Node):
         self.declare_parameter("topic_prefix", "warotrans/v1")
         # Live Nav2 costmap for the admin map overlay (view only; nothing acts on it). "" disables a layer.
         self.declare_parameter("costmap_uplink", True)
+        # The OTHER robots (backend fleet/poses) as PointCloud2 for warotrans_fleet_layer and the collision monitor.
+        self.declare_parameter("fleet_obstacles", True)
+        self.declare_parameter("fleet_obstacles_topic", "/fleet_obstacles")
+        self.declare_parameter("fleet_obstacles_hz", 5.0)
+        self.declare_parameter("fleet_obstacles_margin_m", 0.05)
         self.declare_parameter("global_costmap_topic", "/global_costmap/costmap")
         self.declare_parameter("local_costmap_topic", "/local_costmap/costmap")
         self.declare_parameter("map_version_code", "")
@@ -361,6 +366,7 @@ class RobotGatewayNode(Node):
             self.topic("command"),
             self.topic("interaction_request"),
             self.topic("interaction_result"),
+            self._fleet_poses_topic(),
         ] + ([self.topic("teleop")] if self._teleop_enabled or self._mapping_enabled else []) + (
             [self._epoch_topic(), self.topic("traffic_plan_reject")]
             if self._traffic_mode == "semantic_active"
@@ -378,6 +384,8 @@ class RobotGatewayNode(Node):
             subscribe_topic=subscribe_topics,
             on_message=self._on_mqtt_message,
         )
+
+        self._setup_fleet_obstacles()
 
         self._costmap_uplink = None
         if bool(self.get_parameter("costmap_uplink").get_parameter_value().bool_value):
@@ -812,6 +820,39 @@ class RobotGatewayNode(Node):
         if not self.mqtt.publish(self.topic("command_ack"), ack, qos=1):
             self.get_logger().warning("command_ack queue full; authority ACK dropped")
         return True
+
+    def _fleet_poses_topic(self) -> str:
+        return f"{self._topic_prefix.rstrip('/')}/fleet/poses"
+
+    def _setup_fleet_obstacles(self) -> None:
+        """Other robots → PointCloud2 (map frame) at fleet_obstacles_hz; empty cloud when there are none, so the
+        layer and the collision monitor forget a robot that left or went offline."""
+        from sensor_msgs.msg import PointCloud2, PointField
+
+        from warotrans_fleet.fleet_obstacles import FleetObstaclesState, fleet_points, pointcloud2_fields_xyz
+
+        self._fleet_obstacles = FleetObstaclesState(self._robot_code, time.monotonic)
+        if not bool(self.get_parameter("fleet_obstacles").get_parameter_value().bool_value):
+            return
+        pub = self.create_publisher(PointCloud2, self._str_param("fleet_obstacles_topic"), qos_profile_sensor_data)
+        margin = float(self.get_parameter("fleet_obstacles_margin_m").get_parameter_value().double_value)
+        fields = [PointField(name=n, offset=4 * i, datatype=PointField.FLOAT32, count=1) for i, n in enumerate("xyz")]
+
+        def _publish() -> None:
+            data, width = pointcloud2_fields_xyz(fleet_points(self._fleet_obstacles.current(), margin=margin))
+            msg = PointCloud2()
+            msg.header.frame_id = "map"
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.height, msg.width = 1, width
+            msg.fields = fields
+            msg.is_bigendian = False
+            msg.point_step, msg.row_step = 12, 12 * width
+            msg.data = data
+            msg.is_dense = True
+            pub.publish(msg)
+
+        hz = max(1.0, float(self.get_parameter("fleet_obstacles_hz").get_parameter_value().double_value))
+        self.create_timer(1.0 / hz, _publish)
 
     def _epoch_topic(self) -> str:
         return f"{self._topic_prefix.rstrip('/')}/traffic/epoch"
@@ -1298,6 +1339,12 @@ class RobotGatewayNode(Node):
 
     def _on_mqtt_message(self, topic: str, body: dict) -> None:
         # MQTT network thread: chỉ enqueue, không xử lý.
+        if topic == self._fleet_poses_topic():
+            # Latest wins; read by the publisher timer (a list swap, no inbox needed).
+            fleet = getattr(self, "_fleet_obstacles", None)
+            if fleet is not None:
+                fleet.on_message(body)
+            return
         if topic == self.topic("command"):
             self._inbox.put(("command", body))
         elif self._lab_enabled and topic == self.topic("lab"):

@@ -388,7 +388,9 @@ local_costmap:
           max_obstacle_height: 2.0
           clearing: true
           marking: true
-          inf_is_valid: false
+          # A beam with no return (inf) clears the cells along it up to raytrace_max_range. With false those beams
+          # cleared nothing and old marks (the other robot where it was, a shelf leg seen once) stayed (audit D2).
+          inf_is_valid: true
           data_type: "LaserScan"
           raytrace_max_range: 3.0
           raytrace_min_range: 0.0
@@ -441,7 +443,9 @@ global_costmap:
           max_obstacle_height: 2.0
           clearing: true
           marking: true
-          inf_is_valid: false
+          # A beam with no return (inf) clears the cells along it up to raytrace_max_range. With false those beams
+          # cleared nothing and old marks (the other robot where it was, a shelf leg seen once) stayed (audit D2).
+          inf_is_valid: true
           data_type: "LaserScan"
           raytrace_max_range: 3.0
           raytrace_min_range: 0.0

@@ -125,3 +125,20 @@ def test_only_the_direction_with_room_is_allowed():
     assert spin_blocking_points(CFG, post, -0.5) >= CFG.min_points
     assert decide("spin", 0.5, post) is None
     assert decide("spin", -0.5, post) == "SPIN_NOT_CLEAR"
+
+
+def test_a_chassis_ahead_of_the_turning_centre_is_checked_where_it_is():
+    """RBT-001: chassis centre 0.05 m ahead of base_footprint. A wall 0.18 m behind the turning centre is clear of the
+    rear (0.11 + 0.02 padding) and of a 0.10 m backup with its margin is not; centred box (0.18) refused even a spin."""
+    from warotrans_fleet.recovery_guard import GuardConfig, backup_blocking_points, count_in_footprint
+    offset = GuardConfig(half_length=0.16, half_width=0.13, center_x=0.05)
+    centred = GuardConfig(half_length=0.16, half_width=0.13)
+    wall_behind = [(-0.16, y / 100.0) for y in range(-10, 11, 2)]
+    assert count_in_footprint(centred, wall_behind) > 0  # the old box put the wall inside the body
+    assert count_in_footprint(offset, wall_behind) == 0  # it is behind the real rear (-0.13)
+    front_obstacle = [(0.22, y / 100.0) for y in range(-10, 11, 2)]
+    assert count_in_footprint(offset, front_obstacle) > 0  # the real front reaches 0.23
+    assert backup_blocking_points(offset, [(-0.24, 0.0)] * 5, 0.10) == 5  # within rear 0.13 + 0.10 + margin 0.03
+    # A wall 0.28 m behind the turning centre: the old centred box (rear 0.18) refused a 0.10 m backup, the real body does not.
+    assert backup_blocking_points(centred, [(-0.28, 0.0)] * 5, 0.10) == 5
+    assert backup_blocking_points(offset, [(-0.28, 0.0)] * 5, 0.10) == 0

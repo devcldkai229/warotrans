@@ -1,0 +1,405 @@
+{
+  "zones": [
+    {
+      "code": "ZONE-BAY-A",
+      "kind": "BAY",
+      "rings": [
+        [
+          [
+            -1.64,
+            0.2
+          ],
+          [
+            -0.24,
+            0.2
+          ],
+          [
+            -0.24,
+            1.6
+          ],
+          [
+            -1.64,
+            1.6
+          ],
+          [
+            -1.64,
+            0.2
+          ]
+        ]
+      ],
+      "queueEndpointCodes": [],
+      "holdPoses": [],
+      "endpointCodes": [
+        "EP-SHELF-A-1",
+        "EP-SHELF-A-2"
+      ]
+    },
+    {
+      "code": "ZONE-BAY-B",
+      "kind": "BAY",
+      "rings": [
+        [
+          [
+            -0.24,
+            0.2
+          ],
+          [
+            1.58,
+            0.2
+          ],
+          [
+            1.58,
+            1.6
+          ],
+          [
+            -0.24,
+            1.6
+          ],
+          [
+            -0.24,
+            0.2
+          ]
+        ]
+      ],
+      "queueEndpointCodes": [],
+      "holdPoses": [],
+      "endpointCodes": [
+        "EP-SHELF-B-01-02"
+      ]
+    },
+    {
+      "code": "ZONE-BAY-C",
+      "kind": "BAY",
+      "rings": [
+        [
+          [
+            0.56,
+            -1.88
+          ],
+          [
+            1.58,
+            -1.88
+          ],
+          [
+            1.58,
+            -1.12
+          ],
+          [
+            0.56,
+            -1.12
+          ],
+          [
+            0.56,
+            -1.88
+          ]
+        ]
+      ],
+      "queueEndpointCodes": [],
+      "holdPoses": [],
+      "endpointCodes": [
+        "EP-SHELF-C-1"
+      ]
+    },
+    {
+      "code": "ZONE-BAY-IO",
+      "kind": "BAY",
+      "rings": [
+        [
+          [
+            1.58,
+            -1.88
+          ],
+          [
+            2.66,
+            -1.88
+          ],
+          [
+            2.66,
+            1.6
+          ],
+          [
+            1.58,
+            1.6
+          ],
+          [
+            1.58,
+            -1.88
+          ]
+        ]
+      ],
+      "queueEndpointCodes": [],
+      "holdPoses": [
+        [
+          1.3,
+          -0.81,
+          0.0
+        ]
+      ],
+      "endpointCodes": [
+        "EP-INBOUND",
+        "EP-OUTBOUND"
+      ]
+    },
+    {
+      "code": "ZONE-SLOT-CHARGE",
+      "kind": "SLOT",
+      "rings": [
+        [
+          [
+            -1.425,
+            -1.87
+          ],
+          [
+            -0.875,
+            -1.87
+          ],
+          [
+            -0.875,
+            -1.27
+          ],
+          [
+            -1.425,
+            -1.27
+          ],
+          [
+            -1.425,
+            -1.87
+          ]
+        ]
+      ],
+      "queueEndpointCodes": [],
+      "holdPoses": [],
+      "endpointCodes": [
+        "EP-CHARGE"
+      ]
+    },
+    {
+      "code": "ZONE-SLOT-HOLD-IO",
+      "kind": "SLOT",
+      "rings": [
+        [
+          [
+            1.0,
+            -1.085
+          ],
+          [
+            1.575,
+            -1.085
+          ],
+          [
+            1.575,
+            -0.535
+          ],
+          [
+            1.0,
+            -0.535
+          ],
+          [
+            1.0,
+            -1.085
+          ]
+        ]
+      ],
+      "queueEndpointCodes": [],
+      "holdPoses": [],
+      "endpointCodes": []
+    },
+    {
+      "code": "ZONE-SLOT-INSPECTION",
+      "kind": "SLOT",
+      "rings": [
+        [
+          [
+            -0.155,
+            -1.12
+          ],
+          [
+            0.395,
+            -1.12
+          ],
+          [
+            0.395,
+            -0.52
+          ],
+          [
+            -0.155,
+            -0.52
+          ],
+          [
+            -0.155,
+            -1.12
+          ]
+        ]
+      ],
+      "queueEndpointCodes": [],
+      "holdPoses": [],
+      "endpointCodes": [
+        "EP-INSPECTION"
+      ]
+    },
+    {
+      "code": "ZONE-SLOT-PARKING-A",
+      "kind": "SLOT",
+      "rings": [
+        [
+          [
+            -0.805,
+            -1.88
+          ],
+          [
+            -0.255,
+            -1.88
+          ],
+          [
+            -0.255,
+            -1.28
+          ],
+          [
+            -0.805,
+            -1.28
+          ],
+          [
+            -0.805,
+            -1.88
+          ]
+        ]
+      ],
+      "queueEndpointCodes": [],
+      "holdPoses": [],
+      "endpointCodes": [
+        "EP-PARKING-A"
+      ]
+    },
+    {
+      "code": "ZONE-SLOT-PARKING-B",
+      "kind": "SLOT",
+      "rings": [
+        [
+          [
+            -0.175,
+            -1.89
+          ],
+          [
+            0.375,
+            -1.89
+          ],
+          [
+            0.375,
+            -1.29
+          ],
+          [
+            -0.175,
+            -1.29
+          ],
+          [
+            -0.175,
+            -1.89
+          ]
+        ]
+      ],
+      "queueEndpointCodes": [],
+      "holdPoses": [],
+      "endpointCodes": [
+        "EP-PARKING-B"
+      ]
+    },
+    {
+      "code": "ZONE-TRANSIT-MID-EAST",
+      "kind": "TRANSIT",
+      "rings": [
+        [
+          [
+            0.56,
+            -1.12
+          ],
+          [
+            1.58,
+            -1.12
+          ],
+          [
+            1.58,
+            0.2
+          ],
+          [
+            0.56,
+            0.2
+          ],
+          [
+            0.56,
+            -1.12
+          ]
+        ]
+      ],
+      "queueEndpointCodes": [],
+      "holdPoses": [],
+      "endpointCodes": []
+    },
+    {
+      "code": "ZONE-TRANSIT-MID-WEST",
+      "kind": "TRANSIT",
+      "rings": [
+        [
+          [
+            -1.64,
+            -0.46
+          ],
+          [
+            0.56,
+            -0.46
+          ],
+          [
+            0.56,
+            0.2
+          ],
+          [
+            -1.64,
+            0.2
+          ],
+          [
+            -1.64,
+            -0.46
+          ]
+        ]
+      ],
+      "queueEndpointCodes": [],
+      "holdPoses": [],
+      "endpointCodes": []
+    },
+    {
+      "code": "ZONE-YARD",
+      "kind": "YARD",
+      "rings": [
+        [
+          [
+            -1.64,
+            -1.88
+          ],
+          [
+            0.56,
+            -1.88
+          ],
+          [
+            0.56,
+            -0.46
+          ],
+          [
+            -1.64,
+            -0.46
+          ],
+          [
+            -1.64,
+            -1.88
+          ]
+        ]
+      ],
+      "queueEndpointCodes": [],
+      "holdPoses": [],
+      "endpointCodes": [
+        "EP-CHARGE",
+        "EP-INSPECTION",
+        "EP-PARKING-A",
+        "EP-PARKING-B"
+      ]
+    }
+  ]
+}

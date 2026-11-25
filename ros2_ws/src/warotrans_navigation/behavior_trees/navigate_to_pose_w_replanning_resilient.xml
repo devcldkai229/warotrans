@@ -1,7 +1,10 @@
 <!--
   WaroTrans resilient NavigateToPose BT
-  - Replan on distance traveled (DistanceController), NOT RateController: a 0.33 Hz replan
-    was resetting controller state while the robot was spinning to yaw at the goal.
+  - Replan only when the path became invalid (IsPathValid against the global costmap) or the goal changed, checked
+    once a second (2026-11-24 audit D2). The old DistanceController (0.5 m) never replanned a robot that stood still in
+    front of an obstacle (the progress checker failed after 20 s instead), and replanned a driving robot every 0.5 m:
+    each new path was a new traffic proposal. A periodic replan was not used either: a 0.33 Hz replan reset the
+    controller while the robot was spinning to yaw at the goal; an unchanged valid path is never replaced here.
   - FollowPath fail → clear local costmap → wait → replan (thử lại trong goal)
   - Recovery chỉ đi qua recovery_guard (server_name="guarded_*"): guard kiểm tra scan và grant trước khi
     chuyển tiếp tới Nav2. Bị từ chối = action fail, robot không nhận lệnh, RoundRobin chuyển sang bước sau.
@@ -14,14 +17,22 @@
   <BehaviorTree ID="MainTree">
     <RecoveryNode number_of_retries="5" name="NavigateRecovery">
       <PipelineSequence name="NavigateWithReplanning">
-        <DistanceController distance="0.50">
+        <RateController hz="1.0">
           <RecoveryNode number_of_retries="1" name="ComputePathToPose">
-            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"
-              error_code_id="{compute_path_error_code}"/>
+            <Fallback name="ReplanOnlyIfNeeded">
+              <ReactiveSequence name="KeepTheValidPath">
+                <Inverter>
+                  <GlobalUpdatedGoal/>
+                </Inverter>
+                <IsPathValid path="{path}"/>
+              </ReactiveSequence>
+              <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"
+                error_code_id="{compute_path_error_code}"/>
+            </Fallback>
             <ClearEntireCostmap name="ClearGlobalCostmap-Context"
               service_name="global_costmap/clear_entirely_global_costmap"/>
           </RecoveryNode>
-        </DistanceController>
+        </RateController>
         <RecoveryNode number_of_retries="1" name="FollowPath">
           <FollowPath path="{path}" controller_id="FollowPath" goal_checker_id="general_goal_checker"
             error_code_id="{follow_path_error_code}"/>
