@@ -1,0 +1,38 @@
+{
+  "mapCode": "MAP-ONE-V024",
+  "mapVersionId": "6a50f506-a5f9-43ba-a1fe-5de98fbd1bb7",
+  "frameId": "map",
+  "resolution": 0.05,
+  "origin": [
+    -0.706887,
+    -4.147152,
+    0.0
+  ],
+  "occupancySha256": "1f63a8c497ad71e36c19ce2c8062be7702e7cd655d5e16ca21a35b7bb4f7b31e",
+  "imageWidth": 75,
+  "imageHeight": 89,
+  "contentHash": "0979ecd62df8df4add9b9342adffcd7068a1bcedc3f428e7e2d88e0038124aa7",
+  "footprintMeters": {
+    "length": 0.32,
+    "width": 0.26,
+    "padding": 0.02
+  },
+  "navRuntime": "nav2_semantic",
+  "target": "real_robot",
+  "sourceSnapshot": "MAP-ONE-V024",
+  "exportedAt": "2026-11-25T05:37:18.288319+00:00",
+  "semanticMapFingerprint": "ce5c5e1808ee05db0f0d2dcbc68308ad6e96d6574f54beef0b2307143d859b9a",
+  "plannerId": "warotrans_lane_planner::LaneAwareNavfn",
+  "stage": 2,
+  "policies": {
+    "keepout": "keepout.yaml",
+    "keepout_planning": "keepout_planning.yaml",
+    "keepout_zones": "keepout.json",
+    "speed": "speed.yaml",
+    "lanes": "lanes.json",
+    "no_stop": "no_stop.json",
+    "single_occupancy": "single_occupancy.json",
+    "traffic_zones": "traffic_zones.json"
+  },
+  "note": "Stage-2 fingerprint includes lanes/zones/endpoints/yaw; SINGLE_OCCUPANCY not enforced"
+}

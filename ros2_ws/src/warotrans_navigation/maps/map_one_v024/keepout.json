@@ -1,0 +1,35 @@
+{
+  "zones": [
+    {
+      "id": "62dea7da-25e4-4498-a2bf-7e2b88de96b1",
+      "code": "ZONE-KEEP-OUT-SHELF-A",
+      "name": "KEEP-OUT-SHELF-A",
+      "zone_type": "KEEP_OUT",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            0.875,
+            -0.475
+          ],
+          [
+            1.957,
+            -0.477
+          ],
+          [
+            1.957,
+            -0.445
+          ],
+          [
+            0.875,
+            -0.44
+          ],
+          [
+            0.875,
+            -0.475
+          ]
+        ]
+      ]
+    }
+  ]
+}
