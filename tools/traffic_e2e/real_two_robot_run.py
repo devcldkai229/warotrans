@@ -210,6 +210,10 @@ def create_tr(w: World, workflow: str, moves: list[dict], note: str, check_quali
         "workflowInputs": {"checkQuality": check_quality},
         "note": note, "details": details})["id"]
     jobs = [j["jobId"] for j in w.api.call("POST", f"/api/transportation/transport-requests/{tr}/queue", {})["jobs"]]
+    info = w.api.call("GET", f"/api/transportation/transport-requests/{tr}")
+    route = "; ".join(f"{m.get('srcLoc') or m['src']} -> {m.get('dstLoc') or m['dst']}" for m in moves)
+    print(f"  >> TR {info.get('requestCode') or tr[:8]} {workflow}{' + quality inspection' if check_quality else ''}: "
+          f"{len(moves)} box(es) [{route}], {len(jobs)} trip(s)", flush=True)
     return tr, jobs
 
 
@@ -288,7 +292,8 @@ def run_jobs(w: World, name: str, jobs: list[str], timeout_s: float = 1200) -> d
 
 
 def dispatch(w: World, job: str, code: str) -> None:
-    w.api.call("POST", f"/api/workflow-execution/jobs/{job}/dispatch", {"robotId": w.robots[code]})
+    j = w.api.call("POST", f"/api/workflow-execution/jobs/{job}/dispatch", {"robotId": w.robots[code]})
+    print(f"  >> job {j.get('jobNo', job[:8])} -> {code} (from {nearest(w, code)})", flush=True)
 
 
 def nearest(w: World, code: str) -> str:
@@ -489,7 +494,17 @@ def scenario_S5(w: World) -> dict:
     return run_jobs(w, "S5", jobs, timeout_s=1800)
 
 
-SCENARIOS = {"S1": scenario_S1, "S2": scenario_S2, "S3": scenario_S3, "S4": scenario_S4, "S5": scenario_S5,
+def scenario_S6(w: World) -> dict:
+    """Three INBOUND requests of one box, queued together: the dispatcher hands them out R1 - R2 - R1 (the third goes
+    to whichever robot is free first)."""
+    jobs = []
+    for i, shelf in enumerate(["SHELF-C", "SHELF-B", "SHELF-A-1-V2"], 1):
+        jobs.append(_inbound(w, None, shelf, f"S6-{i}"))
+        w.api.call("POST", f"/api/workflow-execution/jobs/{jobs[-1]}/enqueue", {})
+    return run_jobs(w, "S6", jobs, timeout_s=1800)
+
+
+SCENARIOS = {"S6": scenario_S6, "S1": scenario_S1, "S2": scenario_S2, "S3": scenario_S3, "S4": scenario_S4, "S5": scenario_S5,
              "V1": scenario_V1, "V2": scenario_V2, "WATCH": scenario_WATCH, "HOME": scenario_HOME, "A1": scenario_A1, "A2": scenario_A2, "A3": scenario_A3, "B": scenario_B,
              "C6": lambda w: scenario_C(w, 6), "C5": lambda w: scenario_C(w, 5)}
 
