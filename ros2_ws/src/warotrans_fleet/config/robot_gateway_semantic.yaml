@@ -45,6 +45,10 @@ robot_gateway:
     mapping_map_topic: "/mapping/map"
     mapping_slam_params_file: ""     # "" = warotrans_slam/config/slam_toolbox.yaml
     mapping_local_dir: "~/maps/mapping_sessions"
+    # SYSTEM_ACTION from the console (system_actions.py): restart Nav2 / localization (lifecycle RESET + STARTUP, pose
+    # kept), the camera, the whole stack (tools/pi_run_semantic.sh restart), or reboot / power off the Pi (sudoers rule
+    # from tools/install_system_actions.sh). Every action needs the robot stopped (motion held) and idle.
+    system_actions: "RESTART_NAV,RESTART_LOCALIZATION,RESTART_CAMERA,RESTART_STACK,REBOOT,SHUTDOWN"
     # HUMAN_CONFIRM button (handover confirm; NOT an E-stop). Default on for lab TR→button→COMPLETED.
     human_confirm_enabled: true
     human_confirm_gpiochip: 4

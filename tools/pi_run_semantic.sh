@@ -4,6 +4,9 @@
 #                                                           name / ICS address / LAN scan (broker_discovery.py)
 #   BROKER=<ip|name> ~/warotrans_tools/pi_run_semantic.sh start   pin it
 #   ~/warotrans_tools/pi_run_semantic.sh status | stop
+#   ~/warotrans_tools/pi_run_semantic.sh restart            stop, then start again with the settings of the last start
+#                                                           (SYSTEM_ACTION RESTART_STACK from the console runs this)
+#   ~/warotrans_tools/pi_run_semantic.sh restart-camera     camera stream + evidence agent only (RESTART_CAMERA)
 #   MODE=cloud ~/warotrans_tools/pi_run_semantic.sh start   AWS: MQTT over TLS to AWS IoT Core with this robot's thing
 #                                                           certificate, evidence to the cloud Recorder. Reads
 #                                                           ~/.config/warotrans/cloud.env (docs in tools/cloud.env.example);
@@ -15,6 +18,10 @@
 # AMCL's motion noise follows it, so the odometry source and what AMCL assumes about it cannot disagree.
 set -uo pipefail
 ACTION="${1:-status}"
+# What the last start used, so restart / restart-camera (run by the gateway, without this shell's environment) start
+# the same stack again. Never holds a secret: credentials stay in their own env files.
+LAST_ENV="$HOME/.cache/warotrans/last_start.env"
+BROKER_ASKED="${BROKER:-auto}"
 BUNDLE="${BUNDLE:-$HOME/ros2_ws/src/warotrans_navigation/maps/map_one_v022}"
 SRC="$HOME/ros2_ws/src"
 LOGS="$HOME/wt_logs"
@@ -29,6 +36,18 @@ EVIDENCE_ENV="$HOME/.config/warotrans/evidence.env"
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 MODE="${MODE:-lan}"
 CLOUD_ENV="$HOME/.config/warotrans/cloud.env"
+
+start_camera() {
+  # Needs SRC, LOGS, ROBOT_CODE, BUNDLE, RECORDER_URL and the ROS environment.
+  setsid nohup ros2 run warotrans_camera camera_stream --ros-args --params-file "$SRC/warotrans_camera/config/camera_rbt001.yaml" \
+    > "$LOGS/camera_${ROBOT_CODE}.log" 2>&1 < /dev/null &
+  if [[ -f "$EVIDENCE_ENV" ]]; then
+    set -a; source "$EVIDENCE_ENV"; set +a
+    setsid nohup ros2 run warotrans_evidence_agent evidence_agent --ros-args       --params-file "$SRC/warotrans_evidence_agent/config/evidence_agent_rbt001.yaml"       -p recorder_url:="$RECORDER_URL" -p robot_code:="$ROBOT_CODE"       -p map_version_code:="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['mapCode'])" "$BUNDLE/semantic_manifest.json")"       > "$LOGS/evidence_${ROBOT_CODE}.log" 2>&1 < /dev/null &
+  else
+    echo "no $EVIDENCE_ENV (WARO_EVIDENCE_TOKEN=...): camera live only, no evidence recording"
+  fi
+}
 
 case "$ACTION" in
   start)
@@ -85,14 +104,14 @@ case "$ACTION" in
       robot_code:="$ROBOT_CODE" \
       > "$LOGS/gateway_${ROBOT_CODE}.log" 2>&1 < /dev/null &
     if [[ "$CAMERA" == "true" ]]; then
-      setsid nohup ros2 run warotrans_camera camera_stream --ros-args         --params-file "$SRC/warotrans_camera/config/camera_rbt001.yaml"         > "$LOGS/camera_${ROBOT_CODE}.log" 2>&1 < /dev/null &
-      if [[ -f "$EVIDENCE_ENV" ]]; then
-        set -a; source "$EVIDENCE_ENV"; set +a
-        setsid nohup ros2 run warotrans_evidence_agent evidence_agent --ros-args           --params-file "$SRC/warotrans_evidence_agent/config/evidence_agent_rbt001.yaml"           -p recorder_url:="$RECORDER_URL" -p robot_code:="$ROBOT_CODE"           -p map_version_code:="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['mapCode'])" "$BUNDLE/semantic_manifest.json")"           > "$LOGS/evidence_${ROBOT_CODE}.log" 2>&1 < /dev/null &
-      else
-        echo "no $EVIDENCE_ENV (WARO_EVIDENCE_TOKEN=...): camera live only, no evidence recording"
-      fi
+      start_camera
     fi
+    mkdir -p "$(dirname "$LAST_ENV")"
+    {
+      printf 'BUNDLE=%q\n' "$BUNDLE"; printf 'MOTORS=%q\n' "$MOTORS"; printf 'EKF=%q\n' "$EKF"
+      printf 'ROBOT_CODE=%q\n' "$ROBOT_CODE"; printf 'ROS_DOMAIN_ID=%q\n' "$ROS_DOMAIN_ID"; printf 'CAMERA=%q\n' "$CAMERA"
+      printf 'MODE=%q\n' "$MODE"; printf 'BROKER=%q\n' "$BROKER_ASKED"; printf 'RECORDER_URL=%q\n' "$RECORDER_URL"
+    } > "$LAST_ENV"
     # Follow the laptop if its address changes mid-session: 3 missed MQTT checks -> resolve again -> stop/start
     # (same environment). The restart runs detached because stop kills this watcher.
     # Cloud: IoT Core has a fixed name, paho reconnects by itself; nothing to follow.
@@ -113,8 +132,27 @@ case "$ACTION" in
     pgrep -af 'warotrans|nav2|rplidar|amcl' | grep -v pi_run_semantic | grep -v pgrep | cut -c1-100 || true
     echo stopped
     ;;
+  restart)
+    [[ -f "$LAST_ENV" ]] || { echo "no $LAST_ENV: start the stack by hand once"; exit 2; }
+    "$0" stop
+    sleep 3
+    set -a; source "$LAST_ENV"; set +a
+    exec "$0" start
+    ;;
+  restart-camera)
+    [[ -f "$LAST_ENV" ]] || { echo "no $LAST_ENV: start the stack by hand once"; exit 2; }
+    set -a; source "$LAST_ENV"; set +a
+    [[ "$CAMERA" == "true" ]] || { echo "the stack was started with CAMERA=false"; exit 2; }
+    pkill -INT -f 'camera_strea[m]|evidence_agen[t]' 2>/dev/null
+    sleep 3
+    pkill -KILL -f 'camera_strea[m]|evidence_agen[t]' 2>/dev/null
+    mkdir -p "$LOGS"
+    set +u; source /opt/ros/jazzy/setup.bash; source "$HOME/ros2_ws/install/setup.bash"; set -u
+    start_camera
+    echo "camera restarted"
+    ;;
   status)
     pgrep -af 'ros2 launch|esp32_bridge|robot_gateway|authority_gate|amcl' | grep -v pgrep | cut -c1-110
     ;;
-  *) echo "usage: $0 start|stop|status"; exit 2;;
+  *) echo "usage: $0 start|stop|restart|restart-camera|status"; exit 2;;
 esac
