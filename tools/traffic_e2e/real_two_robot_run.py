@@ -178,7 +178,7 @@ class Watch(threading.Thread):
 # ---------------------------------------------------------------- flow
 def new_containers(w: World, n: int, tag: str) -> list[str]:
     body = {"warehouseId": w.warehouse, "requestId": str(uuid.uuid4()), "containerCount": n,
-            "groups": [{"groupKey": tag, "productId": w.product, "containerCount": n, "quantityPerContainer": 1, "unit": "box"}]}
+            "groups": [{"groupKey": tag, "productId": w.product, "containerCount": n, "quantityPerContainer": 1}]}
     r = w.api.call("POST", "/api/warehouse/containers", body)
     ids = [c["id"] for c in (r.get("containers") or r.get("items") or [])]
     if not ids:
@@ -192,7 +192,7 @@ def voucher(w: World, kind: str, containers: list[str], note: str) -> str:
     return r.get("id") or r.get("data", {}).get("id")
 
 
-def create_tr(w: World, workflow: str, moves: list[dict], note: str) -> tuple[str, list[str]]:
+def create_tr(w: World, workflow: str, moves: list[dict], note: str, check_quality: bool = False) -> tuple[str, list[str]]:
     """moves: {container, src, dst, srcLoc?, dstLoc?}; returns (tr id, job ids)."""
     details = []
     for i, m in enumerate(moves):
@@ -206,7 +206,8 @@ def create_tr(w: World, workflow: str, moves: list[dict], note: str) -> tuple[st
     tr = w.api.call("POST", "/api/transportation/transport-requests", {
         "warehouseId": w.warehouse, "mapVersionId": w.map_id, "workflowId": w.wf[workflow],
         # INBOUND asks "Check Quality?" (STAFF_INPUT checkQuality): straight to the shelf, no EP-INSPECTION stop.
-        "workflowInputs": {"checkQuality": False} if workflow == "INBOUND" else {},
+        # Every transport workflow asks "Check Quality?" (STAFF_INPUT checkQuality); True adds the EP-INSPECTION stop.
+        "workflowInputs": {"checkQuality": check_quality},
         "note": note, "details": details})["id"]
     jobs = [j["jobId"] for j in w.api.call("POST", f"/api/transportation/transport-requests/{tr}/queue", {})["jobs"]]
     return tr, jobs
@@ -224,8 +225,10 @@ def confirm_waiting(w: World, jobs: list[str], log: list) -> dict[str, dict]:
                 container = (s.get("resolvedInputs") or {}).get("containerId") or t.get("containerId")
                 if not container:
                     continue
-                w.api.call("POST", f"/api/workflow-execution/job-steps/{s['id']}/confirm",
-                           {"containerId": container, "note": "real 2-robot test staff"})
+                body = {"containerId": container, "note": "real 2-robot test staff"}
+                if "INSPECTION" in str(s.get("stepKey")):
+                    body["inspectionResult"] = "PASSED"
+                w.api.call("POST", f"/api/workflow-execution/job-steps/{s['id']}/confirm", body)
                 log.append({"t": round(time.time(), 1), "job": j["jobNo"], "step": s.get("name"), "container": container[:8]})
                 print(f"  confirmed {j['jobNo']} {s.get('name')} {container[:8]}")
     return states
@@ -430,7 +433,64 @@ def scenario_V2(w: World) -> dict:
     return run_jobs(w, "V2", [j for _, j in jobs])
 
 
-SCENARIOS = {"V1": scenario_V1, "V2": scenario_V2, "WATCH": scenario_WATCH, "HOME": scenario_HOME, "A1": scenario_A1, "A2": scenario_A2, "A3": scenario_A3, "B": scenario_B,
+# ---------------------------------------------------------------- MAP-ONE-V024 (2026-11-25, scanned from the web)
+# Shelves: SHELF-A-1-V2 / SHELF-A-2-V2 (east, top), SHELF-B (east, middle), SHELF-C (west, bottom). Homes: RBT-001
+# PARKING-A, RBT-002 PARKING-B. Locked zones: SHELF-A, SHELF-B, CENTER; one-way lanes A-1/A-2, B-1/B-2, BOUND-1/2.
+def _inbound(w: World, code: str | None, shelf: str, tag: str, check_quality: bool = False) -> str:
+    c = new_containers(w, 1, tag)
+    voucher(w, "INBOUND", c, f"real V024 {tag}")
+    _, js = create_tr(w, "INBOUND", [{"container": c[0], "src": "EP-INBOUND", "dst": w.loc_ep[shelf], "dstLoc": shelf}],
+                      f"real V024 {tag}", check_quality)
+    if code:
+        dispatch(w, js[0], code)
+    return js[0]
+
+
+def scenario_S1(w: World) -> dict:
+    """RBT-001 alone: INBOUND -> SHELF-A-1-V2 (through lane A-1 and the SHELF-A zone)."""
+    return run_jobs(w, "S1", [_inbound(w, "RBT-001", "SHELF-A-1-V2", "S1-RBT-001")])
+
+
+def scenario_S2(w: World) -> dict:
+    """RBT-002 alone: INBOUND with quality inspection -> EP-QUALITY-INSPECTION -> SHELF-B."""
+    return run_jobs(w, "S2", [_inbound(w, "RBT-002", "SHELF-B", "S2-RBT-002", check_quality=True)])
+
+
+def scenario_S3(w: World) -> dict:
+    """Both at once to different places: RBT-001 INBOUND -> SHELF-C, RBT-002 INBOUND -> SHELF-A-2-V2. Both pick up at
+    EP-INBOUND: the second waits until the first has left."""
+    return run_jobs(w, "S3", [_inbound(w, "RBT-001", "SHELF-C", "S3-RBT-001"),
+                              _inbound(w, "RBT-002", "SHELF-A-2-V2", "S3-RBT-002")])
+
+
+def scenario_S4(w: World) -> dict:
+    """Crossing: RBT-001 OUTBOUND from SHELF-A-1-V2 -> EP-OUTBOUND, RBT-002 INTERNAL_RELOCATION SHELF-B -> SHELF-C."""
+    c1 = stored_at(w, "SHELF-A-1-V2")
+    voucher(w, "OUTBOUND", [c1], "real V024 S4 outbound")
+    _, j1 = create_tr(w, "OUTBOUND_RETRIEVAL", [{"container": c1, "src": w.loc_ep["SHELF-A-1-V2"], "srcLoc": "SHELF-A-1-V2",
+                                                 "dst": "EP-OUTBOUND"}], "real V024 S4 RBT-001")
+    c2 = stored_at(w, "SHELF-B")
+    _, j2 = create_tr(w, "INTERNAL_RELOCATION", [{"container": c2, "src": w.loc_ep["SHELF-B"], "srcLoc": "SHELF-B",
+                                                  "dst": w.loc_ep["SHELF-C"], "dstLoc": "SHELF-C"}], "real V024 S4 RBT-002")
+    dispatch(w, j1[0], "RBT-001")
+    dispatch(w, j2[0], "RBT-002")
+    return run_jobs(w, "S4", [j1[0], j2[0]])
+
+
+def scenario_S5(w: World) -> dict:
+    """One INBOUND request of 3 boxes (3 trips, 1 box each): the dispatcher gives them out R1 - R2 - R1."""
+    new = new_containers(w, 3, "S5")
+    voucher(w, "INBOUND", new, "real V024 S5")
+    shelves = ["SHELF-A-1-V2", "SHELF-B", "SHELF-A-2-V2"]
+    tr, jobs = create_tr(w, "INBOUND", [{"container": c, "src": "EP-INBOUND", "dst": w.loc_ep[s], "dstLoc": s}
+                                         for c, s in zip(new, shelves)], "real V024 S5")
+    print(f"  TR {tr[:8]}: {len(jobs)} trips")
+    w.api.call("POST", f"/api/workflow-execution/jobs/{jobs[0]}/enqueue", {})
+    return run_jobs(w, "S5", jobs, timeout_s=1800)
+
+
+SCENARIOS = {"S1": scenario_S1, "S2": scenario_S2, "S3": scenario_S3, "S4": scenario_S4, "S5": scenario_S5,
+             "V1": scenario_V1, "V2": scenario_V2, "WATCH": scenario_WATCH, "HOME": scenario_HOME, "A1": scenario_A1, "A2": scenario_A2, "A3": scenario_A3, "B": scenario_B,
              "C6": lambda w: scenario_C(w, 6), "C5": lambda w: scenario_C(w, 5)}
 
 
