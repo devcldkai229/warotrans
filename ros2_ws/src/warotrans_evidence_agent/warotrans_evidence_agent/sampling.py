@@ -170,3 +170,24 @@ class GateWatch:
             return None
         self._state, self._sent_at = state, now
         return {"open": state[0], "reason": state[1], "changed": changed}
+
+
+def nav_goal_payload(goal_id: str, command: Optional[dict]) -> dict:
+    """Payload of a nav2.goal.* event: the goal Nav2 really got and the step's endpoint, from the gateway's
+    /fleet/active_command. A goal far from the endpoint means the robot was sent somewhere else (lab 2026-11-24 NAV-01:
+    the AI saw 4 aborts but not that the goal lay off the map)."""
+    out: dict = {"goalId": goal_id}
+    if not isinstance(command, dict):
+        return out
+    out["commandId"] = command.get("commandId")
+    goal, end = command.get("nav2Goal"), command.get("endpoint")
+    if isinstance(goal, dict):
+        out["goal"] = {k: goal.get(k) for k in ("x", "y", "yaw")}
+    if isinstance(end, dict):
+        out["endpoint"] = {k: end.get(k) for k in ("x", "y")}
+    try:
+        out["goalOffEndpointM"] = round(math.hypot(float(goal["x"]) - float(end["x"]),
+                                                   float(goal["y"]) - float(end["y"])), 3)
+    except (TypeError, KeyError, ValueError):
+        pass
+    return out

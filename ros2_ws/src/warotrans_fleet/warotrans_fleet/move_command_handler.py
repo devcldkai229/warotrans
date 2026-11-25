@@ -125,6 +125,8 @@ class _ActiveMove:
     # Obstacle window: last_progress_at slides forward while the gate holds the robot, so a traffic wait is not counted.
     last_tick_at: Optional[float] = None
     progress_pose: Optional[tuple[float, float]] = None
+    # The pose last sent to Nav2 (x, y, yaw), for local observers: evidence pairs each Nav2 outcome with its goal.
+    nav_goal: Optional[tuple[float, float, float]] = None
     progress_best_yaw_err: Optional[float] = None
     last_stage: Optional[int] = None
     # First planner failure since the last progress. A closed gate cannot cause "no path", so this ignores holds.
@@ -248,8 +250,14 @@ class MoveCommandHandler:
             if move is None:
                 return None
             c = move.command
-            return {"commandId": c.command_id, "type": c.command_type, "jobAssignmentId": c.job_assignment_id,
-                    "jobStepId": c.job_step_id}
+            out = {"commandId": c.command_id, "type": c.command_type, "jobAssignmentId": c.job_assignment_id,
+                   "jobStepId": c.job_step_id,
+                   "endpoint": {"x": round(move.target.x, 3), "y": round(move.target.y, 3),
+                                "frame": move.target.frame_id}}
+            if move.nav_goal is not None:
+                gx, gy, gyaw = move.nav_goal
+                out["nav2Goal"] = {"x": round(gx, 3), "y": round(gy, 3), "yaw": round(gyaw, 4)}
+            return out
 
     @property
     def navigation_status(self) -> str:
@@ -541,6 +549,7 @@ class MoveCommandHandler:
                 # Fault Injection Lab NAV-01: Nav2 gets an unreachable goal and really aborts; the retry loop re-sends.
                 self._log.warning(f"[LabGoalDiverted] commandId={move.command_id} goal -> {diverted}")
                 gx, gy = diverted
+            move.nav_goal = (gx, gy, t.yaw)
             goal = NavGoal(command_id=move.command_id, frame_id=t.frame_id, x=gx, y=gy, yaw=t.yaw,
                            position_tolerance=t.position_tolerance)
             self._log.info(

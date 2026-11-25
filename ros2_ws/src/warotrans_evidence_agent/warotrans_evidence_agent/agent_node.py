@@ -31,7 +31,7 @@ from typing import Optional
 
 from .agent_core import AgentCore, CameraProfile
 from .recorder_api import ApiError, RecorderApi
-from .sampling import GateWatch, SilenceWatch, read_clock_quality
+from .sampling import GateWatch, SilenceWatch, nav_goal_payload, read_clock_quality
 from .spool import Spool
 from .uploader import Uploader
 
@@ -209,8 +209,9 @@ def main(args=None) -> None:
                 if st.status in names:
                     severity = {4: "INFO", 5: "WARNING", 6: "ERROR"}[st.status]
                     with self._lock:
+                        payload = nav_goal_payload(gid.hex(), self.core.state.command)
                         self.core.add_event(f"nav2.goal.{names[st.status].lower()}", "NAVIGATION", severity,
-                                            {"goalId": gid.hex()}, message=f"Nav2 goal {names[st.status]}")
+                                            payload, message=f"Nav2 goal {names[st.status]}")
                         self.core.on_pose(*self._pose(), force=True)
             if len(self._nav_status) > 200:
                 self._nav_status.clear()
