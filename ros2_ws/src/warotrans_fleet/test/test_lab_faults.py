@@ -1,6 +1,6 @@
 import pytest
 
-from warotrans_fleet.lab_faults import FAKE_FINGERPRINT, UNREACHABLE_GOAL, LabFaults, LabMessageError, contradicting_outcome
+from warotrans_fleet.lab_faults import UNREACHABLE_GOAL, fake_fingerprint, LabFaults, LabMessageError, contradicting_outcome
 
 
 def msg(scenario, action="inject", ttl=30, **params):
@@ -39,7 +39,10 @@ def test_clear_needs_the_same_injection():
     lab.handle(msg("MAP-01"), 0.0)
     other = dict(msg("MAP-01", action="clear"), injectionId="inj-2")
     assert lab.handle(other, 1.0) == ("ignored", None)
-    assert lab.fingerprint("real") == FAKE_FINGERPRINT
+    real = "27e8c7d9af1908e1d6ed4cce0123abcd"
+    fake = lab.fingerprint(real)
+    assert fake == fake_fingerprint(real) != real and len(fake) == len(real) and "lab" not in fake
+    int(fake, 16)
     kind, _ = lab.handle(msg("MAP-01", action="clear"), 1.0)
     assert kind == "clear"
     assert lab.fingerprint("real") == "real"

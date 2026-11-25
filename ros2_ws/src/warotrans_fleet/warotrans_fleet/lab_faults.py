@@ -16,6 +16,8 @@ What each scenario does on the robot (the gateway applies the side effects; this
 
 from __future__ import annotations
 
+import hashlib
+
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 
@@ -23,7 +25,8 @@ ROBOT_SCENARIOS = frozenset({"IOT-01", "IOT-02", "IOT-03", "NAV-01", "NAV-02", "
 MAX_TTL_SEC = 900.0
 # A point no map contains: Nav2's planner refuses it (goal outside the costmap) and the goal aborts for real.
 UNREACHABLE_GOAL = (-500.0, -500.0)
-FAKE_FINGERPRINT = "lab-wrong-bundle-0000000000000000"
+# MAP-01 reports another bundle's fingerprint. It must look like a real one (a hex digest of the same length): a name
+# such as "lab-wrong-bundle" would hand the answer to the AI being graded (lab 2026-11-25).
 
 
 class LabMessageError(ValueError):
@@ -98,7 +101,7 @@ class LabFaults:
         return _float(f.parameters.get("offset_s"), 45.0) if f else 0.0
 
     def fingerprint(self, real: str) -> str:
-        return FAKE_FINGERPRINT if "MAP-01" in self.active else real
+        return fake_fingerprint(real) if "MAP-01" in self.active else real
 
     def divert_goal(self) -> Optional[tuple[float, float]]:
         """NAV-01: the unreachable point for this goal, while goals remain to divert (each call uses one)."""
@@ -145,3 +148,9 @@ def _float(text: Optional[str], default: float) -> float:
         return float(str(text))
     except (TypeError, ValueError):
         return default
+
+
+def fake_fingerprint(real: str) -> str:
+    """A different, plausible bundle fingerprint: hex, as long as the real one, stable for one real fingerprint."""
+    digest = hashlib.sha256(f"other-bundle:{real}".encode()).hexdigest()
+    return (digest * 2)[: max(len(real), 16)]
