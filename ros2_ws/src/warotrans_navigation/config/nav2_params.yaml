@@ -325,7 +325,12 @@ velocity_smoother:
   ros__parameters:
     use_sim_time: false
     smoothing_frequency: 20.0
-    scale_velocities: false
+    # 2026-11-26: false -> true. Each axis ramped on its own: when RPP switched from driving to rotate-to-heading the
+    # linear speed decayed over ~0.4 s while the turn already ramped up, an arc of ~0.2-0.4 m radius = about half
+    # the wheel separation: the inner wheels stood still and the skid-steer pivoted on one side (slip, AMCL jumps).
+    # Scaled, the output keeps the controller's linear/angular ratio: a pure turn starts once the robot has stopped.
+    # Manual drive (teleop, map building) does not go through the smoother and is not affected.
+    scale_velocities: true
     # Stays OPEN_LOOP on purpose: CLOSED_LOOP ramps from the *measured* velocity, so a stalled
     # wheel (measured 0) would keep the command under the motor deadband forever.
     feedback: "OPEN_LOOP"
