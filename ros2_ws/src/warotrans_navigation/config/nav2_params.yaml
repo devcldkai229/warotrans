@@ -75,7 +75,9 @@ controller_server:
       # "hang"). With deadband compensation the robot moves 0.10 m in ~1-3 s, so 20 s is ample.
       # 0.10 → 0.05: a docking run in can be 0.05–0.15 m long in total.
       required_movement_radius: 0.05
-      movement_time_allowance: 20.0
+      # 2026-11-26: 20 -> 10 s. A robot stuck behind another one now gives up sooner, and the gateway re-sends the
+      # goal (a new plan) instead of standing still for the whole window.
+      movement_time_allowance: 10.0
 
     general_goal_checker:
       stateful: true

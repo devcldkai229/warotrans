@@ -99,6 +99,9 @@ _CANCEL_BY_TIMEOUT = "TIMEOUT"
 _CANCEL_BY_CORRIDOR = "CORRIDOR"
 _CANCEL_BY_GRANT_LOSS = "GRANT_LOSS"
 _CANCEL_BY_OBSTACLE = "OBSTACLE"
+# Held (traffic gate shut / another robot close ahead) for hold_replan_sec: the goal is canceled and sent again, so
+# Nav2 plans anew on the current costmaps (the fleet layer draws the other robot) and the new path goes to the Host.
+_CANCEL_BY_REPLAN = "REPLAN"
 
 
 @dataclass
@@ -131,6 +134,10 @@ class _ActiveMove:
     # Time the obstacle window was paused because another fleet robot stood close ahead (capped by fleet_hold_max_sec).
     fleet_held_sec: float = 0.0
     fleet_held_logged: bool = False
+    # Early replan while held: when the hold started, the last replan, how many so far.
+    hold_since: Optional[float] = None
+    last_hold_replan_at: Optional[float] = None
+    hold_replans: int = 0
     last_stage: Optional[int] = None
     # First planner failure since the last progress. A closed gate cannot cause "no path", so this ignores holds.
     planner_failing_since: Optional[float] = None
@@ -173,7 +180,9 @@ class MoveCommandHandler:
         traffic_hold_active: Callable[[], bool] = lambda: False,
         traffic_wait_active: Callable[[], bool] = lambda: False,
         max_traffic_retries: int = 30,
-        obstacle_wait_sec: float = 60.0,
+        obstacle_wait_sec: float = 15.0,
+        hold_replan_sec: float = 6.0,
+        hold_replan_max: int = 20,
         arrival_settle_sec: float = 0.0,
         arrival_pose: Callable[[], Optional[tuple[float, float, float]]] = lambda: None,
         motion_hold_active: Callable[[], bool] = lambda: False,
@@ -208,6 +217,10 @@ class MoveCommandHandler:
         # Fault Injection Lab (NAV-01): returns a goal to send instead of the real one, or None. None in production.
         self.goal_rewrite: Optional[Callable[[], Optional[tuple[float, float]]]] = None
         self._obstacle_wait_sec = float(obstacle_wait_sec)
+        # Lab 2026-11-26: a robot waiting on another one stood still until the 60 s window ran out (or up to
+        # fleet_hold_max_sec). Now it asks Nav2 for a new path every hold_replan_sec while it is held.
+        self._hold_replan_sec = max(0.0, float(hold_replan_sec))
+        self._hold_replan_max = max(0, int(hold_replan_max))
         # Lab 2026-11-25 (V024): a robot standing behind another fleet robot is waiting, not blocked. While this hook
         # says another robot stands close ahead, the obstacle window does not run, for at most fleet_hold_max_sec per
         # MOVE (after that the wait is reported as usual so an operator looks at it). None: no fleet obstacles.
@@ -685,6 +698,13 @@ class MoveCommandHandler:
                     move.next_refresh_at = now + self._arrival_settle_sec / 3.0
                 else:
                     self._on_settled(move)
+            elif move.cancel_reason == _CANCEL_BY_REPLAN and status in (STATUS_CANCELED, STATUS_ABORTED):
+                move.cancel_reason = None
+                move.cancel_sent_at = None
+                move.ticket = GoalTicket()
+                move.phase = _SENDING
+                self._log.info(f"[HoldReplan] commandId={move.command_id} goal canceled for a new plan; re-sending")
+                self._send_goal(move)
             elif status == STATUS_CANCELED and move.cancel_reason == _CANCEL_BY_TIMEOUT:
                 self._log.warning(f"[NavigationTimeout] commandId={move.command_id} goal canceled by Nav2")
                 self._finish(
@@ -869,6 +889,27 @@ class MoveCommandHandler:
             )
         return True
 
+    def _maybe_replan_while_held(self, move: _ActiveMove, now: float) -> None:
+        """Held for hold_replan_sec on the travel stage: cancel and re-send the goal (a fresh Nav2 plan)."""
+        if self._hold_replan_sec <= 0 or move.phase != _ACTIVE or move.cancel_reason is not None:
+            return
+        if move.last_stage not in (None, 0):
+            return  # docking run-in / align: the robot is at its goal, a new plan would only restart the stages
+        if move.hold_since is None:
+            move.hold_since = now
+            return
+        if now - move.hold_since < self._hold_replan_sec or move.hold_replans >= self._hold_replan_max:
+            return
+        if move.last_hold_replan_at is not None and now - move.last_hold_replan_at < self._hold_replan_sec:
+            return
+        move.last_hold_replan_at = now
+        move.hold_replans += 1
+        self._log.info(
+            f"[HoldReplan] commandId={move.command_id} held {now - move.hold_since:.0f}s; asking Nav2 for a new path "
+            f"({move.hold_replans}/{self._hold_replan_max})"
+        )
+        self._request_cancel(move, _CANCEL_BY_REPLAN, None)
+
     def _obstacle_window_expired(self, move: _ActiveMove, now: float) -> bool:
         """Tick-driven, so the limit holds however long Nav2 spends in its own recovery tree before it aborts."""
         since_tick = now - move.last_tick_at if move.last_tick_at is not None else 0.0
@@ -877,10 +918,13 @@ class MoveCommandHandler:
             return False
         if self._traffic_hold_is_active():
             move.last_progress_at = min(now, move.last_progress_at + since_tick)
+            self._maybe_replan_while_held(move, now)
             return False
         if self._held_by_fleet_robot(move, since_tick):
             move.last_progress_at = min(now, move.last_progress_at + since_tick)
+            self._maybe_replan_while_held(move, now)
             return False
+        move.hold_since = None
         try:
             pose = self._arrival_pose()
         except Exception:  # noqa: BLE001 — no pose: only distance_remaining counts
@@ -1011,6 +1055,11 @@ class MoveCommandHandler:
                 move.cancel_sessions.append(cancel_session)
             if move.phase == _SETTLING:
                 return  # Nav2 already finished: _finish answers the CANCEL as ineffective
+            if move.cancel_reason == _CANCEL_BY_REPLAN and reason != _CANCEL_BY_REPLAN:
+                # A real cancel (backend, timeout, ...) while a replan cancel is out: the real one decides the result.
+                move.cancel_reason = reason
+                self._log.info(f"[Nav2CancelRequested] commandId={move.command_id} reason={reason} (over a replan)")
+                return
             if move.cancel_reason is not None:
                 self._log.info(
                     f"[Nav2CancelRequested] commandId={move.command_id} already canceling "

@@ -542,7 +542,7 @@ def test_semantic_traffic_hold_keeps_the_original_timeout():
 def test_waiting_behind_a_healthy_robot_does_not_run_down_the_timeout():
     wait = {"value": True}
     h = Harness(traffic_mode="semantic_active", traffic_hold_active=lambda: wait["value"],
-                traffic_wait_active=lambda: wait["value"])
+                traffic_wait_active=lambda: wait["value"], hold_replan_sec=0.0)
     h.send(navigate(CMD, timeoutSeconds=30))
     h.nav.accept()
     for _ in range(60):          # 10 minutes in the queue behind another robot
@@ -577,7 +577,7 @@ def test_legacy_mode_abort_is_reported_even_if_a_hold_is_signalled():
 def test_waiting_behind_a_fleet_robot_is_not_an_obstacle_block():
     """Lab 2026-11-25 V024: the other robot stood close ahead for over a minute; that is a wait, not NAVIGATION_BLOCKED."""
     ahead = {"value": True}
-    h = Harness(obstacle_wait_sec=60.0)
+    h = Harness(obstacle_wait_sec=60.0, hold_replan_sec=0.0)
     h.move.fleet_robot_ahead = lambda: ahead["value"]
     h.send(navigate(CMD, timeoutSeconds=900))
     h.nav.accept()
@@ -594,7 +594,7 @@ def test_waiting_behind_a_fleet_robot_is_not_an_obstacle_block():
 
 def test_waiting_behind_a_fleet_robot_ends_after_the_cap():
     """A robot that never moves away is still reported, after fleet_hold_max_sec (180 s) plus the obstacle window."""
-    h = Harness(obstacle_wait_sec=60.0)
+    h = Harness(obstacle_wait_sec=60.0, hold_replan_sec=0.0)
     h.move.fleet_robot_ahead = lambda: True
     h.send(navigate(CMD, timeoutSeconds=900))
     h.nav.accept()
@@ -620,3 +620,42 @@ def test_a_failing_fleet_hook_is_not_a_hold():
     h.nav.feedback(2.0)
     h.tick(61.0)
     assert h.recorder.kinds().count("nav2_cancel") == 1
+
+
+def test_held_behind_a_fleet_robot_asks_nav2_for_a_new_path():
+    """Lab 2026-11-26: waiting on another robot, the goal is canceled and re-sent every hold_replan_sec (a fresh plan
+    that the fleet layer routes around it); the replan cancel is never reported as a result."""
+    ahead = {"value": True}
+    h = Harness(obstacle_wait_sec=60.0, hold_replan_sec=6.0)
+    h.move.fleet_robot_ahead = lambda: ahead["value"]
+    h.send(navigate(CMD, timeoutSeconds=900))
+    h.nav.accept()
+    h.nav.feedback(2.0)
+    h.tick(1.0)
+    h.tick(5.0)
+    assert h.nav.cancel_requests == []          # held 5 s: not yet
+    h.tick(2.0)
+    assert len(h.nav.cancel_requests) == 1      # held 7 s: replan
+    h.nav.finish(STATUS_CANCELED)
+    assert len(h.nav.goals) == 2 and h.recorder.results == []
+    h.nav.accept()
+    ahead["value"] = False                      # the way is free: no more replans
+    h.tick(10.0)
+    assert len(h.nav.cancel_requests) == 1 and h.move.active_command_id == CMD
+
+
+def test_a_backend_cancel_during_a_replan_cancel_wins():
+    ahead = {"value": True}
+    h = Harness(obstacle_wait_sec=60.0, hold_replan_sec=6.0)
+    h.move.fleet_robot_ahead = lambda: ahead["value"]
+    h.send(navigate(CMD, timeoutSeconds=900))
+    h.nav.accept()
+    h.nav.feedback(2.0)
+    h.tick(1.0)
+    h.tick(7.0)
+    assert len(h.nav.cancel_requests) == 1      # replan cancel out
+    h.move._request_cancel(h.move._active, "BACKEND", None)
+    h.nav.finish(STATUS_CANCELED)
+    assert len(h.nav.goals) == 1                # not re-sent
+    assert h.recorder.results and h.recorder.results[0]["outcome"] == "CANCELED"
+
