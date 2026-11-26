@@ -19,9 +19,9 @@
   },
   "navRuntime": "nav2_semantic",
   "target": "real_robot",
-  "sourceSnapshot": "snap_v027",
-  "exportedAt": "2026-11-26T07:26:43.331138+00:00",
-  "semanticMapFingerprint": "53e77e407b3de200d8a850cf81e059544dfe6c1a9bdefb6f55736ae45318a388",
+  "sourceSnapshot": "snap_v027b",
+  "exportedAt": "2026-11-26T07:45:38.865325+00:00",
+  "semanticMapFingerprint": "d898558c779df4f8a6d98b516f4484da7aaf3adc2ac3dd1859dcb0347f967b6e",
   "plannerId": "warotrans_lane_planner::LaneAwareNavfn",
   "stage": 2,
   "policies": {

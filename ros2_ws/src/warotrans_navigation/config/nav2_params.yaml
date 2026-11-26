@@ -125,7 +125,10 @@ controller_server:
       # 2026-11-11: 0.30/0.20 → 0.22/0.15. A carrot 0.30 m ahead starts the turn early and the body cuts the corner
       # toward the opposite lane (lane centres are 0.66 m apart on MAP-ONE).
       lookahead_dist: 0.22
-      min_lookahead_dist: 0.15
+      # 2026-11-26: 0.15 -> 0.20. With 0.15 m and a 29 deg heading error RPP asked for a 0.16 m radius, under half the
+      # wheel separation (0.198 m): the inner wheels stopped, the skid-steer pivoted on one side, slipped and AMCL lost
+      # the robot. 0.20 m with the 17 deg rotate threshold below keeps every arc above ~0.34 m.
+      min_lookahead_dist: 0.20
       max_lookahead_dist: 0.45
       lookahead_time: 0.8
       # In-place turn rate. 0.35 rad/s (≈25 % PWM, open loop) stalled the skid-steer wheels at
@@ -153,7 +156,9 @@ controller_server:
       # Class A: stop-and-rotate when heading error large before translating (skid-steer 90° turns)
       use_rotate_to_heading: true
       # 0.785 → 0.5 (~29°): at a 90° corner the robot stops and pivots near the lane centre instead of arcing across.
-      rotate_to_heading_min_angle: 0.5
+      # 2026-11-26: 0.5 -> 0.3 (~17 deg): a larger heading error is turned on the spot (both sides opposite), not with
+      # an arc tighter than half the wheel separation (pivot on one side, slip).
+      rotate_to_heading_min_angle: 0.3
       max_angular_accel: 0.8       # TUNING
       # Slightly wider latch after enabling rotate-to-heading (in-place spin can leave path briefly)
       max_robot_pose_search_dist: 2.0
