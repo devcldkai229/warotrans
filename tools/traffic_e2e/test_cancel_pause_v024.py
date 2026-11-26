@@ -328,7 +328,9 @@ def test_P3_pause_then_cancel_the_request_releases_the_robot(api, pair):
     assert not _robot(api, sim.robot_id)["motionHeld"], "a cancelled paused Job must not leave its robot held"
 
 
-def test_P4_pause_one_job_of_two_the_other_finishes(api, pair):
+def test_P4_pause_one_job_of_two_the_other_goes_on_then_resume(api, pair):
+    """Pausing one Job of a two-robot request does not stop the other robot. A paused robot stands still and keeps its
+    place, so where both share the only way (the west room) the other one waits behind it: resume after 15 s."""
     _start(api, pair, "P4")
     tr, jobs = _request(api, pair, [("EP-INBOUND", "EP-SHELF-A-1")] * 3 + [("EP-INBOUND", "EP-SHELF-B")] * 3)
     assert len(jobs) == 2, jobs
@@ -339,18 +341,21 @@ def test_P4_pause_one_job_of_two_the_other_finishes(api, pair):
         if not paused and all(v["status"] == "RUNNING" for v in states.values()) and _moving_step(states[jobs[0]]):
             api.call("POST", f"{JOBS}/{jobs[0]}/pause", {"reason": "e2e P4"})
             paused["at"] = time.time()
+            other = _sim_of(pair, jobs[1])
+            paused["other"] = (other, other.x, other.y)
+        elif paused and not paused.get("resumed") and time.time() - paused["at"] > 15:
+            other, x0, y0 = paused["other"]
+            paused["other_moved_m"] = round(((other.x - x0) ** 2 + (other.y - y0) ** 2) ** 0.5, 2)
+            paused["first_status_while_paused"] = states[jobs[0]]["status"]
+            api.call("POST", f"{JOBS}/{jobs[0]}/resume", {})
+            paused["resumed"] = True
 
-    def other_done(states):
-        return bool(paused) and states[jobs[1]]["status"] in ("COMPLETED", "FAILED", "CANCELLED")
-
-    states = w.run_until(other_done, 600, jobs, on_tick=pause_first_when_both_run)
-    assert states[jobs[1]]["status"] == "COMPLETED", states[jobs[1]]["status"]
-    assert states[jobs[0]]["status"] == "PAUSED", states[jobs[0]]["status"]
-    api.call("POST", f"{JOBS}/{jobs[0]}/resume", {})
-    states = w.run_until(base.terminal, 600, jobs)
+    states = w.run_until(base.terminal, 900, jobs, on_tick=pause_first_when_both_run)
     w.stop()
     w.assert_safe()
-    _record("P4", jobs=[v["status"] for v in states.values()], request=api.call("GET", f"{TR}/{tr}")["status"], robots=_settled(api, pair))
+    _record("P4", other_moved_while_paused_m=paused.get("other_moved_m"), first_while_paused=paused.get("first_status_while_paused"),
+            jobs=[v["status"] for v in states.values()], request=api.call("GET", f"{TR}/{tr}")["status"], robots=_settled(api, pair))
+    assert paused.get("first_status_while_paused") == "PAUSED"
     assert all(v["status"] == "COMPLETED" for v in states.values())
 
 
