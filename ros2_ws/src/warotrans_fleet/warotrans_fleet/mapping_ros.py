@@ -157,6 +157,15 @@ class MappingRos:
                         break
                     except subprocess.TimeoutExpired:
                         continue
+                # `ros2 launch` exits before slam_toolbox does: a new slam_toolbox started meanwhile published no map
+                # (lab 2026-11-25, RBT-001: START 0.7 s after the stop -> MAPPING_NO_MAP). Stop only when the whole
+                # group is gone.
+                if not wait_group_gone(pgid, 8.0):
+                    try:
+                        os.killpg(pgid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    wait_group_gone(pgid, 2.0)
         except (ProcessLookupError, PermissionError):
             pass
         finally:
@@ -233,6 +242,22 @@ class MappingRos:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             yaml.safe_dump(doc, fh, sort_keys=False)
         return out
+
+
+def wait_group_gone(pgid: int, timeout_sec: float, *, kill=None, sleep=time.sleep, clock=time.monotonic) -> bool:
+    """True once no process of the group is left (signal 0 finds none), False after timeout_sec."""
+    kill = kill or os.killpg  # looked up at call time: os.killpg does not exist on Windows (tests)
+    deadline = clock() + timeout_sec
+    while True:
+        try:
+            kill(pgid, 0)
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            return False
+        if clock() >= deadline:
+            return False
+        sleep(0.1)
 
 
 def _wait(future: Any, timeout_sec: float) -> bool:
