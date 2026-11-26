@@ -22,8 +22,11 @@ def build_heartbeat(
     sequence: int,
     sent_at: Optional[str] = None,
     message_id: Optional[str] = None,
+    capabilities: Optional[list[str]] = None,
 ) -> dict[str, Any]:
-    return {
+    """``capabilities``: what this robot can be asked beyond MOVE / STOP (e.g. SYSTEM_ACTION names). None = not sent,
+    so the backend keeps what it knew; a list replaces it."""
+    body: dict[str, Any] = {
         "schemaVersion": 1,
         "messageId": message_id or new_message_id(),
         "robotCode": robot_code,
@@ -31,6 +34,9 @@ def build_heartbeat(
         "sequence": sequence,
         "sentAt": sent_at or utc_now_iso(),
     }
+    if capabilities is not None:
+        body["capabilities"] = list(capabilities)
+    return body
 
 
 def build_telemetry(

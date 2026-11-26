@@ -173,6 +173,16 @@ class RobotGatewayNode(Node):
         self.declare_parameter("mapping_slam_params_file", "")  # "" = warotrans_slam/config/slam_toolbox.yaml
         self.declare_parameter("mapping_local_dir", "~/maps/mapping_sessions")
         self.declare_parameter("mapping_first_map_timeout_sec", 30.0)
+        # SYSTEM_ACTION (system_actions.py): restart one stack, or reboot / power off the robot computer, from the console.
+        # Off by default (a simulated robot has no stack to restart); the real-robot config lists what this robot runs.
+        self.declare_parameter("system_actions", "")
+        self.declare_parameter("system_nav_lifecycle_manager", "lifecycle_manager_navigation")
+        self.declare_parameter("system_localization_lifecycle_manager", "lifecycle_manager_localization")
+        self.declare_parameter("system_camera_restart_cmd", "~/warotrans_tools/pi_run_semantic.sh restart-camera")
+        self.declare_parameter("system_stack_restart_cmd", "~/warotrans_tools/pi_run_semantic.sh restart")
+        self.declare_parameter("system_reboot_cmd", "sudo -n /usr/sbin/reboot")
+        self.declare_parameter("system_shutdown_cmd", "sudo -n /usr/sbin/poweroff")
+        self.declare_parameter("system_action_log", "~/wt_logs/system_actions.log")
         self.declare_parameter("mapping_preview_period_sec", 1.0)
         self.declare_parameter("mapping_map_every_sec", 2.0)
         # MOVE command
@@ -883,6 +893,38 @@ class RobotGatewayNode(Node):
             self._register_auto_localize(router)
         if self._mapping_enabled:
             self._register_mapping(router)
+        self._register_system_actions(router)
+
+    def _register_system_actions(self, router) -> None:
+        from warotrans_fleet.system_actions import SystemActionHandler, parse_action_list
+        from warotrans_fleet.system_actions_ros import build_actions
+
+        enabled = parse_action_list(self._str_param("system_actions"))
+        if not enabled:
+            return
+        actions = build_actions(
+            self,
+            enabled=enabled,
+            nav_manager=self._str_param("system_nav_lifecycle_manager"),
+            localization_manager=self._str_param("system_localization_lifecycle_manager"),
+            camera_cmd=self._str_param("system_camera_restart_cmd"),
+            stack_cmd=self._str_param("system_stack_restart_cmd"),
+            reboot_cmd=self._str_param("system_reboot_cmd"),
+            shutdown_cmd=self._str_param("system_shutdown_cmd"),
+            current_pose=self._traffic_pose,
+            publish_initial_pose=self._publish_initial_pose,
+            log_file=self._str_param("system_action_log"),
+            log=self.get_logger(),
+        )
+        handler = SystemActionHandler(
+            actions,
+            motion_held=lambda: self._motion_hold.held,
+            busy=lambda: self._motion_busy() or self._mapping_active(),
+            log=self.get_logger(),
+        )
+        router.register(handler)
+        self._system_actions = handler
+        self.get_logger().info(f"SYSTEM_ACTION ready: {handler.announced}")
 
     def _register_auto_localize(self, router) -> None:
         from warotrans_fleet.auto_localize import AutoLocalizeCommandHandler
@@ -1481,10 +1523,12 @@ class RobotGatewayNode(Node):
 
     def _on_heartbeat_timer(self) -> None:
         seq = self._seq.next_heartbeat()
+        system_actions = getattr(self, "_system_actions", None)
         payload = build_heartbeat(
             robot_code=self._robot_code,
             boot_id=self._seq.boot_id,
             sequence=seq,
+            capabilities=system_actions.announced if system_actions is not None else None,
         )
         self.mqtt.publish(self.topic("heartbeat"), payload)
 
