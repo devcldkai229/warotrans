@@ -392,7 +392,8 @@ def scenario_HOME(w: World) -> dict:
     """Both robots drive home at the same time (RobotCare return-to-park), from wherever they are."""
     jobs = []
     for code, home in (("RBT-001", "EP-PARKING-A"), ("RBT-002", "EP-PARKING-B")):
-        j = w.api.call("POST", f"/api/workflow-execution/robots/{w.robots[code]}/return-to-park", {"endpointId": w.eps[home][0]})
+        # No endpoint: the Host sends each robot to its configured home (Traffic:RobotHomeEndpoints).
+        j = w.api.call("POST", f"/api/workflow-execution/robots/{w.robots[code]}/return-to-park", {})
         jobs.append(j["id"])
     return run_jobs(w, "HOME", jobs, timeout_s=600)
 
@@ -504,7 +505,190 @@ def scenario_S6(w: World) -> dict:
     return run_jobs(w, "S6", jobs, timeout_s=1800)
 
 
-SCENARIOS = {"S6": scenario_S6, "S1": scenario_S1, "S2": scenario_S2, "S3": scenario_S3, "S4": scenario_S4, "S5": scenario_S5,
+V024_SHELVES = ["SHELF-A-1-V2", "SHELF-A-2-V2", "SHELF-B", "SHELF-C"]
+
+
+def _stored(w: World, n: int) -> list[tuple[str, str]]:
+    """n STORED boxes on the V024 shelves, spread over the shelves (round robin), oldest first."""
+    per = {sh: [c for c, in sql("select c.id from warehouse.containers c join warehouse.storage_locations sl on "
+                                f"sl.id=c.current_storage_location_id where c.status='STORED' and sl.code='{sh}' "
+                                "order by c.created_at")] for sh in V024_SHELVES}
+    out: list[tuple[str, str]] = []
+    while len(out) < n and any(per.values()):
+        for sh in V024_SHELVES:
+            if per[sh] and len(out) < n:
+                out.append((per[sh].pop(0), sh))
+    if len(out) < n:
+        raise AssertionError(f"only {len(out)} STORED boxes on the V024 shelves, {n} needed")
+    return out
+
+
+def _queue_all(w: World, name: str, jobs: list[str]) -> dict:
+    for j in jobs:
+        w.api.call("POST", f"/api/workflow-execution/jobs/{j}/enqueue", {})
+    return run_jobs(w, name, jobs, timeout_s=2400)
+
+
+def scenario_M1(w: World) -> dict:
+    """One INBOUND request of 6 boxes: two trips of 3, both robots pick up at INBOUND and store at the same time."""
+    new = new_containers(w, 6, "M1")
+    voucher(w, "INBOUND", new, "real V024 M1")
+    shelves = ["SHELF-A-1-V2", "SHELF-A-2-V2", "SHELF-B", "SHELF-C", "SHELF-A-1-V2", "SHELF-B"]
+    _, jobs = create_tr(w, "INBOUND", [{"container": c, "src": "EP-INBOUND", "dst": w.loc_ep[s], "dstLoc": s}
+                                        for c, s in zip(new, shelves)], "real V024 M1")
+    return _queue_all(w, "M1", jobs)
+
+
+def scenario_M2(w: World) -> dict:
+    """One INTERNAL_RELOCATION request of 6 boxes, each to another V024 shelf."""
+    boxes = _stored(w, 6)
+    nxt = {"SHELF-A-1-V2": "SHELF-C", "SHELF-A-2-V2": "SHELF-B", "SHELF-B": "SHELF-A-1-V2", "SHELF-C": "SHELF-A-2-V2"}
+    _, jobs = create_tr(w, "INTERNAL_RELOCATION", [{"container": c, "src": w.loc_ep[sh], "srcLoc": sh,
+                                                    "dst": w.loc_ep[nxt[sh]], "dstLoc": nxt[sh]} for c, sh in boxes],
+                        "real V024 M2")
+    return _queue_all(w, "M2", jobs)
+
+
+def scenario_M3(w: World) -> dict:
+    """One OUTBOUND_RETRIEVAL request of 6 boxes (phieu xuat) from the V024 shelves to EP-OUTBOUND."""
+    boxes = _stored(w, 6)
+    voucher(w, "OUTBOUND", [c for c, _ in boxes], "real V024 M3")
+    _, jobs = create_tr(w, "OUTBOUND_RETRIEVAL", [{"container": c, "src": w.loc_ep[sh], "srcLoc": sh, "dst": "EP-OUTBOUND"}
+                                                  for c, sh in boxes], "real V024 M3")
+    return _queue_all(w, "M3", jobs)
+
+
+def scenario_M4(w: World) -> dict:
+    """Two INBOUND requests with quality inspection (one box each), queued together: both robots stop at
+    EP-QUALITY-INSPECTION in turn."""
+    jobs = [_inbound(w, None, "SHELF-C", "M4-1", check_quality=True), _inbound(w, None, "SHELF-A-2-V2", "M4-2", check_quality=True)]
+    return _queue_all(w, "M4", jobs)
+
+
+# ---------------------------------------------------------------- user script 2026-11-25 evening (V024, step-by-step grants)
+HOMES = {"RBT-001": "EP-PARKING-A", "RBT-002": "EP-PARKING-B"}
+
+
+def _pick(w: World, shelf: str, n: int, used: set) -> list[str]:
+    rows = [c for c, in sql("select c.id from warehouse.containers c join warehouse.storage_locations sl on "
+                            f"sl.id=c.current_storage_location_id where c.status='STORED' and sl.code='{shelf}' "
+                            "order by c.created_at")]
+    got = [c for c in rows if c not in used][:n]
+    if len(got) < n:
+        raise AssertionError(f"only {len(got)} STORED boxes on {shelf}, {n} needed")
+    used.update(got)
+    return got
+
+
+def _inbound_tr(w: World, shelves: list[str], tag: str, check_quality: bool = False) -> list[str]:
+    new = new_containers(w, len(shelves), tag)
+    voucher(w, "INBOUND", new, f"real V024 {tag}")
+    return create_tr(w, "INBOUND", [{"container": c, "src": "EP-INBOUND", "dst": w.loc_ep[s], "dstLoc": s}
+                                    for c, s in zip(new, shelves)], f"real V024 {tag}", check_quality)[1]
+
+
+def _reloc_tr(w: World, pairs: list[tuple[str, str]], tag: str, used: set) -> list[str]:
+    moves = [{"container": _pick(w, src, 1, used)[0], "src": w.loc_ep[src], "srcLoc": src, "dst": w.loc_ep[dst], "dstLoc": dst}
+             for src, dst in pairs]
+    return create_tr(w, "INTERNAL_RELOCATION", moves, f"real V024 {tag}")[1]
+
+
+def _outbound_tr(w: World, shelves: list[str], tag: str, used: set, check_quality: bool = False) -> list[str]:
+    boxes = [(_pick(w, sh, 1, used)[0], sh) for sh in shelves]
+    voucher(w, "OUTBOUND", [c for c, _ in boxes], f"real V024 {tag}")
+    return create_tr(w, "OUTBOUND_RETRIEVAL", [{"container": c, "src": w.loc_ep[sh], "srcLoc": sh, "dst": "EP-OUTBOUND"}
+                                               for c, sh in boxes], f"real V024 {tag}", check_quality)[1]
+
+
+def _at_home(w: World) -> bool:
+    """Each robot on one of the two parking places (either one: the homes may be swapped), not on the same one."""
+    spots = []
+    for code in HOMES:
+        r = w.robot(code)
+        near = [h for h in HOMES.values() if math.hypot(r["poseX"] - w.eps[h][1], r["poseY"] - w.eps[h][2]) <= 0.20]
+        if not near:
+            return False
+        spots.append(near[0])
+    return len(set(spots)) == len(spots) and not sql("select 1 from execution.jobs where status in ('RUNNING','QUEUED','ASSIGNED','PAUSED','CREATED') limit 1")
+
+
+def _home_after(w: World, name: str, res: dict) -> dict:
+    """After every request both robots are back at their own parking (idle auto-park; sent there after 60 s)."""
+    t0 = time.time()
+    while time.time() - t0 < 60 and not _at_home(w):
+        time.sleep(2)
+    if not _at_home(w):
+        print("  robots not home after 60 s: return-to-park", flush=True)
+        scenario_HOME(w)
+    res["backHomeS"] = round(time.time() - t0, 1)
+    print(f"  {name}: both robots at PARKING-A / PARKING-B ({res['backHomeS']} s after the last job)", flush=True)
+    return res
+
+
+def _pair(w: World, name: str, made: list[tuple[str, list[str]]]) -> dict:
+    """Independent requests created together, each forced on its robot, started together."""
+    jobs = []
+    for code, js in made:
+        assert len(js) == 1, js
+        jobs.append(js[0])
+    for (code, js) in made:
+        dispatch(w, js[0], code)
+    return _home_after(w, name, run_jobs(w, name, jobs))
+
+
+def scenario_U1(w: World) -> dict:
+    """1 INBOUND request, 6 boxes, 2 per shelf: two trips of 3, both robots at once."""
+    jobs = _inbound_tr(w, ["SHELF-A-1-V2", "SHELF-A-1-V2", "SHELF-B", "SHELF-B", "SHELF-C", "SHELF-C"], "U1")
+    return _home_after(w, "U1", _queue_all(w, "U1", jobs))
+
+
+def scenario_U2(w: World) -> dict:
+    """1 INTERNAL_RELOCATION request, 6 boxes, 2 to each shelf."""
+    used: set = set()
+    jobs = _reloc_tr(w, [("SHELF-A-1-V2", "SHELF-C"), ("SHELF-A-1-V2", "SHELF-C"), ("SHELF-B", "SHELF-A-2-V2"),
+                         ("SHELF-B", "SHELF-A-2-V2"), ("SHELF-C", "SHELF-B"), ("SHELF-C", "SHELF-B")], "U2", used)
+    return _home_after(w, "U2", _queue_all(w, "U2", jobs))
+
+
+def scenario_U3(w: World) -> dict:
+    """1 OUTBOUND request, 6 boxes, 2 from each shelf, through QUALITY-INSPECTION."""
+    used: set = set()
+    jobs = _outbound_tr(w, ["SHELF-A-1-V2", "SHELF-A-1-V2", "SHELF-B", "SHELF-B", "SHELF-C", "SHELF-C"], "U3", used,
+                        check_quality=True)
+    return _home_after(w, "U3", _queue_all(w, "U3", jobs))
+
+
+def scenario_U4(w: World) -> dict:
+    """Two independent requests sent together: INBOUND (2 boxes) on RBT-002, OUTBOUND (2 boxes) on RBT-001."""
+    used: set = set()
+    return _pair(w, "U4", [("RBT-002", _inbound_tr(w, ["SHELF-A-2-V2", "SHELF-B"], "U4-RBT-002")),
+                           ("RBT-001", _outbound_tr(w, ["SHELF-C", "SHELF-A-1-V2"], "U4-RBT-001", used))])
+
+
+def scenario_U5a(w: World) -> dict:
+    """Same moment, 2 boxes each: RBT-001 INBOUND, RBT-002 INTERNAL_RELOCATION."""
+    used: set = set()
+    return _pair(w, "U5a", [("RBT-001", _inbound_tr(w, ["SHELF-C", "SHELF-B"], "U5a-RBT-001")),
+                            ("RBT-002", _reloc_tr(w, [("SHELF-A-1-V2", "SHELF-A-2-V2"), ("SHELF-A-1-V2", "SHELF-A-2-V2")],
+                                                  "U5a-RBT-002", used))])
+
+
+def scenario_U5b(w: World) -> dict:
+    """Same moment, 2 boxes each: both INBOUND (both pick up at EP-INBOUND, in turn)."""
+    return _pair(w, "U5b", [("RBT-001", _inbound_tr(w, ["SHELF-A-1-V2", "SHELF-A-2-V2"], "U5b-RBT-001")),
+                            ("RBT-002", _inbound_tr(w, ["SHELF-B", "SHELF-C"], "U5b-RBT-002"))])
+
+
+def scenario_U5c(w: World) -> dict:
+    """Same moment, 2 boxes each: RBT-001 INTERNAL_RELOCATION, RBT-002 OUTBOUND."""
+    used: set = set()
+    return _pair(w, "U5c", [("RBT-001", _reloc_tr(w, [("SHELF-B", "SHELF-C"), ("SHELF-B", "SHELF-C")], "U5c-RBT-001", used)),
+                            ("RBT-002", _outbound_tr(w, ["SHELF-A-2-V2", "SHELF-A-1-V2"], "U5c-RBT-002", used))])
+
+
+SCENARIOS = {"U1": scenario_U1, "U2": scenario_U2, "U3": scenario_U3, "U4": scenario_U4, "U5a": scenario_U5a,
+             "U5b": scenario_U5b, "U5c": scenario_U5c,
+             "M1": scenario_M1, "M2": scenario_M2, "M3": scenario_M3, "M4": scenario_M4, "S6": scenario_S6, "S1": scenario_S1, "S2": scenario_S2, "S3": scenario_S3, "S4": scenario_S4, "S5": scenario_S5,
              "V1": scenario_V1, "V2": scenario_V2, "WATCH": scenario_WATCH, "HOME": scenario_HOME, "A1": scenario_A1, "A2": scenario_A2, "A3": scenario_A3, "B": scenario_B,
              "C6": lambda w: scenario_C(w, 6), "C5": lambda w: scenario_C(w, 5)}
 

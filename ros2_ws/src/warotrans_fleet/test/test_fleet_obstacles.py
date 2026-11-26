@@ -58,3 +58,22 @@ def test_pointcloud_body_is_float32_xyz():
     data, width = pointcloud2_fields_xyz(pts)
     assert width == len(pts) and len(data) == 12 * width
     assert all(p[2] == 0.10 for p in pts)
+
+
+def _other(x: float, y: float) -> "OtherRobot":
+    from warotrans_fleet.fleet_obstacles import OtherRobot
+
+    return OtherRobot(code="RBT-X", x=x, y=y, yaw=0.0, length=0.32, width=0.26, localized=True, pose_age_sec=0.0)
+
+
+def test_robot_ahead_only_counts_close_robots_in_front():
+    from warotrans_fleet.fleet_obstacles import robot_ahead
+
+    me = (0.0, 0.0, 0.0)  # facing +x
+    assert robot_ahead([_other(0.6, 0.0)], me)
+    assert robot_ahead([_other(0.3, 0.5)], me)  # ~59 deg off the nose
+    assert not robot_ahead([_other(-0.6, 0.0)], me)  # behind
+    assert not robot_ahead([_other(0.0, 0.6)], me)  # beside (90 deg)
+    assert not robot_ahead([_other(0.9, 0.0)], me)  # too far
+    assert not robot_ahead([_other(0.6, 0.0)], None)  # no own pose
+    assert robot_ahead([_other(0.0, -0.6)], (0.0, 0.0, -1.5708))  # facing -y

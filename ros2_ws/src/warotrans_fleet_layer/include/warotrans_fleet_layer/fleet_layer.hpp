@@ -55,6 +55,8 @@ private:
   bool had_bounds_{false};
   double last_min_x_{0}, last_min_y_{0}, last_max_x_{0}, last_max_y_{0};
   double max_age_{1.0};
+  unsigned char mark_cost_{254};
+  double grow_m_{0.0};
   std::string topic_;
 };
 
