@@ -1004,6 +1004,7 @@ class RobotGatewayNode(Node):
             save_local=ros.save_local,
             save_posegraph=ros.save_posegraph,
             first_map_timeout_sec=self._float_param("mapping_first_map_timeout_sec"),
+            ensure_slam_active=ros.ensure_slam_active,
             preview_period_sec=self._float_param("mapping_preview_period_sec"),
             map_every_sec=self._float_param("mapping_map_every_sec"),
         )

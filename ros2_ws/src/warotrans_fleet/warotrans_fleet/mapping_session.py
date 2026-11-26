@@ -221,6 +221,9 @@ class MappingController:
         save_posegraph: Optional[Callable[[str], Optional[str]]] = None,
         run_async: Optional[Callable[[Callable[[], None]], None]] = None,
         first_map_timeout_sec: float = 30.0,
+        ensure_slam_active: Optional[Callable[[], Optional[str]]] = None,
+        slam_nudge_after_sec: float = 3.0,
+        slam_nudge_every_sec: float = 2.0,
         preview_period_sec: float = 1.0,
         map_every_sec: float = 2.0,
         chunk_bytes: int = 96_000,
@@ -241,6 +244,12 @@ class MappingController:
         self._save_posegraph = save_posegraph
         self._run_async = run_async or (lambda fn: threading.Thread(target=fn, name="mapping", daemon=True).start())
         self._first_map_timeout = first_map_timeout_sec
+        # slam.launch.py activates slam_toolbox on its configuring -> inactive event; under load (or on a second
+        # session) the launch can miss that event and slam_toolbox stays inactive: no map, MAPPING_NO_MAP
+        # (lab 2026-11-26, RBT-002). While no map has come, the gateway checks the lifecycle state and finishes it.
+        self._ensure_slam_active = ensure_slam_active
+        self._slam_nudge_after = slam_nudge_after_sec
+        self._slam_nudge_every = slam_nudge_every_sec
         self._preview_period = preview_period_sec
         self._map_every = map_every_sec
         self._chunk_bytes = chunk_bytes
@@ -314,8 +323,17 @@ class MappingController:
             self._rollback()
             return OUTCOME_FAILED, ERROR_SLAM_START, reason
         deadline = asked + self._first_map_timeout
+        next_nudge = asked + self._slam_nudge_after
         while self._now() < deadline:
             grid = self._latest_map()
+            if (grid is None or grid.stamp < asked) and self._ensure_slam_active is not None and self._now() >= next_nudge:
+                next_nudge = self._now() + self._slam_nudge_every
+                try:
+                    note = self._ensure_slam_active()
+                except Exception as exc:  # noqa: BLE001 - a failed check only waits for the next one
+                    note = f"lifecycle check failed: {exc!r}"
+                if note:
+                    self._log.warning(f"[Mapping] {note}")
             if grid is not None and grid.stamp >= asked:
                 with self._lock:
                     self._state = STATE_MAPPING

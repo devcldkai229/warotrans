@@ -218,7 +218,9 @@ def create_tr(w: World, workflow: str, moves: list[dict], note: str, check_quali
 
 
 def confirm_waiting(w: World, jobs: list[str], log: list) -> dict[str, dict]:
-    states = {}
+    """Confirm every WAITING person step of all jobs. Steps waiting at the same moment (both robots at a pickup or
+    a drop-off) are confirmed AT ONCE from parallel threads, as two staff members pressing together would."""
+    states, todo = {}, []
     for job in jobs:
         j = w.api.call("GET", f"/api/workflow-execution/jobs/{job}")
         states[job] = j
@@ -227,14 +229,40 @@ def confirm_waiting(w: World, jobs: list[str], log: list) -> dict[str, dict]:
                 if s["status"] != "WAITING" or s.get("stepType") != "HUMAN_INTERACTION":
                     continue
                 container = (s.get("resolvedInputs") or {}).get("containerId") or t.get("containerId")
-                if not container:
+                inspection = s.get("operationCode") == "INSPECTION_CONFIRM" or "INSPECTION" in str(s.get("stepKey"))
+                if not container and not inspection:
                     continue
-                body = {"containerId": container, "note": "real 2-robot test staff"}
-                if "INSPECTION" in str(s.get("stepKey")):
+                # Quality inspection is one confirmation for every box at the stop (no container on the step).
+                body = {"containerId": container, "note": "real 2-robot test staff"} if container else {"note": "real 2-robot test QI"}
+                if inspection:
                     body["inspectionResult"] = "PASSED"
-                w.api.call("POST", f"/api/workflow-execution/job-steps/{s['id']}/confirm", body)
-                log.append({"t": round(time.time(), 1), "job": j["jobNo"], "step": s.get("name"), "container": container[:8]})
-                print(f"  confirmed {j['jobNo']} {s.get('name')} {container[:8]}")
+                todo.append((j, s, container or "all-boxes", body))
+
+    def one(item):
+        j, s, container, body = item
+        try:
+            w.api.call("POST", f"/api/workflow-execution/job-steps/{s['id']}/confirm", body)
+            return item, None
+        except Exception as exc:  # noqa: BLE001 - a step another confirm already moved on is not a failure
+            return item, str(exc)[:160]
+
+    if todo:
+        robots = {robot_code(w, j.get("assignedRobotId")) for j, *_ in todo}
+        together = len(robots) > 1
+        threads, results = [], []
+        for item in todo:
+            th = threading.Thread(target=lambda it=item: results.append(one(it)))
+            threads.append(th)
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
+        for (j, s, container, _), err in results:
+            log.append({"t": round(time.time(), 1), "job": j["jobNo"], "step": s.get("name"), "container": container[:8],
+                        "together": together, "error": err})
+            who = robot_code(w, j.get("assignedRobotId"))
+            print(f"  {'confirmed' if not err else 'confirm refused'} {j['jobNo']} [{who}] {s.get('name')} {container[:8]}"
+                  f"{'  (SIMULTANEOUS with the other robot)' if together else ''}{'  ' + err if err else ''}", flush=True)
     return states
 
 
@@ -637,8 +665,9 @@ def _pair(w: World, name: str, made: list[tuple[str, list[str]]]) -> dict:
 
 
 def scenario_U1(w: World) -> dict:
-    """1 INBOUND request, 6 boxes, 2 per shelf: two trips of 3, both robots at once."""
-    jobs = _inbound_tr(w, ["SHELF-A-1-V2", "SHELF-A-1-V2", "SHELF-B", "SHELF-B", "SHELF-C", "SHELF-C"], "U1")
+    """1 INBOUND request, 6 boxes, 2 per shelf, through QUALITY-INSPECTION: two trips of 3, both robots at once."""
+    jobs = _inbound_tr(w, ["SHELF-A-1-V2", "SHELF-A-1-V2", "SHELF-B", "SHELF-B", "SHELF-C", "SHELF-C"], "U1",
+                       check_quality=True)
     return _home_after(w, "U1", _queue_all(w, "U1", jobs))
 
 

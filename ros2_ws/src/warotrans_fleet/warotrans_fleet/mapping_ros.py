@@ -143,6 +143,41 @@ class MappingRos:
             return f"slam_toolbox exited at once (code {code}); see {session_dir}/slam_toolbox.log"
         return None
 
+    def ensure_slam_active(self) -> Optional[str]:
+        """slam_toolbox left unconfigured / inactive (its launch file missed the lifecycle event): configure or activate
+        it here. None when it is already active, still starting, or its services are not up yet."""
+        if self._proc is None:
+            return None
+        from lifecycle_msgs.msg import State, Transition
+        from lifecycle_msgs.srv import ChangeState, GetState
+
+        get = self._node.create_client(GetState, "slam_toolbox/get_state")
+        change = self._node.create_client(ChangeState, "slam_toolbox/change_state")
+        try:
+            if not get.wait_for_service(timeout_sec=1.0):
+                return None
+            future = get.call_async(GetState.Request())
+            if not _wait(future, 3.0) or future.result() is None:
+                return None
+            state = future.result().current_state.id
+            if state == State.PRIMARY_STATE_UNCONFIGURED:
+                transition, label = Transition.TRANSITION_CONFIGURE, "configure"
+            elif state == State.PRIMARY_STATE_INACTIVE:
+                transition, label = Transition.TRANSITION_ACTIVATE, "activate"
+            else:
+                return None  # active, or in a transition right now
+            if not change.wait_for_service(timeout_sec=1.0):
+                return None
+            req = ChangeState.Request()
+            req.transition.id = transition
+            future = change.call_async(req)
+            ok = _wait(future, 10.0) and future.result() is not None and future.result().success
+            return f"slam_toolbox was left {'unconfigured' if label == 'configure' else 'inactive'}: {label} " \
+                   f"{'done' if ok else 'FAILED'} by the gateway"
+        finally:
+            self._node.destroy_client(get)
+            self._node.destroy_client(change)
+
     def stop_slam(self) -> None:
         proc = self._proc
         if proc is None:

@@ -1,0 +1,98 @@
+{
+  "zones": [
+    {
+      "id": "6631baed-08cb-4a71-b528-c6f607ad1da9",
+      "code": "ZONE-SINGLE-OCCUPANCY---2",
+      "name": "Single-occupancy - 2",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            1.096,
+            1.447
+          ],
+          [
+            1.918,
+            1.442
+          ],
+          [
+            1.931,
+            0.086
+          ],
+          [
+            1.091,
+            0.086
+          ],
+          [
+            1.096,
+            1.447
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "873023b0-ddef-4614-bb0e-b66cbdc952c9",
+      "code": "ZONE-SINGLE-OCCUPANCY---4",
+      "name": "Single-occupancy - 4",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            1.082,
+            0.043
+          ],
+          [
+            1.082,
+            -1.315
+          ],
+          [
+            2.031,
+            -1.315
+          ],
+          [
+            2.031,
+            0.064
+          ],
+          [
+            1.082,
+            0.043
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "76678a6e-599b-48c0-b414-7c97e3806e9d",
+      "code": "ZONE-SINGLE-OCCUPANCY---5",
+      "name": "Single-occupancy - 5",
+      "zone_type": "SINGLE_OCCUPANCY",
+      "max_speed": null,
+      "rings": [
+        [
+          [
+            2.536,
+            1.407
+          ],
+          [
+            3.826,
+            1.389
+          ],
+          [
+            3.172,
+            0.108
+          ],
+          [
+            2.545,
+            0.108
+          ],
+          [
+            2.536,
+            1.407
+          ]
+        ]
+      ]
+    }
+  ],
+  "enforcement": "NOT_SUPPORTED_STAGE2"
+}

@@ -54,6 +54,7 @@ class Robot:
         self.uploads: list[dict] = []
         self.finished = 0
         self.busy = False
+        self.stuck_inactive = None
 
     def pause(self):
         self.calls.append("pause")
@@ -72,6 +73,15 @@ class Robot:
 
     def stop_slam(self):
         self.calls.append("stop_slam")
+
+    def ensure_active(self):
+        # slam_toolbox stuck inactive (launch missed its lifecycle event) until the gateway activates it.
+        if self.stuck_inactive is None:
+            return None
+        self.calls.append("activate")
+        self.grid = self.stuck_inactive
+        self.stuck_inactive = None
+        return "slam_toolbox was left inactive: activate done by the gateway"
 
     def upload(self, body):
         self.uploads.append(body)
@@ -100,6 +110,9 @@ def _setup(robot: Robot):
         save_local=lambda sid, pgm, yaml_text: f"/maps/{sid}",
         run_async=pending.append,
         first_map_timeout_sec=3.0,
+        ensure_slam_active=robot.ensure_active,
+        slam_nudge_after_sec=1.0,
+        slam_nudge_every_sec=0.5,
         monotonic=clock.now,
         sleep=clock.sleep,
     )
@@ -286,3 +299,29 @@ def test_preview_carries_the_pose_and_the_grid_only_when_new():
 
     body = preview_body("s", 1, None, None)
     assert body["pose"] is None and "map" not in body
+
+
+def test_start_activates_slam_left_inactive_by_its_launch():
+    """Lab 2026-11-26 (RBT-002, second session after a save): slam_toolbox configured but never activated."""
+    robot = Robot()
+    robot.stuck_inactive = robot.map_after_start
+    robot.map_after_start = None
+    rec, router, controller, run = _setup(robot)
+
+    router.handle_message(_cmd("c1", "START_MAPPING", {"sessionId": "s-2"}))
+    run()
+
+    assert rec.results[0]["outcome"] == "SUCCEEDED"
+    assert robot.calls == ["pause", "slam:s-2", "activate"]
+    assert controller.state == STATE_MAPPING
+
+
+def test_an_active_slam_is_never_touched():
+    robot = Robot()
+    rec, router, controller, run = _setup(robot)
+
+    router.handle_message(_cmd("c1", "START_MAPPING", {"sessionId": "s-3"}))
+    run()
+
+    assert rec.results[0]["outcome"] == "SUCCEEDED"
+    assert "activate" not in robot.calls
